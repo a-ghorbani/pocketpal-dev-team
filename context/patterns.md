@@ -2,6 +2,8 @@
 
 Reference patterns for consistent code across the codebase.
 
+---
+
 ## MobX Store Pattern
 
 ```typescript
@@ -61,6 +63,8 @@ class ExampleStore {
 export const exampleStore = new ExampleStore();
 ```
 
+---
+
 ## Component Pattern
 
 ```typescript
@@ -107,6 +111,8 @@ export const ExampleComponent: React.FC<ExampleComponentProps> = observer(
   },
 );
 ```
+
+---
 
 ## Hook Pattern
 
@@ -159,59 +165,253 @@ export const useExample = (options: UseExampleOptions = {}): UseExampleReturn =>
 };
 ```
 
-## Test Pattern (Component)
+---
+
+## Testing Infrastructure
+
+PocketPal uses a **centralized mocking system**. Understanding this is critical for writing tests.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `jest.config.js` | Jest configuration, module name mappings |
+| `jest/setup.ts` | Global mocks applied to ALL tests |
+| `jest/setupFilesAfterEnv.ts` | Test lifecycle hooks (afterEach cleanup) |
+| `jest/test-utils.tsx` | Custom render function with providers |
+| `jest/fixtures.ts` | Shared test data (messages, users, etc.) |
+| `jest/fixtures/` | Domain-specific fixtures (models, pals, themes) |
+| `__mocks__/stores/` | Mock store implementations |
+| `__mocks__/external/` | Mocks for external packages (llama.rn, etc.) |
+| `__mocks__/services/` | Mock service implementations |
+
+### How Store Mocking Works
+
+**DO NOT mock stores inline in tests.** The stores are globally mocked in `jest/setup.ts`:
 
 ```typescript
-// src/components/ExampleComponent/ExampleComponent.test.tsx
-import React from 'react';
-import {render, fireEvent, waitFor} from '@testing-library/react-native';
-import {ExampleComponent} from './ExampleComponent';
-import {exampleStore} from '../../store';
+// jest/setup.ts (simplified)
+import {mockUiStore} from '../__mocks__/stores/uiStore';
+import {mockModelStore} from '../__mocks__/stores/modelStore';
+import {mockChatSessionStore} from '../__mocks__/stores/chatSessionStore';
+// ... other mock imports
 
-// Mock the store
-jest.mock('../../store', () => ({
-  exampleStore: {
-    isLoading: false,
-    items: [],
-    fetchItems: jest.fn(),
-  },
+jest.mock('../src/store', () => ({
+  modelStore: mockModelStore,
+  uiStore: mockUiStore,
+  chatSessionStore: mockChatSessionStore,
+  // ... all stores
+}));
+```
+
+### Mock Store Structure
+
+Mock stores in `__mocks__/stores/` follow this pattern:
+
+```typescript
+// __mocks__/stores/modelStore.ts
+import {makeAutoObservable} from 'mobx';
+import {modelsList} from '../../jest/fixtures/models';
+
+class MockModelStore {
+  // Observable state with fixture data
+  models = modelsList;
+  activeModelId: string | undefined;
+  isContextLoading = false;
+
+  // Jest mock functions for methods
+  initContext: jest.Mock;
+  deleteModel: jest.Mock;
+  // ... other methods
+
+  constructor() {
+    makeAutoObservable(this, {
+      // Exclude mock functions from observability
+      initContext: false,
+      deleteModel: false,
+    });
+
+    // Initialize mock functions
+    this.initContext = jest.fn().mockResolvedValue(Promise.resolve());
+    this.deleteModel = jest.fn().mockResolvedValue(Promise.resolve());
+  }
+
+  // Real actions that modify state
+  setActiveModel = (modelId: string) => {
+    this.activeModelId = modelId;
+  };
+
+  // Computed values
+  get activeModel() {
+    return this.models.find(model => model.id === this.activeModelId);
+  }
+}
+
+export const mockModelStore = new MockModelStore();
+```
+
+### Writing Component Tests
+
+```typescript
+// src/components/MyComponent/__tests__/MyComponent.test.tsx
+import React from 'react';
+import {runInAction} from 'mobx';
+
+// Use custom render from test-utils (includes providers)
+import {fireEvent, render} from '../../../../jest/test-utils';
+
+// Import fixtures
+import {textMessage, user} from '../../../../jest/fixtures';
+
+// Import stores - these are already mocked globally
+import {modelStore, chatSessionStore} from '../../../store';
+
+import {MyComponent} from '../MyComponent';
+
+// Use fake timers if component uses timers/animations
+jest.useFakeTimers();
+
+// Mock child components if needed (inline mocks are OK for components)
+jest.mock('../../ChildComponent', () => ({
+  ChildComponent: jest.fn(() => null),
 }));
 
-describe('ExampleComponent', () => {
+describe('MyComponent', () => {
   beforeEach(() => {
+    // Reset mock function calls between tests
     jest.clearAllMocks();
   });
 
-  it('renders correctly with title', () => {
-    const {getByText} = render(<ExampleComponent title="Test Title" />);
-    expect(getByText('Test Title')).toBeTruthy();
+  it('renders correctly', () => {
+    const {getByTestId} = render(
+      <MyComponent />,
+      {withNavigation: true, withBottomSheetProvider: true}
+    );
+    expect(getByTestId('my-component')).toBeTruthy();
   });
 
-  it('calls onPress when button is pressed', () => {
-    const onPress = jest.fn();
-    const {getByTestId} = render(
-      <ExampleComponent title="Test" onPress={onPress} />,
+  it('responds to store state changes', () => {
+    // Modify mock store state using runInAction
+    runInAction(() => {
+      modelStore.activeModelId = 'test-model-id';
+    });
+
+    const {getByText} = render(
+      <MyComponent />,
+      {withNavigation: true}
     );
 
-    fireEvent.press(getByTestId('example-button'));
-    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(getByText('Model Selected')).toBeTruthy();
   });
 
-  it('shows loading state', () => {
-    (exampleStore as any).isLoading = true;
-    const {getByText} = render(<ExampleComponent title="Test" />);
-    expect(getByText('Loading...')).toBeTruthy();
+  it('calls store methods on user interaction', () => {
+    const {getByTestId} = render(
+      <MyComponent />,
+      {withNavigation: true}
+    );
+
+    fireEvent.press(getByTestId('action-button'));
+
+    expect(modelStore.initContext).toHaveBeenCalled();
   });
 });
 ```
 
-## Test Pattern (Store)
+### Custom Render Options
+
+The `render` function from `jest/test-utils.tsx` accepts options:
+
+```typescript
+render(<Component />, {
+  theme: customTheme,              // Custom theme (default: lightTheme)
+  user: customUser,                // User context (default: userFixture)
+  withNavigation: true,            // Wrap in NavigationContainer
+  withSafeArea: true,              // Wrap in SafeAreaProvider
+  withBottomSheetProvider: true,   // Wrap in BottomSheetModalProvider
+});
+```
+
+### Modifying Mock Store State in Tests
+
+**Use `runInAction` from MobX** to modify mock store state:
+
+```typescript
+import {runInAction} from 'mobx';
+import {modelStore} from '../../../store';
+
+it('shows loading state', () => {
+  runInAction(() => {
+    modelStore.isContextLoading = true;
+  });
+
+  const {getByText} = render(<MyComponent />);
+  expect(getByText('Loading...')).toBeTruthy();
+});
+```
+
+### Testing Async Store Methods
+
+Mock store methods return jest.fn() - set up return values as needed:
+
+```typescript
+it('handles model initialization', async () => {
+  // Mock method is already set up with mockResolvedValue
+  // To customize return value:
+  modelStore.initContext.mockResolvedValueOnce({success: true});
+
+  const {getByTestId} = render(<MyComponent />);
+  fireEvent.press(getByTestId('init-button'));
+
+  await waitFor(() => {
+    expect(modelStore.initContext).toHaveBeenCalledWith(
+      expect.objectContaining({modelId: 'test-id'})
+    );
+  });
+});
+```
+
+### Using Fixtures
+
+```typescript
+// Import from jest/fixtures.ts (main fixtures)
+import {
+  textMessage,
+  imageMessage,
+  fileMessage,
+  user,
+} from '../../../../jest/fixtures';
+
+// Import from jest/fixtures/ subfolder (domain fixtures)
+import {modelsList} from '../../../../jest/fixtures/models';
+import {palFixtures} from '../../../../jest/fixtures/pals';
+import {themeFixtures} from '../../../../jest/fixtures/theme';
+```
+
+### Module Name Mapper (External Mocks)
+
+External packages are mocked via `moduleNameMapper` in `jest.config.js`:
+
+```javascript
+moduleNameMapper: {
+  'llama.rn': '<rootDir>/__mocks__/external/llama.rn.ts',
+  '@nozbe/watermelondb': '<rootDir>/__mocks__/external/@nozbe/watermelondb.js',
+  // ... etc
+}
+```
+
+**DO NOT** try to mock these packages inline - they're handled globally.
+
+---
+
+## Test Pattern (Store Unit Tests)
+
+For testing store logic directly (not through components):
 
 ```typescript
 // src/store/__tests__/ExampleStore.test.ts
 import {ExampleStore} from '../ExampleStore';
 
-// Mock external dependencies
+// Mock external dependencies this store uses
 jest.mock('../../api', () => ({
   getItems: jest.fn(),
 }));
@@ -222,6 +422,7 @@ describe('ExampleStore', () => {
   let store: ExampleStore;
 
   beforeEach(() => {
+    // Create fresh store instance for each test
     store = new ExampleStore();
     jest.clearAllMocks();
   });
@@ -266,6 +467,68 @@ describe('ExampleStore', () => {
 });
 ```
 
+---
+
+## Common Testing Mistakes to Avoid
+
+### 1. Inline Store Mocking
+
+```typescript
+// WRONG - stores are globally mocked
+jest.mock('../../store', () => ({
+  modelStore: { isLoading: false }
+}));
+
+// RIGHT - import and modify the global mock
+import {modelStore} from '../../store';
+runInAction(() => { modelStore.isLoading = true; });
+```
+
+### 2. Missing Provider Wrappers
+
+```typescript
+// WRONG - component needs providers
+render(<ChatView messages={[]} />);
+
+// RIGHT - use test-utils render with options
+render(<ChatView messages={[]} />, {
+  withNavigation: true,
+  withBottomSheetProvider: true
+});
+```
+
+### 3. Forgetting jest.clearAllMocks()
+
+```typescript
+// WRONG - mock calls accumulate across tests
+describe('MyComponent', () => {
+  it('first test', () => { /* calls mock */ });
+  it('second test', () => { /* mock has calls from first test */ });
+});
+
+// RIGHT - clear in beforeEach
+describe('MyComponent', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+  // tests...
+});
+```
+
+### 4. Not Using runInAction for State Changes
+
+```typescript
+// WRONG - may not trigger MobX reactions
+modelStore.activeModelId = 'test-id';
+
+// RIGHT - ensures MobX reactions fire
+runInAction(() => {
+  modelStore.activeModelId = 'test-id';
+});
+```
+
+---
+
 ## API Integration Pattern
 
 ```typescript
@@ -301,6 +564,8 @@ export const fetchExamples = async (params: {
 };
 ```
 
+---
+
 ## Navigation Pattern
 
 ```typescript
@@ -322,47 +587,45 @@ export const MyComponent = () => {
 };
 ```
 
-## Error Handling Pattern
-
-```typescript
-// Consistent error handling
-try {
-  const result = await riskyOperation();
-  return result;
-} catch (error) {
-  // Log error with context
-  console.error('[ModuleName] Operation failed:', error);
-
-  // User-friendly error message
-  if (error instanceof NetworkError) {
-    throw new Error('Unable to connect. Please check your connection.');
-  }
-
-  if (error instanceof ValidationError) {
-    throw new Error(`Invalid input: ${error.message}`);
-  }
-
-  // Generic fallback
-  throw new Error('An unexpected error occurred. Please try again.');
-}
-```
+---
 
 ## File Organization
 
 ```
 src/components/
   ExampleComponent/
-    ExampleComponent.tsx      # Main component
-    ExampleComponent.test.tsx # Tests
-    index.ts                  # Re-export
+    ExampleComponent.tsx       # Main component
+    __tests__/
+      ExampleComponent.test.tsx  # Tests in __tests__ folder
+    index.ts                   # Re-export
 
 src/store/
-  ExampleStore.ts             # Store class
+  ExampleStore.ts              # Store class
   __tests__/
-    ExampleStore.test.ts      # Store tests
+    ExampleStore.test.ts       # Store tests
 
 src/hooks/
-  useExample.ts               # Hook
-  useExample.test.ts          # Hook tests (co-located)
-  index.ts                    # Re-exports all hooks
+  useExample.ts                # Hook
+  index.ts                     # Re-exports all hooks
+
+jest/
+  setup.ts                     # Global test setup & mocks
+  setupFilesAfterEnv.ts        # Lifecycle hooks
+  test-utils.tsx               # Custom render with providers
+  fixtures.ts                  # Shared test data
+  fixtures/                    # Domain-specific fixtures
+    models.ts
+    pals.ts
+    theme.ts
+
+__mocks__/
+  stores/                      # Mock store implementations
+    modelStore.ts
+    chatSessionStore.ts
+    uiStore.ts
+  external/                    # External package mocks
+    llama.rn.ts
+    @nozbe/watermelondb.js
+  services/                    # Mock services
+    downloads.ts
 ```
