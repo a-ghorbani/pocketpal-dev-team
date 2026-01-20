@@ -142,24 +142,33 @@ BRANCH=$(git branch --show-current)
 if [ "$BRANCH" = "main" ]; then echo "ABORT: On main!"; exit 1; fi
 
 git add <files>
-git commit -m "$(cat <<'EOF'
-feat(component): brief description of change
-
-- Specific detail 1
-- Specific detail 2
-
-Story: TASK-{id}
-EOF
-)"
+git commit -m "feat(component): brief description"
 ```
 
-### Commit Types
+### Commit Rules (enforced by commitlint)
+
+**Header format**: `type(scope): subject`
+- **Total header max**: 100 characters
+- **Body line max**: 100 characters
+- **No Co-Authored-By** - not needed
+
+**Allowed types** (only these 4):
 - `feat`: New feature
 - `fix`: Bug fix
-- `refactor`: Code restructuring (no behavior change)
-- `test`: Test additions/changes
 - `docs`: Documentation
-- `chore`: Build/config changes
+- `chore`: Dependencies, config, tooling
+
+**Examples**:
+```bash
+# Good - short and clear
+git commit -m "chore(deps): upgrade llama.rn to 0.11.0"
+git commit -m "feat(chat): add haptic feedback on send"
+git commit -m "fix(model): prevent crash on low memory"
+
+# Bad - too long, wrong type
+git commit -m "refactor(component): restructure..." # 'refactor' not allowed
+git commit -m "chore(deps): upgrade llama.rn from 0.10.0 to 0.11.0-rc.0 with pod install and build verification" # too long
+```
 
 ## Output Format
 

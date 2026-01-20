@@ -24,9 +24,10 @@ Before ANY analysis or routing, you MUST:
 TASK_ID="TASK-$(date +%Y%m%d-%H%M)"
 BRANCH_NAME="feature/${TASK_ID}"
 WORKTREE_PATH="/Users/aghorbani/codes/pocketpal-dev-team/worktrees/${TASK_ID}"
+MAIN_REPO="/Users/aghorbani/codes/pocketpal-ai"
 
 # Step 2: Create worktree with feature branch (from pocketpal-ai)
-cd /Users/aghorbani/codes/pocketpal-ai
+cd "${MAIN_REPO}"
 git fetch origin
 git worktree add "${WORKTREE_PATH}" -b "${BRANCH_NAME}" origin/main
 
@@ -35,7 +36,30 @@ cd "${WORKTREE_PATH}"
 git branch --show-current  # Must show feature/TASK-xxx, NOT main
 pwd  # Must show worktrees path, NOT pocketpal-ai
 
-# Step 4: Install dependencies in worktree
+# Step 4: Copy secrets/env files (gitignored, won't be in worktree)
+copy_if_exists() {
+  local src="$1" dst="$2"
+  if [ -f "$src" ]; then
+    mkdir -p "$(dirname "$dst")"
+    cp "$src" "$dst"
+    echo "Copied: $(basename "$src")"
+  fi
+}
+
+# Root level
+copy_if_exists "${MAIN_REPO}/.env" "${WORKTREE_PATH}/.env"
+copy_if_exists "${MAIN_REPO}/e2e/.env" "${WORKTREE_PATH}/e2e/.env"
+
+# iOS secrets
+copy_if_exists "${MAIN_REPO}/ios/.xcode.env.local" "${WORKTREE_PATH}/ios/.xcode.env.local"
+copy_if_exists "${MAIN_REPO}/ios/GoogleService-Info.plist" "${WORKTREE_PATH}/ios/GoogleService-Info.plist"
+
+# Android secrets
+copy_if_exists "${MAIN_REPO}/android/local.properties" "${WORKTREE_PATH}/android/local.properties"
+copy_if_exists "${MAIN_REPO}/android/app/google-services.json" "${WORKTREE_PATH}/android/app/google-services.json"
+copy_if_exists "${MAIN_REPO}/android/app/pocketpal-release-key.keystore" "${WORKTREE_PATH}/android/app/pocketpal-release-key.keystore"
+
+# Step 5: Install dependencies in worktree
 yarn install
 ```
 

@@ -216,14 +216,23 @@ ${WORKTREE_PATH}/__mocks__/stores/  # Mock stores
 - **Hooks**: Follow existing hooks in `/src/hooks/`
 - **Types**: Strict TypeScript, avoid `any`
 
-### Commit Format
+### Commit Format (enforced by commitlint)
 ```
-[type](scope): brief description
+type(scope): subject
+```
 
-- Detail about change
-- Another detail
+**Rules**:
+- Header max: 100 chars total
+- Types allowed: `feat`, `fix`, `docs`, `chore` (only these 4)
+- No Co-Authored-By needed
+- Keep it short and clear
 
-Story: TASK-[ID]
+**Examples**:
+```
+feat(chat): add haptic feedback on message send
+fix(model): prevent crash on low memory devices
+chore(deps): upgrade llama.rn to 0.11.0
+docs(readme): update installation instructions
 ```
 
 ### Naming Conventions
