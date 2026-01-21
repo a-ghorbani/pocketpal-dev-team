@@ -111,6 +111,7 @@ copy_if_exists "${MAIN_REPO}/e2e/.env" "${WORKTREE_PATH}/e2e/.env"
 # iOS secrets
 copy_if_exists "${MAIN_REPO}/ios/.xcode.env.local" "${WORKTREE_PATH}/ios/.xcode.env.local"
 copy_if_exists "${MAIN_REPO}/ios/GoogleService-Info.plist" "${WORKTREE_PATH}/ios/GoogleService-Info.plist"
+copy_if_exists "${MAIN_REPO}/ios/Config/Env.xcconfig" "${WORKTREE_PATH}/ios/Config/Env.xcconfig"
 
 # Android secrets
 copy_if_exists "${MAIN_REPO}/android/local.properties" "${WORKTREE_PATH}/android/local.properties"
