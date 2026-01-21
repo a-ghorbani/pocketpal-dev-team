@@ -32,6 +32,7 @@ PR_INFO=$(gh pr view ${PR_NUMBER} --json title,body,author,files,additions,delet
 PR_BRANCH=$(echo "$PR_INFO" | jq -r '.headRefName')
 
 # Create worktree for PR review
+# NAMING CONVENTION: worktrees/PR-{number}, branch pr-{number}
 REVIEW_ID="PR-${PR_NUMBER}"
 WORKTREE_PATH="/Users/aghorbani/codes/pocketpal-dev-team/worktrees/${REVIEW_ID}"
 
@@ -333,31 +334,61 @@ Provide all Option A comments for human to post (or post via `gh pr comment`).
 
 ### If "We Fix It"
 
-**We're already in a worktree** at `worktrees/PR-{number}`. We can either:
+**Route through orchestrator. The PR reviewer does NOT implement.**
 
-**Option 1**: Fix directly in this worktree (small fixes)
-```bash
-cd "${WORKTREE_PATH}"
-# Make fixes
-git add .
-git commit -m "fix(scope): description"
-git push origin pr-${PR_NUMBER}:${PR_BRANCH}
+Provide this command to human with ALL issues listed:
+
+```
+To fix these issues, run:
+
+claude "Use pocketpal-orchestrator: Fix issues in PR #{number}
+
+Issues to fix:
+1. {Issue 1}: {brief description} ({file:line})
+2. {Issue 2}: {brief description} ({file:line})
+3. {Issue 3}: {brief description} ({file:line})
+
+Original PR: #{number} by @{author}
+PR Branch: {branch_name}
+Native Changes: YES/NO
+"
 ```
 
-**Option 2**: Create story for complex fixes (goes through full pipeline)
-```bash
-# Route to implementer with this worktree
-claude "Use pocketpal-implementer: Fix {issue description}
-WORKTREE: ${WORKTREE_PATH}
-BRANCH: pr-${PR_NUMBER}
-NATIVE_CHANGES: YES/NO"
+**Example output:**
+
+```
+To fix these issues, run:
+
+claude "Use pocketpal-orchestrator: Fix issues in PR #490
+
+Issues to fix:
+1. Missing l10n: Add Japanese/Chinese translations for 3 new strings (src/utils/l10n.ts)
+2. Test pattern: Replace inline store mock with global mock (src/store/__tests__/ModelStore.test.ts:245)
+3. Bug fix: resetModelName should strip .gguf extension (src/store/ModelStore.ts:1520)
+
+Original PR: #490 by @contributor
+PR Branch: feature/reset-model-name
+Native Changes: NO
+"
 ```
 
-The implementer will:
-1. Use existing worktree (already has secrets)
-2. Make fixes following patterns
-3. Run verification (lint, typecheck, tests)
-4. Commit and push to PR branch
+**Naming Convention for PR Fixes:**
+- Worktree: `worktrees/PR-{number}` (e.g., `worktrees/PR-490`)
+- Branch: `pr-{number}` (e.g., `pr-490`)
+- Story: `PR-{number}-fix.md` (e.g., `PR-490-fix.md`)
+
+The orchestrator will:
+1. Reuse existing `worktrees/PR-{number}` from review (or create if needed)
+2. Route to planner → creates story file `PR-{number}-fix.md`
+3. Human approves story
+4. Implementer fixes all issues
+5. Tester verifies
+6. Reviewer approves
+7. Push to PR branch
+
+---
+
+**The PR reviewer ONLY analyzes. Implementation always goes through orchestrator.**
 
 ### If "Approve"
 
@@ -385,6 +416,9 @@ git branch -D pr-{number}  # Delete local branch
 - **NEVER** work directly in `/Users/aghorbani/codes/pocketpal-ai`
 - **NEVER** skip worktree setup
 - **NEVER** run builds without copying secrets first
+- **NEVER** start implementing fixes without creating a story file first
+- **NEVER** skip human approval before implementing
+- **NEVER** use "plan mode" or create plans outside of story files
 - Do NOT automatically approve or post comments
 - Do NOT dismiss issues as "minor" if they break patterns
 - Do NOT skip testing pattern verification
@@ -392,3 +426,18 @@ git branch -D pr-{number}  # Delete local branch
 - Do provide constructive, specific feedback
 - Do acknowledge what the PR does well
 - Do explain WHY something is an issue, not just WHAT
+
+## CRITICAL WORKFLOW RULE
+
+When human says "implement it" or "fix it" or "go ahead":
+
+1. **Create story file** at `workflows/stories/PR-{number}-fix.md`
+2. **Present to human** for approval
+3. **Wait for explicit approval**
+4. **Then route to implementer** with story file
+
+Do NOT:
+- Enter "plan mode"
+- Start writing code
+- Create plans outside story files
+- Skip the story → approval → implement flow

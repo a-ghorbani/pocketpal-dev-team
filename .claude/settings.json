@@ -2,29 +2,50 @@
   "permissions": {
     "allow": [
       "Read",
-      "Edit",
-      "Write",
       "Glob",
       "Grep",
       "WebFetch",
       "WebSearch",
-      "Bash"
+      "Bash",
+      "Edit(**/worktrees/**)",
+      "Write(**/worktrees/**)",
+      "Edit(**/pocketpal-dev-team/**)",
+      "Write(**/pocketpal-dev-team/**)"
     ],
     "ask": [
       "Bash(git push:*)",
       "Bash(git commit:*)",
       "Bash(git reset:*)",
-      "Bash(git rebase:*)"
+      "Bash(git rebase:*)",
+      "Edit(**/pocketpal-ai/**)",
+      "Write(**/pocketpal-ai/**)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
       "Bash(curl:*)",
       "Bash(wget:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git push origin master:*)",
       "Read(.env)",
       "Read(.env.*)",
-      "Read(./secrets/**)",
+      "Read(**/secrets/**)",
       "Edit(.env)",
       "Edit(.env.*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git commit:*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/aghorbani/codes/pocketpal-dev-team/tools/block-commit-to-main.sh"
+          }
+        ]
+      }
     ]
   }
 }

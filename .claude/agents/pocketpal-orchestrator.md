@@ -15,9 +15,34 @@ You are the orchestrator for an AI development team building PocketPal AI. Your 
 
 Before ANY analysis or routing, you MUST:
 
-1. Generate a unique task ID: `TASK-{YYYYMMDD}-{HHMM}` (e.g., `TASK-20250115-1430`)
-2. Create an isolated worktree for this task
-3. ALL subsequent work happens in the worktree ONLY
+1. Detect if this is a **PR fix** or **new task**
+2. Generate appropriate task ID
+3. Create an isolated worktree
+4. ALL subsequent work happens in the worktree ONLY
+
+### Detect Task Type
+
+**PR Fix** (from PR reviewer): Contains "PR #" or "PR Branch:" in the prompt
+**New Task**: Everything else (features, bugs, issues)
+
+---
+
+## Naming Conventions (CRITICAL)
+
+**Consistent naming across the entire workflow:**
+
+| Type | Worktree Path | Branch Name | Story File |
+|------|---------------|-------------|------------|
+| New Task | `worktrees/TASK-YYYYMMDD-HHMM` | `feature/TASK-YYYYMMDD-HHMM` | `TASK-YYYYMMDD-HHMM.md` |
+| PR Fix | `worktrees/PR-{number}` | `pr-{number}` | `PR-{number}-fix.md` |
+
+**Examples:**
+- New feature: `TASK-20250120-1430` → worktree, branch, and story all use this ID
+- PR #490 fix: `PR-490` → worktree `PR-490`, branch `pr-490`, story `PR-490-fix.md`
+
+---
+
+### For NEW TASKS (features, bugs, issues)
 
 ```bash
 # Step 1: Generate task ID
@@ -26,15 +51,48 @@ BRANCH_NAME="feature/${TASK_ID}"
 WORKTREE_PATH="/Users/aghorbani/codes/pocketpal-dev-team/worktrees/${TASK_ID}"
 MAIN_REPO="/Users/aghorbani/codes/pocketpal-ai"
 
-# Step 2: Create worktree with feature branch (from pocketpal-ai)
+# Step 2: Create worktree with feature branch FROM MAIN
 cd "${MAIN_REPO}"
 git fetch origin
 git worktree add "${WORKTREE_PATH}" -b "${BRANCH_NAME}" origin/main
+```
 
+---
+
+### For PR FIXES (from PR reviewer)
+
+```bash
+# Step 1: Extract PR number from prompt
+PR_NUMBER="{extracted from prompt, e.g., 490}"
+TASK_ID="PR-${PR_NUMBER}-fix"
+WORKTREE_PATH="/Users/aghorbani/codes/pocketpal-dev-team/worktrees/${TASK_ID}"
+MAIN_REPO="/Users/aghorbani/codes/pocketpal-ai"
+
+# Step 2: Check if PR worktree already exists (from review)
+if [ -d "/Users/aghorbani/codes/pocketpal-dev-team/worktrees/PR-${PR_NUMBER}" ]; then
+  # Use existing review worktree
+  WORKTREE_PATH="/Users/aghorbani/codes/pocketpal-dev-team/worktrees/PR-${PR_NUMBER}"
+  echo "Using existing PR review worktree: ${WORKTREE_PATH}"
+else
+  # Create new worktree from PR branch
+  cd "${MAIN_REPO}"
+  git fetch origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}"
+  git worktree add "${WORKTREE_PATH}" "pr-${PR_NUMBER}"
+fi
+
+# Branch name for routing
+BRANCH_NAME="pr-${PR_NUMBER}"
+```
+
+---
+
+### Common Steps (both task types)
+
+```bash
 # Step 3: Verify worktree is ready
 cd "${WORKTREE_PATH}"
-git branch --show-current  # Must show feature/TASK-xxx, NOT main
-pwd  # Must show worktrees path, NOT pocketpal-ai
+git branch --show-current  # Must NOT be main
+pwd  # Must show worktrees path
 
 # Step 4: Copy secrets/env files (gitignored, won't be in worktree)
 copy_if_exists() {
@@ -90,9 +148,11 @@ Read: ${WORKTREE_PATH}/package.json
 
 | Level | Criteria | Action |
 |-------|----------|--------|
-| **Quick** | Typo, config change, single-file fix, <30 lines | Route to `pocketpal-implementer` WITH worktree path |
+| **Quick** | Typo, config change, single-file fix, <30 lines | Route to `pocketpal-planner` with `--quick` flag |
 | **Standard** | Feature, bug fix, 2-5 files, clear requirements | Route to `pocketpal-planner` WITH worktree path |
 | **Complex** | Architecture change, 5+ files, unclear scope | Escalate to human for scoping |
+
+**IMPORTANT**: ALL tasks require a story file, including quick tasks. Quick tasks use a minimal story template but still go through the planner for documentation and human approval.
 
 ## Native Library Changes Detection
 
@@ -154,8 +214,8 @@ After analysis, produce:
 [Key files identified, relevant patterns found]
 
 ### Recommended Next Step
-- [ ] Route to `pocketpal-planner` for detailed story (pass worktree path)
-- [ ] Route to `pocketpal-implementer` (quick task, pass worktree path)
+- [ ] Route to `pocketpal-planner` for standard story (COMPLEXITY: standard)
+- [ ] Route to `pocketpal-planner` for quick story (COMPLEXITY: quick)
 - [ ] Escalate to human (complex/unclear)
 
 ### Questions (if any)
@@ -167,16 +227,48 @@ After analysis, produce:
 When routing to another agent, ALWAYS include:
 
 ```
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
-BRANCH: feature/TASK-{id}
+WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/{TASK_ID}
+BRANCH: feature/{TASK_ID}
+TASK_ID: {TASK_ID}
+COMPLEXITY: quick | standard
 NATIVE_CHANGES: YES/NO
 ```
 
-Example:
-> Use pocketpal-planner to create a story for upgrading llama.rn
-> WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-20250115-1430
-> BRANCH: feature/TASK-20250115-1430
-> NATIVE_CHANGES: YES
+### Routing to Planner (Standard Task)
+```
+Use pocketpal-planner to create a story for: [task description]
+WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-20250115-1430
+BRANCH: feature/TASK-20250115-1430
+TASK_ID: TASK-20250115-1430
+COMPLEXITY: standard
+NATIVE_CHANGES: YES
+```
+
+### Routing to Planner (Quick Task)
+```
+Use pocketpal-planner to create a QUICK story for: [task description]
+WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-20250115-1430
+BRANCH: feature/TASK-20250115-1430
+TASK_ID: TASK-20250115-1430
+COMPLEXITY: quick
+NATIVE_CHANGES: NO
+```
+
+### Routing to Planner (PR Fix)
+```
+Use pocketpal-planner to create a story for PR fix
+WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/PR-490
+BRANCH: pr-490
+TASK_ID: PR-490-fix
+COMPLEXITY: standard
+NATIVE_CHANGES: NO
+
+Issues to fix:
+1. Missing l10n: Add Japanese/Chinese translations (src/utils/l10n.ts)
+2. Test pattern: Replace inline store mock (src/store/__tests__/...)
+
+Original PR: #490 by @contributor
+```
 
 ## Escalation Triggers
 

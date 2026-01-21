@@ -49,8 +49,9 @@ echo "Branch verified: $CURRENT_BRANCH"
 Read: /Users/aghorbani/codes/pocketpal-dev-team/context/pocketpal-overview.md
 Read: /Users/aghorbani/codes/pocketpal-dev-team/context/patterns.md
 
-# Story template
-Read: /Users/aghorbani/codes/pocketpal-dev-team/templates/story-template.md
+# Story templates (choose based on COMPLEXITY flag)
+Read: /Users/aghorbani/codes/pocketpal-dev-team/templates/story-template.md        # For standard
+Read: /Users/aghorbani/codes/pocketpal-dev-team/templates/quick-story-template.md  # For quick
 
 # Current PocketPal priorities (from worktree)
 Read: ${WORKTREE_PATH}/CLAUDE.md
@@ -59,12 +60,36 @@ Read: ${WORKTREE_PATH}/CLAUDE.md
 ## Your Responsibilities
 
 1. **Verify** pre-flight checks pass
-2. **Research** the codebase IN THE WORKTREE
-3. **Identify** all affected files and components
-4. **Study** existing patterns to follow
-5. **Draft** step-by-step implementation approach
-6. **Define** concrete test requirements
-7. **Create** a self-contained story file
+2. **Check COMPLEXITY** flag from orchestrator (quick vs standard)
+3. **Research** the codebase IN THE WORKTREE
+4. **Identify** all affected files and components
+5. **Study** existing patterns to follow
+6. **Draft** step-by-step implementation approach
+7. **Define** concrete test requirements
+8. **Create** a self-contained story file (quick or standard template)
+
+---
+
+## Quick vs Standard Stories
+
+The orchestrator provides a `COMPLEXITY` flag. Use the appropriate template:
+
+| Complexity | Template | Use When |
+|------------|----------|----------|
+| **quick** | `quick-story-template.md` | Typo, config change, single-file fix, <30 lines |
+| **standard** | `story-template.md` | Features, bug fixes, 2+ files, requires research |
+
+### Quick Story Characteristics
+- Minimal sections (no extensive research needed)
+- Single implementation step
+- Simple test requirements
+- Still requires human approval before implementation
+
+### Standard Story Characteristics
+- Full research and context documentation
+- Multiple implementation steps
+- Comprehensive test requirements
+- Detailed risk analysis
 
 ## Research Protocol
 
@@ -170,19 +195,31 @@ Before completing the story:
 
 Save story files to: `/Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/`
 
-Naming: `TASK-{id}.md` (matches the worktree task ID)
+### Naming Convention (CRITICAL)
+
+| Task Type | Story File Name | Example |
+|-----------|-----------------|---------|
+| New Task | `{TASK_ID}.md` | `TASK-20250120-1430.md` |
+| PR Fix | `{TASK_ID}.md` | `PR-490-fix.md` |
+
+**The TASK_ID is provided by the orchestrator.** Use it exactly as given for the story filename.
 
 ## Routing to Implementer
 
 When story is complete and approved, route with:
 
 ```
-Use pocketpal-implementer to implement story TASK-{id}
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
-BRANCH: feature/TASK-{id}
+Use pocketpal-implementer to implement story {TASK_ID}
+WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/{TASK_ID}
+BRANCH: feature/{TASK_ID}
+TASK_ID: {TASK_ID}
 NATIVE_CHANGES: YES/NO
-STORY: /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/TASK-{id}.md
+STORY: /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/{TASK_ID}.md
 ```
+
+**Examples:**
+- New task: `TASK_ID: TASK-20250120-1430`, story: `TASK-20250120-1430.md`
+- PR fix: `TASK_ID: PR-490-fix`, story: `PR-490-fix.md`
 
 ## Anti-Patterns
 

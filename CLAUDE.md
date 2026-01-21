@@ -24,6 +24,17 @@ Every agent has **hard stops** that prevent critical mistakes:
 
 If any pre-flight check fails, agents STOP and report the error.
 
+### System-Level Protections (Hooks & Permissions)
+
+Additional protections enforced by Claude Code settings (`.claude/settings.json`):
+
+| Protection | Mechanism |
+|------------|-----------|
+| **Block commits to main** | Hook: `tools/block-commit-to-main.sh` blocks `git commit` on main/master |
+| **Path-scoped edits** | Permission: Edit/Write allowed in `worktrees/**`, asks for `pocketpal-ai/**` |
+| **Block force push** | Permission: Denies `git push -f` and `git push origin main` |
+| **Secrets protection** | Permission: Denies Read/Edit of `.env` files |
+
 ## Project Structure
 
 ```
@@ -41,7 +52,8 @@ pocketpal-dev-team/
 ├── workflows/
 │   └── stories/             # Story files (implementation plans)
 ├── templates/
-│   └── story-template.md    # Template for new stories
+│   ├── story-template.md         # Standard story template (features, bugs)
+│   └── quick-story-template.md   # Quick story template (typos, config)
 ├── worktrees/               # Git worktrees for parallel development
 │   └── README.md            # Instructions for creating worktrees
 └── docs/
@@ -50,9 +62,23 @@ pocketpal-dev-team/
 
 ## Quick Start
 
-### Start a Development Task
+### Slash Commands (Recommended)
 
-From this directory or pocketpal-ai:
+```bash
+# Review an external PR
+/review-pr 490
+
+# Start from a GitHub issue
+/start-task #123
+
+# Start from a description
+/start-task "Add dark mode toggle to settings"
+
+# Start from an action-tracker item
+/start-action "lifecycle guard"
+```
+
+### Manual Invocation (Alternative)
 
 ```bash
 # Analyze and implement a GitHub issue
@@ -152,3 +178,54 @@ Each agent automatically creates its own worktree = no conflicts.
 6. **Worktree Isolation** - All work in worktrees, never in main repo
 7. **Branch Protection** - Agents refuse to work on main/master
 8. **Native Build Verification** - Agents MUST run actual builds for native changes
+
+## Naming Conventions
+
+**Consistent naming across the entire workflow:**
+
+| Type | Worktree | Branch | Story File |
+|------|----------|--------|------------|
+| New Task | `worktrees/TASK-YYYYMMDD-HHMM` | `feature/TASK-YYYYMMDD-HHMM` | `TASK-YYYYMMDD-HHMM.md` |
+| PR Fix | `worktrees/PR-{number}` | `pr-{number}` | `PR-{number}-fix.md` |
+
+**Examples:**
+- `TASK-20250120-1430` for new features/bugs
+- `PR-490` / `PR-490-fix.md` for PR review fixes
+
+---
+
+## CRITICAL RULE: Story Files Required
+
+**ALL implementation work requires a story file, including:**
+- New features (standard story)
+- Bug fixes (standard or quick story)
+- PR review fixes (standard story)
+- Dependency upgrades (standard story)
+- Quick fixes like typos (quick story)
+
+### Quick vs Standard Stories
+
+| Complexity | Template | Use When |
+|------------|----------|----------|
+| **quick** | `templates/quick-story-template.md` | Typo, config, single-file, <30 lines |
+| **standard** | `templates/story-template.md` | Features, bugs, 2+ files |
+
+**The workflow is ALWAYS:**
+```
+Task/Issue/PR Fix
+    ↓
+Orchestrator (creates worktree, classifies complexity)
+    ↓
+Planner (creates story file - quick or standard)
+    ↓
+[HUMAN APPROVAL]
+    ↓
+Implementation
+```
+
+**Agents must NEVER:**
+- Enter "plan mode" and start implementing
+- Write code without a story file
+- Skip human approval
+- Create plans outside of story files
+- Route quick tasks directly to implementer (they still need a quick story)
