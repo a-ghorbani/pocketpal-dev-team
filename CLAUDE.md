@@ -128,7 +128,7 @@ pocketpal-reviewer      (verify builds, quality gate)
 ## Linked Codebases
 
 - **PocketPal**: `/Users/aghorbani/codes/pocketpal-ai`
-- **Advisory System**: `/Users/aghorbani/codes/sparing-partner-agents`
+- **Advisory System**: `/Users/aghorbani/codes/founder-advisory-board`
 
 ## Critical Files
 

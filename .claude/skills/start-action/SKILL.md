@@ -17,8 +17,8 @@ Action search: $ARGUMENTS
 Search for the action in the action-tracker files:
 
 ```
-Read: /Users/aghorbani/codes/sparing-partner-agents/action-tracker/in-progress.md
-Read: /Users/aghorbani/codes/sparing-partner-agents/action-tracker/accepted.md
+Read: /Users/aghorbani/codes/founder-advisory-board/action-tracker/in-progress.md
+Read: /Users/aghorbani/codes/founder-advisory-board/action-tracker/accepted.md
 ```
 
 Find the action that best matches "$ARGUMENTS" (case-insensitive, partial match OK).
