@@ -1,3 +1,5 @@
 # Worktrees - these are temporary checkouts, not part of the dev-team repo
 worktrees/*
 !worktrees/README.md
+
+.env

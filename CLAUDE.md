@@ -89,7 +89,7 @@ claude "Use pocketpal-orchestrator: Add dark mode toggle to settings"
 
 # Create a plan only
 claude "Use pocketpal-planner to create a story for: [description]
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-xxx
+WORKTREE: ./worktrees/TASK-xxx
 BRANCH: feature/TASK-xxx"
 ```
 
@@ -127,15 +127,15 @@ pocketpal-reviewer      (verify builds, quality gate)
 
 ## Linked Codebases
 
-- **PocketPal**: `/Users/aghorbani/codes/pocketpal-ai`
-- **Advisory System**: `/Users/aghorbani/codes/founder-advisory-board`
+- **PocketPal**: `./repos/pocketpal-ai` (git submodule)
+- **Linear Integration**: `./tools/linear.sh` (requires `LINEAR_API_KEY` in `.env`)
 
 ## Critical Files
 
 ### For Testing (READ THESE)
 PocketPal has specific testing patterns. Agents MUST understand:
-- `pocketpal-ai/jest/setup.ts` - Global mocks
-- `pocketpal-ai/jest/test-utils.tsx` - Custom render with providers
+- `repos/pocketpal-ai/jest/setup.ts` - Global mocks
+- `repos/pocketpal-ai/jest/test-utils.tsx` - Custom render with providers
 - `context/patterns.md` - Patterns including testing mistakes to avoid
 
 ### For Context
@@ -152,7 +152,7 @@ For running multiple agents on different features simultaneously:
 
 ```bash
 # Start multiple tasks in separate terminals
-cd /Users/aghorbani/codes/pocketpal-dev-team
+cd .
 
 # Terminal 1
 claude "Use pocketpal-orchestrator: Add feature A"
@@ -181,16 +181,16 @@ Each agent automatically creates its own worktree = no conflicts.
 
 ## Worktree Management
 
-**CRITICAL**: Worktree commands must be run from `/Users/aghorbani/codes/pocketpal-ai` (the source repo), NOT from pocketpal-dev-team.
+**CRITICAL**: Worktree commands must be run from `repos/pocketpal-ai` (the submodule), NOT from pocketpal-dev-team root.
 
 ```bash
-# Create worktree (from pocketpal-ai)
-cd /Users/aghorbani/codes/pocketpal-ai
-git worktree add ../pocketpal-dev-team/worktrees/TASK-xxx -b feature/TASK-xxx
+# Create worktree (from repos/pocketpal-ai)
+cd repos/pocketpal-ai
+git worktree add ../../worktrees/TASK-xxx -b feature/TASK-xxx
 
-# Remove worktree (from pocketpal-ai)
-cd /Users/aghorbani/codes/pocketpal-ai
-git worktree remove ../pocketpal-dev-team/worktrees/TASK-xxx
+# Remove worktree (from repos/pocketpal-ai)
+cd repos/pocketpal-ai
+git worktree remove ../../worktrees/TASK-xxx
 ```
 
 See `worktrees/README.md` for full documentation.

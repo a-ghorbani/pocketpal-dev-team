@@ -25,8 +25,8 @@ Read: ${WORKTREE_PATH}/CLAUDE.md
 
 Always load:
 ```
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/patterns.md
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/pocketpal-overview.md
+Read: ./context/patterns.md
+Read: ./context/pocketpal-overview.md
 ```
 
 ---
@@ -63,7 +63,7 @@ Before proposing ANYTHING, you MUST:
 **A. Codebase Research**
 ```bash
 # Search relevant code
-grep -r "relevant_keyword" ${WORKTREE_PATH:-/Users/aghorbani/codes/pocketpal-ai}/src/
+grep -r "relevant_keyword" ${WORKTREE_PATH:-./repos/pocketpal-ai}/src/
 
 # Find similar patterns
 # Read related files

@@ -2,11 +2,42 @@
 
 AI-powered autonomous development team for PocketPal AI. Takes issues/tasks and delivers implementations with tests.
 
-## Quick Start
+## Getting Started
+
+### 1. Clone with Submodules
 
 ```bash
-cd /Users/aghorbani/codes/pocketpal-dev-team
+git clone --recursive https://github.com/a-ghorbani/pocketpal-dev-team.git
+cd pocketpal-dev-team
+```
 
+If you already cloned without `--recursive`:
+```bash
+git submodule update --init --recursive
+```
+
+### 2. (Optional) Use Your Own Fork
+
+If you want to work with your own fork of pocketpal-ai:
+
+```bash
+cd repos/pocketpal-ai
+git remote add myfork git@github.com:YOUR_USERNAME/pocketpal-ai.git
+git fetch myfork
+```
+
+### 3. (Optional) Configure Linear Integration
+
+For the `/start-action` skill to work with Linear:
+
+```bash
+cp .env.example .env
+# Edit .env and add your LINEAR_API_KEY
+```
+
+### 4. Start a Task
+
+```bash
 # Start a task
 claude "Use pocketpal-orchestrator: <your task description>"
 ```
@@ -83,18 +114,18 @@ The dev team will NOT claim "build ready" without actually running builds.
 ```bash
 # Just create a plan (no implementation)
 claude "Use pocketpal-planner to create a story for: Add dark mode support
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-20250115-1200
+WORKTREE: ./worktrees/TASK-20250115-1200
 BRANCH: feature/TASK-20250115-1200"
 
 # Implement an existing story
 claude "Use pocketpal-implementer to implement story TASK-20250115-1200
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-20250115-1200
+WORKTREE: ./worktrees/TASK-20250115-1200
 BRANCH: feature/TASK-20250115-1200
-STORY: /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/TASK-20250115-1200.md"
+STORY: ./workflows/stories/TASK-20250115-1200.md"
 
 # Review before PR
 claude "Use pocketpal-reviewer to review TASK-20250115-1200
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-20250115-1200
+WORKTREE: ./worktrees/TASK-20250115-1200
 BRANCH: feature/TASK-20250115-1200"
 ```
 
@@ -106,7 +137,7 @@ Run multiple features simultaneously - each gets its own worktree:
 
 ```bash
 # Start multiple tasks in separate terminals
-cd /Users/aghorbani/codes/pocketpal-dev-team
+cd .
 
 # Terminal 1
 claude "Use pocketpal-orchestrator: Add feature A"
@@ -135,13 +166,17 @@ Safe commands are pre-allowed in `.claude/settings.json`. Dangerous commands (rm
 
 ```
 pocketpal-dev-team/
+├── repos/
+│   └── pocketpal-ai/     # Git submodule - the target codebase
 ├── .claude/
 │   ├── agents/           # Agent definitions with pre-flight checks
+│   ├── skills/           # Slash command skills (/start-task, /review-pr, etc.)
 │   └── settings.json     # Permission rules
 ├── context/              # Codebase patterns & overview
 ├── workflows/stories/    # Implementation plans (story files)
 ├── worktrees/            # Git worktrees for isolated development
-└── templates/            # Story file template
+├── templates/            # Story file templates
+└── tools/                # Utility scripts (linear.sh, etc.)
 ```
 
 ## Key Files
@@ -163,6 +198,22 @@ pocketpal-dev-team/
 After a task is merged, clean up the worktree:
 
 ```bash
-cd /Users/aghorbani/codes/pocketpal-ai
-git worktree remove ../pocketpal-dev-team/worktrees/TASK-xxx
+cd repos/pocketpal-ai
+git worktree remove ../../worktrees/TASK-xxx
 ```
+
+## Optional Features
+
+| Feature | Requirement | Without It |
+|---------|-------------|------------|
+| `/start-action` skill | `LINEAR_API_KEY` in `.env` | Use `/start-task` instead |
+| Native iOS builds | Xcode + CocoaPods | Set `NATIVE_CHANGES=NO` or skip native tasks |
+| Native Android builds | Android SDK + Gradle | Set `NATIVE_CHANGES=NO` or skip native tasks |
+
+## Requirements
+
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed
+- Git 2.20+ (for worktree support)
+- Node.js 18+ (for PocketPal development)
+- (Optional) Xcode 15+ for iOS builds
+- (Optional) Android SDK for Android builds

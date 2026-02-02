@@ -35,7 +35,7 @@ Issue Title: [title from gh]
 Issue Body: [body from gh]
 Labels: [labels from gh]
 
-Repository: /Users/aghorbani/codes/pocketpal-ai
+Repository: ./repos/pocketpal-ai
 ```
 
 ## For Description
@@ -45,7 +45,7 @@ Use the `pocketpal-orchestrator` agent directly:
 ```
 Use pocketpal-orchestrator: $ARGUMENTS
 
-Repository: /Users/aghorbani/codes/pocketpal-ai
+Repository: ./repos/pocketpal-ai
 ```
 
 ## What Happens Next

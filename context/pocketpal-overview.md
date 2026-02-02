@@ -6,7 +6,7 @@ PocketPal AI is a privacy-first, on-device LLM chat application for iOS and Andr
 
 ## Repository
 
-Location: `/Users/aghorbani/codes/pocketpal-ai`
+Location: `./repos/pocketpal-ai`
 
 ## Technology Stack
 

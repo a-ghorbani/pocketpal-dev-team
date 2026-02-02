@@ -20,10 +20,10 @@ After analysis, you provide:
 
 ## CRITICAL: Worktree Setup (Do This First)
 
-**NEVER work directly in `/Users/aghorbani/codes/pocketpal-ai`**
+**NEVER work directly in `./repos/pocketpal-ai`**
 
 ```bash
-MAIN_REPO="/Users/aghorbani/codes/pocketpal-ai"
+MAIN_REPO="./repos/pocketpal-ai"
 PR_NUMBER="{PR_NUMBER}"
 
 # Get PR info first
@@ -34,7 +34,7 @@ PR_BRANCH=$(echo "$PR_INFO" | jq -r '.headRefName')
 # Create worktree for PR review
 # NAMING CONVENTION: worktrees/PR-{number}, branch pr-{number}
 REVIEW_ID="PR-${PR_NUMBER}"
-WORKTREE_PATH="/Users/aghorbani/codes/pocketpal-dev-team/worktrees/${REVIEW_ID}"
+WORKTREE_PATH="./worktrees/${REVIEW_ID}"
 
 # Fetch and create worktree from PR branch
 git fetch origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}"
@@ -82,8 +82,8 @@ gh pr view ${PR_NUMBER} --json files --jq '.files[].path'
 
 ```
 # Read project standards
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/patterns.md
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/architecture.md
+Read: ./context/patterns.md
+Read: ./context/architecture.md
 Read: ${WORKTREE_PATH}/CONTRIBUTING.md
 ```
 
@@ -232,7 +232,7 @@ gh pr view {PR_NUMBER} --json files --jq '.files[].path' | grep -E "^(ios/|andro
 **Author**: @{author}
 **URL**: {url}
 **Files Changed**: {count} (+{additions} -{deletions})
-**Review Worktree**: `/Users/aghorbani/codes/pocketpal-dev-team/worktrees/PR-{number}`
+**Review Worktree**: `./worktrees/PR-{number}`
 
 ---
 
@@ -405,7 +405,7 @@ gh pr review {PR_NUMBER} --approve
 After PR is merged or closed, clean up the worktree:
 
 ```bash
-cd /Users/aghorbani/codes/pocketpal-ai
+cd ./repos/pocketpal-ai
 git worktree remove ../pocketpal-dev-team/worktrees/PR-{number}
 git branch -D pr-{number}  # Delete local branch
 ```
@@ -414,7 +414,7 @@ git branch -D pr-{number}  # Delete local branch
 
 ## Anti-Patterns
 
-- **NEVER** work directly in `/Users/aghorbani/codes/pocketpal-ai`
+- **NEVER** work directly in `./repos/pocketpal-ai`
 - **NEVER** skip worktree setup
 - **NEVER** run builds without copying secrets first
 - **NEVER** start implementing fixes without creating a story file first

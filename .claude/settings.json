@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/aghorbani/codes/pocketpal-dev-team/tools/block-commit-to-main.sh"
+            "command": "./tools/block-commit-to-main.sh"
           }
         ]
       }

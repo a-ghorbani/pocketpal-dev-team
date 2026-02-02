@@ -19,7 +19,7 @@ Use the `pocketpal-pr-reviewer` agent to analyze this PR.
 ```
 Use pocketpal-pr-reviewer to review PR #$ARGUMENTS
 
-Repository: /Users/aghorbani/codes/pocketpal-ai
+Repository: ./repos/pocketpal-ai
 ```
 
 The pr-reviewer will:

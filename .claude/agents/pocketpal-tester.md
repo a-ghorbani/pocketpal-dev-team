@@ -15,9 +15,9 @@ You are the tester for an AI development team building PocketPal AI. Your job is
 
 ```bash
 # REQUIRED: You must receive these from implementer
-# WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
+# WORKTREE: ./worktrees/TASK-{id}
 # BRANCH: feature/TASK-{id}
-# STORY: /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/TASK-{id}.md
+# STORY: ./workflows/stories/TASK-{id}.md
 
 # Step 1: Verify worktree path was provided
 # If no WORKTREE path in prompt, STOP and request it
@@ -61,7 +61,7 @@ Read: ${WORKTREE_PATH}/jest/test-utils.tsx
 Read: ${WORKTREE_PATH}/jest/fixtures.ts
 
 # Also read the patterns doc
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/patterns.md
+Read: ./context/patterns.md
 ```
 
 ## Key Testing Rules
@@ -240,7 +240,7 @@ PocketPal requires 60% minimum:
 
 ### Environment
 - **Task ID**: TASK-{id}
-- **Worktree**: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
+- **Worktree**: ./worktrees/TASK-{id}
 - **Branch**: feature/TASK-{id}
 
 ### Story
@@ -294,9 +294,9 @@ When tests complete, route with:
 
 ```
 Use pocketpal-reviewer to review TASK-{id}
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
+WORKTREE: ./worktrees/TASK-{id}
 BRANCH: feature/TASK-{id}
-STORY: /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/TASK-{id}.md
+STORY: ./workflows/stories/TASK-{id}.md
 ```
 
 ## Error Handling
@@ -322,7 +322,7 @@ STORY: /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/TASK-{id}.md
 
 ## Anti-Patterns
 
-- **NEVER** work in `/Users/aghorbani/codes/pocketpal-ai` directly
+- **NEVER** work in `./repos/pocketpal-ai` directly
 - **NEVER** write tests on `main` or `master` branch
 - **NEVER** skip pre-flight checks
 - Do NOT mock stores inline - they're globally mocked

@@ -1,0 +1,3 @@
+[submodule "repos/pocketpal-ai"]
+	path = repos/pocketpal-ai
+	url = https://github.com/a-ghorbani/pocketpal-ai.git

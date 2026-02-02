@@ -12,74 +12,83 @@ You are starting work on an action from the action-tracker.
 ## Input
 Action search: $ARGUMENTS
 
+## Prerequisites
+
+This skill requires Linear integration. Ensure `LINEAR_API_KEY` is set in `.env`:
+```bash
+# .env
+LINEAR_API_KEY=lin_api_xxxxx
+```
+
 ## Step 1: Find the Action
 
-Search for the action in the action-tracker files:
+Search for the action in Linear using the CLI tool:
 
-```
-Read: /Users/aghorbani/codes/founder-advisory-board/action-tracker/in-progress.md
-Read: /Users/aghorbani/codes/founder-advisory-board/action-tracker/accepted.md
+```bash
+# List all issues (actions)
+./tools/linear.sh issues
+
+# Or search in specific project
+./tools/linear.sh issues [project_id]
 ```
 
 Find the action that best matches "$ARGUMENTS" (case-insensitive, partial match OK).
 
 ## Step 2: Extract Action Context
 
-From the matching action, extract:
-- **Title**: The action title (### heading)
-- **Priority**: P0/P1/P2
-- **Status**: Current state
-- **Next step**: Immediate action needed
-- **Action Items**: Sub-tasks with checkboxes
-- **Details**: Any additional context
-- **Related**: Links to decisions, analysis files
+From the matching Linear issue, extract:
+- **Title**: The issue title
+- **Priority**: Issue priority (1=urgent, 4=low)
+- **Status**: Current workflow state
+- **Description**: Full description with context
+- **Identifier**: Linear issue ID (e.g., PPT-123)
 
-## Step 3: Read Related Context
+You can fetch full issue details with:
+```bash
+./tools/linear.sh query "{ issue(id: \"<issue_id>\") { id identifier title description priority state { name } } }"
+```
 
-If the action has **Related** links, read those files to get full context:
-- Decision logs in `decision-log/`
-- Analysis in `shared-context/`
-
-## Step 4: Route to Orchestrator
+## Step 3: Route to Orchestrator
 
 Use the `pocketpal-orchestrator` agent with the extracted context:
 
 ```
 Use pocketpal-orchestrator: [Action Title]
 
-Context from action-tracker:
+Context from Linear:
+- Linear ID: [identifier]
 - Priority: [priority]
 - Status: [status]
-- Next step: [next step]
 
-Action Items:
-[list of action items]
+Description:
+[description from Linear issue]
 
-Details:
-[details from action]
-
-Related Context:
-[content from related files if any]
-
-Repository: /Users/aghorbani/codes/pocketpal-ai
+Repository: ./repos/pocketpal-ai
 ```
 
 ## What Happens Next
 
 The orchestrator will:
 1. Create a worktree for this action
-2. Classify complexity based on action items
+2. Classify complexity based on the description
 3. Route to planner to create a story file
-4. Story will include action-tracker context for continuity
+4. Story will include Linear context for traceability
 
 ## Example
 
 Input: `/start-action "lifecycle guard"`
 
-Matches: "Fix UnknownCppException/SIGSEGV Crashes" (contains "lifecycle guard" in action items)
+Searches Linear issues, finds: "PPT-42: Fix UnknownCppException/SIGSEGV Crashes"
 
 Extracts:
-- Next step: Add lifecycle guard to prevent context release during inference
-- Action Items: Add lifecycle guard in ModelStore.ts, Add breadcrumb logging, etc.
+- Description: Add lifecycle guard to prevent context release during inference
+- Priority: 1 (urgent)
+- Status: In Progress
 
 Routes to orchestrator with full context.
+
+## Without Linear API Key
+
+If `LINEAR_API_KEY` is not set, this skill will not work. You can:
+1. Add your Linear API key to `.env`
+2. Or use `/start-task` with a manual description instead

@@ -18,7 +18,7 @@ Custom agents are defined in `/.claude/agents/`:
 From the PocketPal repo, invoke the orchestrator:
 
 ```bash
-cd /Users/aghorbani/codes/pocketpal-ai
+cd repos/pocketpal-ai
 
 # Start with a GitHub issue
 claude "Use pocketpal-orchestrator to analyze and implement GitHub issue #123"
@@ -95,7 +95,7 @@ claude --model opus "Use pocketpal-planner for complex feature X"
 ### Agent Not Found
 
 Ensure you're in a directory where Claude Code can see the `.claude/agents/` folder:
-- `/Users/aghorbani/codes/pocketpal-dev-team/` (where agents are defined)
+- `./` (where agents are defined)
 - Or symlink/copy to your working directory
 
 ### Context Issues

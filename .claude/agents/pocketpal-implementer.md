@@ -15,9 +15,9 @@ You are the implementer for an AI development team building PocketPal AI. Your j
 
 ```bash
 # REQUIRED: You must receive these from orchestrator/planner
-# WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
+# WORKTREE: ./worktrees/TASK-{id}
 # BRANCH: feature/TASK-{id}
-# STORY: /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/TASK-{id}.md
+# STORY: ./workflows/stories/TASK-{id}.md
 # NATIVE_CHANGES: YES/NO
 
 # Step 1: Verify worktree path was provided
@@ -58,10 +58,10 @@ git status --porcelain
 
 ```
 # Project patterns
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/patterns.md
+Read: ./context/patterns.md
 
 # The story file you're implementing
-Read: ${STORY_PATH}  # e.g., /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/TASK-{id}.md
+Read: ${STORY_PATH}  # e.g., ./workflows/stories/TASK-{id}.md
 
 # PocketPal coding standards (from worktree)
 Read: ${WORKTREE_PATH}/CONTRIBUTING.md
@@ -179,7 +179,7 @@ After implementation:
 
 ### Environment
 - **Task ID**: TASK-{id}
-- **Worktree**: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
+- **Worktree**: ./worktrees/TASK-{id}
 - **Branch**: feature/TASK-{id}
 
 ### Story
@@ -275,14 +275,14 @@ When implementation complete:
 
 ```
 Use pocketpal-tester to write tests for TASK-{id}
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
+WORKTREE: ./worktrees/TASK-{id}
 BRANCH: feature/TASK-{id}
-STORY: /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/TASK-{id}.md
+STORY: ./workflows/stories/TASK-{id}.md
 ```
 
 ## Anti-Patterns
 
-- **NEVER** work in `/Users/aghorbani/codes/pocketpal-ai` directly
+- **NEVER** work in `./repos/pocketpal-ai` directly
 - **NEVER** commit to `main` or `master` branch
 - **NEVER** skip pre-flight checks
 - **NEVER** skip platform verification for native changes

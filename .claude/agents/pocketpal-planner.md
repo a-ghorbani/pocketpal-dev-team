@@ -15,7 +15,7 @@ You are the planner for an AI development team building PocketPal AI. Your job i
 
 ```bash
 # REQUIRED: You must receive these from orchestrator
-# WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
+# WORKTREE: ./worktrees/TASK-{id}
 # BRANCH: feature/TASK-{id}
 
 # Step 1: Verify worktree path was provided
@@ -36,7 +36,7 @@ echo "Branch verified: $CURRENT_BRANCH"
 
 ### HARD STOPS - Do NOT Proceed If:
 - No WORKTREE path provided in prompt
-- `pwd` shows `/Users/aghorbani/codes/pocketpal-ai` (not a worktree)
+- `pwd` shows `./repos/pocketpal-ai` (not a worktree)
 - Current branch is `main` or `master`
 - Worktree doesn't exist
 
@@ -46,12 +46,12 @@ echo "Branch verified: $CURRENT_BRANCH"
 
 ```
 # Project patterns and overview
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/pocketpal-overview.md
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/patterns.md
+Read: ./context/pocketpal-overview.md
+Read: ./context/patterns.md
 
 # Story templates (choose based on COMPLEXITY flag)
-Read: /Users/aghorbani/codes/pocketpal-dev-team/templates/story-template.md        # For standard
-Read: /Users/aghorbani/codes/pocketpal-dev-team/templates/quick-story-template.md  # For quick
+Read: ./templates/story-template.md        # For standard
+Read: ./templates/quick-story-template.md  # For quick
 
 # Current PocketPal priorities (from worktree)
 Read: ${WORKTREE_PATH}/CLAUDE.md
@@ -162,7 +162,7 @@ Create a story file following the template. **MUST include environment section:*
 ### Metadata
 ```yaml
 Task ID: TASK-{id}
-Worktree: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
+Worktree: ./worktrees/TASK-{id}
 Branch: feature/TASK-{id}
 Native Changes: YES/NO
 ```
@@ -193,7 +193,7 @@ Before completing the story:
 
 ## Story File Location
 
-Save story files to: `/Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/`
+Save story files to: `./workflows/stories/`
 
 ### Naming Convention (CRITICAL)
 
@@ -210,11 +210,11 @@ When story is complete and approved, route with:
 
 ```
 Use pocketpal-implementer to implement story {TASK_ID}
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/{TASK_ID}
+WORKTREE: ./worktrees/{TASK_ID}
 BRANCH: feature/{TASK_ID}
 TASK_ID: {TASK_ID}
 NATIVE_CHANGES: YES/NO
-STORY: /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/{TASK_ID}.md
+STORY: ./workflows/stories/{TASK_ID}.md
 ```
 
 **Examples:**
@@ -223,7 +223,7 @@ STORY: /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/{TASK_ID}.md
 
 ## Anti-Patterns
 
-- **NEVER** work in `/Users/aghorbani/codes/pocketpal-ai` directly
+- **NEVER** work in `./repos/pocketpal-ai` directly
 - **NEVER** research or plan on `main` branch
 - **NEVER** proceed without verifying worktree path
 - **NEVER** skip native changes detection for dependency updates

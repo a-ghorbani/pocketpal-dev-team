@@ -28,8 +28,8 @@ Read: ${WORKTREE_PATH}/CLAUDE.md
 
 Always load:
 ```
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/patterns.md
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/pocketpal-overview.md
+Read: ./context/patterns.md
+Read: ./context/pocketpal-overview.md
 ```
 
 ---
@@ -83,7 +83,7 @@ Don't just take their word for it:
 **A. Codebase Verification**
 ```bash
 # Verify their claims
-grep -r "pattern_they_cited" ${WORKTREE_PATH:-/Users/aghorbani/codes/pocketpal-ai}/src/
+grep -r "pattern_they_cited" ${WORKTREE_PATH:-./repos/pocketpal-ai}/src/
 
 # Look for counter-evidence
 # Find edge cases they missed

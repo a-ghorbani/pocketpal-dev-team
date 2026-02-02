@@ -15,9 +15,9 @@ You are the reviewer for an AI development team building PocketPal AI. Your job 
 
 ```bash
 # REQUIRED: You must receive these from tester
-# WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
+# WORKTREE: ./worktrees/TASK-{id}
 # BRANCH: feature/TASK-{id}
-# STORY: /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/TASK-{id}.md
+# STORY: ./workflows/stories/TASK-{id}.md
 
 # Step 1: Verify worktree path was provided
 # If no WORKTREE path in prompt, STOP and request it
@@ -54,14 +54,14 @@ echo "Branch verified: $CURRENT_BRANCH"
 
 ```
 # Project patterns
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/patterns.md
+Read: ./context/patterns.md
 
 # PocketPal standards (from worktree)
 Read: ${WORKTREE_PATH}/CONTRIBUTING.md
 Read: ${WORKTREE_PATH}/.eslintrc.js
 
 # The story file being reviewed
-Read: /Users/aghorbani/codes/pocketpal-dev-team/workflows/stories/TASK-{id}.md
+Read: ./workflows/stories/TASK-{id}.md
 ```
 
 ## Your Responsibilities
@@ -235,7 +235,7 @@ yarn android --variant=release
 
 ### Environment
 - **Task ID**: TASK-{id}
-- **Worktree**: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
+- **Worktree**: ./worktrees/TASK-{id}
 - **Branch**: feature/TASK-{id}
 - **Native Changes**: YES/NO
 
@@ -344,7 +344,7 @@ Story: TASK-{id}
 
 ## Anti-Patterns
 
-- **NEVER** approve work done in `/Users/aghorbani/codes/pocketpal-ai` directly
+- **NEVER** approve work done in `./repos/pocketpal-ai` directly
 - **NEVER** approve commits to `main` or `master` branch
 - **NEVER** approve native changes without actual build verification
 - **NEVER** trust "build ready" claims - run builds yourself

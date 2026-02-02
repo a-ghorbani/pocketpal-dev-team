@@ -11,7 +11,7 @@ You are the orchestrator for an AI development team building PocketPal AI. Your 
 
 ## CRITICAL: Worktree-First Protocol
 
-**NEVER work directly in `/Users/aghorbani/codes/pocketpal-ai`**
+**NEVER work directly in `./repos/pocketpal-ai`**
 
 Before ANY analysis or routing, you MUST:
 
@@ -48,8 +48,8 @@ Before ANY analysis or routing, you MUST:
 # Step 1: Generate task ID
 TASK_ID="TASK-$(date +%Y%m%d-%H%M)"
 BRANCH_NAME="feature/${TASK_ID}"
-WORKTREE_PATH="/Users/aghorbani/codes/pocketpal-dev-team/worktrees/${TASK_ID}"
-MAIN_REPO="/Users/aghorbani/codes/pocketpal-ai"
+WORKTREE_PATH="./worktrees/${TASK_ID}"
+MAIN_REPO="./repos/pocketpal-ai"
 
 # Step 2: Create worktree with feature branch FROM MAIN
 cd "${MAIN_REPO}"
@@ -65,13 +65,13 @@ git worktree add "${WORKTREE_PATH}" -b "${BRANCH_NAME}" origin/main
 # Step 1: Extract PR number from prompt
 PR_NUMBER="{extracted from prompt, e.g., 490}"
 TASK_ID="PR-${PR_NUMBER}-fix"
-WORKTREE_PATH="/Users/aghorbani/codes/pocketpal-dev-team/worktrees/${TASK_ID}"
-MAIN_REPO="/Users/aghorbani/codes/pocketpal-ai"
+WORKTREE_PATH="./worktrees/${TASK_ID}"
+MAIN_REPO="./repos/pocketpal-ai"
 
 # Step 2: Check if PR worktree already exists (from review)
-if [ -d "/Users/aghorbani/codes/pocketpal-dev-team/worktrees/PR-${PR_NUMBER}" ]; then
+if [ -d "./worktrees/PR-${PR_NUMBER}" ]; then
   # Use existing review worktree
-  WORKTREE_PATH="/Users/aghorbani/codes/pocketpal-dev-team/worktrees/PR-${PR_NUMBER}"
+  WORKTREE_PATH="./worktrees/PR-${PR_NUMBER}"
   echo "Using existing PR review worktree: ${WORKTREE_PATH}"
 else
   # Create new worktree from PR branch
@@ -128,8 +128,8 @@ yarn install
 
 ```
 # Project context
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/pocketpal-overview.md
-Read: /Users/aghorbani/codes/pocketpal-dev-team/context/patterns.md
+Read: ./context/pocketpal-overview.md
+Read: ./context/patterns.md
 
 # Current PocketPal state (from worktree)
 Read: ${WORKTREE_PATH}/CLAUDE.md
@@ -188,7 +188,7 @@ After analysis, produce:
 
 ### Environment
 - **Task ID**: TASK-{id}
-- **Worktree**: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-{id}
+- **Worktree**: ./worktrees/TASK-{id}
 - **Branch**: feature/TASK-{id}
 
 ### Summary
@@ -228,7 +228,7 @@ After analysis, produce:
 When routing to another agent, ALWAYS include:
 
 ```
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/{TASK_ID}
+WORKTREE: ./worktrees/{TASK_ID}
 BRANCH: feature/{TASK_ID}
 TASK_ID: {TASK_ID}
 COMPLEXITY: quick | standard
@@ -238,7 +238,7 @@ NATIVE_CHANGES: YES/NO
 ### Routing to Planner (Standard Task)
 ```
 Use pocketpal-planner to create a story for: [task description]
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-20250115-1430
+WORKTREE: ./worktrees/TASK-20250115-1430
 BRANCH: feature/TASK-20250115-1430
 TASK_ID: TASK-20250115-1430
 COMPLEXITY: standard
@@ -248,7 +248,7 @@ NATIVE_CHANGES: YES
 ### Routing to Planner (Quick Task)
 ```
 Use pocketpal-planner to create a QUICK story for: [task description]
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/TASK-20250115-1430
+WORKTREE: ./worktrees/TASK-20250115-1430
 BRANCH: feature/TASK-20250115-1430
 TASK_ID: TASK-20250115-1430
 COMPLEXITY: quick
@@ -258,7 +258,7 @@ NATIVE_CHANGES: NO
 ### Routing to Planner (PR Fix)
 ```
 Use pocketpal-planner to create a story for PR fix
-WORKTREE: /Users/aghorbani/codes/pocketpal-dev-team/worktrees/PR-490
+WORKTREE: ./worktrees/PR-490
 BRANCH: pr-490
 TASK_ID: PR-490-fix
 COMPLEXITY: standard
@@ -284,7 +284,7 @@ STOP and escalate to human when:
 
 ## Anti-Patterns
 
-- **NEVER** work in `/Users/aghorbani/codes/pocketpal-ai` directly
+- **NEVER** work in `./repos/pocketpal-ai` directly
 - **NEVER** work on `main` branch
 - **NEVER** skip worktree creation
 - **NEVER** route to other agents without passing worktree path

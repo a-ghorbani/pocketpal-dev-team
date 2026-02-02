@@ -9,7 +9,7 @@
 - **Status**: draft | pending_approval | approved | in_progress | complete
 
 ## Environment
-- **Worktree**: `/Users/aghorbani/codes/pocketpal-dev-team/worktrees/[TASK_ID]`
+- **Worktree**: `./worktrees/[TASK_ID]`
 - **Branch**: `feature/[TASK_ID]`
 - **Base**: `main`
 
