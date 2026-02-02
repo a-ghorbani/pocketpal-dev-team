@@ -133,24 +133,28 @@ BRANCH: feature/TASK-20250115-1200"
 
 ## Parallel Development
 
-Run multiple features simultaneously - each gets its own worktree:
+Since each task runs in its own git worktree, you can safely run multiple workstreams in parallel from the same directory. No need to clone the repo multiple times or set up separate folders - just open separate terminals:
 
 ```bash
-# Start multiple tasks in separate terminals
-cd .
-
 # Terminal 1
 claude "Use pocketpal-orchestrator: Add feature A"
 
 # Terminal 2
 claude "Use pocketpal-orchestrator: Fix bug B"
 
-# Each creates its own worktree:
-# worktrees/TASK-20250115-1430/
-# worktrees/TASK-20250115-1431/
+# Terminal 3
+claude "Use pocketpal-orchestrator: Refactor component C"
 ```
 
-No conflicts because each agent works in isolated worktrees.
+Each orchestrator automatically creates an isolated worktree:
+```
+worktrees/
+├── TASK-20250115-1430/   # Feature A
+├── TASK-20250115-1431/   # Bug B
+└── TASK-20250115-1432/   # Refactor C
+```
+
+No conflicts, no setup overhead - worktrees handle the isolation.
 
 ## Autonomous Mode
 
