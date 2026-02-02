@@ -26,7 +26,28 @@ git remote add myfork git@github.com:YOUR_USERNAME/pocketpal-ai.git
 git fetch myfork
 ```
 
-### 3. (Optional) Configure Linear Integration
+### 3. (Optional) Set Up Secrets for Native Builds
+
+If you plan to run iOS/Android builds, copy your env and config files to the submodule. The orchestrator will automatically copy these to each worktree:
+
+```bash
+# Copy your secrets to repos/pocketpal-ai/
+cp /path/to/your/.env repos/pocketpal-ai/
+cp /path/to/your/e2e/.env repos/pocketpal-ai/e2e/
+
+# iOS
+cp /path/to/your/ios/.xcode.env.local repos/pocketpal-ai/ios/
+cp /path/to/your/ios/GoogleService-Info.plist repos/pocketpal-ai/ios/
+cp /path/to/your/ios/Config/Env.xcconfig repos/pocketpal-ai/ios/Config/
+
+# Android
+cp /path/to/your/android/local.properties repos/pocketpal-ai/android/
+cp /path/to/your/android/app/google-services.json repos/pocketpal-ai/android/app/
+```
+
+These files are gitignored by pocketpal-ai, so they won't be committed.
+
+### 4. (Optional) Configure Linear Integration
 
 For the `/start-action` skill to work with Linear:
 
@@ -35,7 +56,7 @@ cp .env.example .env
 # Edit .env and add your LINEAR_API_KEY
 ```
 
-### 4. Start a Task
+### 5. Start a Task
 
 ```bash
 # Start a task
