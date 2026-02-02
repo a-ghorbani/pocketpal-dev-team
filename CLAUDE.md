@@ -179,6 +179,22 @@ Each agent automatically creates its own worktree = no conflicts.
 7. **Branch Protection** - Agents refuse to work on main/master
 8. **Native Build Verification** - Agents MUST run actual builds for native changes
 
+## Worktree Management
+
+**CRITICAL**: Worktree commands must be run from `/Users/aghorbani/codes/pocketpal-ai` (the source repo), NOT from pocketpal-dev-team.
+
+```bash
+# Create worktree (from pocketpal-ai)
+cd /Users/aghorbani/codes/pocketpal-ai
+git worktree add ../pocketpal-dev-team/worktrees/TASK-xxx -b feature/TASK-xxx
+
+# Remove worktree (from pocketpal-ai)
+cd /Users/aghorbani/codes/pocketpal-ai
+git worktree remove ../pocketpal-dev-team/worktrees/TASK-xxx
+```
+
+See `worktrees/README.md` for full documentation.
+
 ## Naming Conventions
 
 **Consistent naming across the entire workflow:**
