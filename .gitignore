@@ -2,4 +2,6 @@
 worktrees/*
 !worktrees/README.md
 
+# Environment and local settings
 .env
+.claude/settings.local.json

@@ -10,7 +10,11 @@
       "Edit(**/worktrees/**)",
       "Write(**/worktrees/**)",
       "Edit(**/pocketpal-dev-team/**)",
-      "Write(**/pocketpal-dev-team/**)"
+      "Write(**/pocketpal-dev-team/**)",
+      "Skill(start-task)",
+      "Skill(start-action)",
+      "Skill(review-pr)",
+      "Skill(deliberate)"
     ],
     "ask": [
       "Bash(git push:*)",
