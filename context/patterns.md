@@ -4,6 +4,29 @@ Reference patterns for consistent code across the codebase.
 
 ---
 
+## Design Principles
+
+Inspired by Don Norman (human-centered design) and Dieter Rams (less but better).
+
+**When designing features, follow these principles:**
+
+| Principle | Guideline | Example |
+|-----------|-----------|---------|
+| **Visibility** | Show system status clearly | Loading indicators, memory usage, model state |
+| **Feedback** | Respond to actions immediately | Haptic on send, progress during download |
+| **Simplicity** | Don't add options unless necessary | Sensible defaults over settings screens |
+| **Error Prevention** | Validate before actions fail | Check memory before loading model |
+| **Recovery** | Help users fix problems | Clear error messages with actionable steps |
+| **Accessibility** | Works for everyone | Proper contrast, screen reader support, touch targets |
+
+**Questions to ask before adding UI:**
+- Can we use a sensible default instead of a setting?
+- Is this visible enough without being intrusive?
+- What happens when this fails? Is the error helpful?
+- Would a non-technical user understand this?
+
+---
+
 ## MobX Store Pattern
 
 ```typescript

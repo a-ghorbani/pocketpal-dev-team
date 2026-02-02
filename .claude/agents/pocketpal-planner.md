@@ -190,6 +190,7 @@ Before completing the story:
 - [ ] Patterns to follow are cited with file:line references
 - [ ] No ambiguous requirements (flagged questions for human)
 - [ ] Risks identified with mitigations
+- [ ] Design principles considered (see `context/patterns.md` - visibility, simplicity, error handling)
 
 ## Story File Location
 
