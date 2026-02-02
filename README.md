@@ -1,6 +1,6 @@
 # PocketPal Dev Team
 
-AI-powered autonomous development team for PocketPal AI. Takes issues/tasks and delivers implementations with tests.
+Starter Claude Code setup for [PocketPal AI](https://github.com/a-ghorbani/pocketpal-ai) development. Includes agents, workflows, and templates - extend as needed.
 
 ## Getting Started
 
