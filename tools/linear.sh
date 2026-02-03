@@ -111,13 +111,19 @@ cmd_update() {
     local status="$2"
 
     if [ -z "$issue_id" ] || [ -z "$status" ]; then
-        echo "Usage: linear.sh update <issue_id> <status>" >&2
-        echo "Status can be: backlog, todo, in_progress, done, canceled" >&2
+        echo "Usage: linear.sh update <issue_id> <state_id>" >&2
+        echo "" >&2
+        echo "State IDs (founder advisors team):" >&2
+        echo "  Backlog:     1f692912-2a27-4e8c-b4e8-77dac00666b2" >&2
+        echo "  Todo:        b09856af-f221-495d-8280-cc886cca8255" >&2
+        echo "  In Progress: 155b3856-c8ec-41ae-b339-007b7099d51f" >&2
+        echo "  Done:        25b69969-5bfa-4885-bf43-f6764a9377d1" >&2
+        echo "  Canceled:    33295a98-43af-40c0-9712-649d59f4d0af" >&2
+        echo "" >&2
+        echo "Use './tools/linear.sh states <team_id>' to fetch current states" >&2
         exit 1
     fi
 
-    # Map friendly status names to state IDs (these need to be fetched per-team)
-    # For now, pass the state ID directly or use stateId
     gql "mutation { issueUpdate(id: \\\"$issue_id\\\", input: { stateId: \\\"$status\\\" }) { success issue { id identifier title state { name } } } }" | jq '.data.issueUpdate'
 }
 
@@ -179,7 +185,7 @@ case "${1:-}" in
         echo "  create <title> [desc] [team_id] [project_id]"
         echo "                            Create a new issue"
         echo "  update <issue_id> <state_id>"
-        echo "                            Update issue status"
+        echo "                            Update issue status (run with no args for state IDs)"
         echo "  query '<graphql>'         Run raw GraphQL query"
         ;;
 esac

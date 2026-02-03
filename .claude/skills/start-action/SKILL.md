@@ -7,7 +7,7 @@ argument-hint: "[action title or partial match]"
 
 # Start Action Workflow
 
-You are starting work on an action from the action-tracker.
+You are starting work on an action from Linear.
 
 ## Input
 Action search: $ARGUMENTS
@@ -19,6 +19,31 @@ This skill requires Linear integration. Ensure `LINEAR_API_KEY` is set in `.env`
 # .env
 LINEAR_API_KEY=lin_api_xxxxx
 ```
+
+## Linear Workflow States
+
+| State | Meaning | When to Use |
+|-------|---------|-------------|
+| **Backlog** | Ideas, not committed | Low-priority ideas |
+| **Todo** | Accepted, ready to start | Committed, waiting to begin |
+| **In Progress** | Currently being worked on | Active work (including monitoring/validation) |
+| **Done** | Fully completed | Finished with outcomes recorded |
+
+### State IDs (founder advisors team)
+
+```
+Backlog:     1f692912-2a27-4e8c-b4e8-77dac00666b2
+Todo:        b09856af-f221-495d-8280-cc886cca8255
+In Progress: 155b3856-c8ec-41ae-b339-007b7099d51f
+Done:        25b69969-5bfa-4885-bf43-f6764a9377d1
+Canceled:    33295a98-43af-40c0-9712-649d59f4d0af
+```
+
+### Important State Transitions
+
+- When starting work → Update to **In Progress**
+- "Released but monitoring" = still **In Progress** (not Done)
+- Only move to **Done** when fully complete with no follow-up needed
 
 ## Step 1: Find the Action
 
