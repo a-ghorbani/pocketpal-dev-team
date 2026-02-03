@@ -18,7 +18,7 @@ Location: `./repos/pocketpal-ai`
 | Navigation | React Navigation | 7.x |
 | Database | WatermelonDB | 0.28.0 |
 | UI Kit | React Native Paper | 5.14.5 |
-| LLM | llama.rn (llama.cpp) | 0.10.0 |
+| LLM | llama.rn (llama.cpp) | 0.11.0-rc.3 |
 | Testing | Jest + Appium | 29.6.3 |
 
 ## Project Structure
@@ -27,14 +27,14 @@ Location: `./repos/pocketpal-ai`
 pocketpal-ai/
 ├── src/
 │   ├── api/           # External API integrations (HuggingFace, feedback)
-│   ├── components/    # UI components (63 components)
+│   ├── components/    # UI components (~66 components)
 │   ├── config/        # App configuration
 │   ├── database/      # WatermelonDB schema and models
-│   ├── hooks/         # Custom React hooks (12 hooks)
+│   ├── hooks/         # Custom React hooks (8 hooks)
 │   ├── repositories/  # Data access layer
-│   ├── screens/       # Navigation screens (8 screens)
+│   ├── screens/       # Navigation screens (7 screens)
 │   ├── services/      # Business logic services
-│   ├── store/         # MobX stores (10 stores)
+│   ├── store/         # MobX stores (8 stores)
 │   ├── types/         # TypeScript definitions
 │   └── utils/         # Utility functions
 ├── android/           # Android native code
@@ -47,22 +47,26 @@ pocketpal-ai/
 
 ## Key Stores (MobX)
 
-| Store | Purpose | Size |
-|-------|---------|------|
-| `ModelStore` | Model lifecycle, loading, offloading | 76KB |
-| `ChatSessionStore` | Chat history, sessions, messages | 25KB |
-| `PalStore` | AI personas management | 22KB |
-| `HFStore` | HuggingFace integration | 11KB |
-| `UIStore` | UI state (theme, navigation) | 3.5KB |
-| `BenchmarkStore` | Performance metrics | 1.7KB |
+| Store | Purpose |
+|-------|---------|
+| `ModelStore` | Model lifecycle, loading, offloading |
+| `ChatSessionStore` | Chat history, sessions, messages |
+| `PalStore` | AI personas management |
+| `HFStore` | HuggingFace integration, model downloads |
+| `UIStore` | UI state (theme, navigation) |
+| `BenchmarkStore` | Performance metrics |
+| `FeedbackStore` | User feedback collection |
+| `DeepLinkStore` | Deep link handling |
 
 ## Key Screens
 
-1. **ModelsScreen** - Model discovery and download
-2. **ChatScreen** - Main chat interface
-3. **SettingsScreen** - App settings
-4. **PalsScreen** - AI persona management
+1. **ChatScreen** - Main chat interface
+2. **ModelsScreen** - Model discovery and download
+3. **PalsScreen** - AI persona management
+4. **SettingsScreen** - App settings
 5. **BenchmarkScreen** - Performance testing
+6. **AboutScreen** - App information
+7. **DevToolsScreen** - Developer tools (debug only)
 
 ## Testing
 

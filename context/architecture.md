@@ -46,17 +46,17 @@ pocketpal-ai/
 
 ### Store Architecture
 
+All stores are singleton instances, independently instantiated (no root store pattern):
+
 ```
-┌─────────────────────────────────────────────────────────┐
-│                      Root Store                         │
-├─────────────┬─────────────┬─────────────┬──────────────┤
-│ ModelStore  │ChatSession  │  UIStore    │  PalStore    │
-│             │   Store     │             │              │
-├─────────────┼─────────────┼─────────────┼──────────────┤
-│ - models    │ - sessions  │ - language  │ - pals       │
-│ - active    │ - messages  │ - theme     │ - favorites  │
-│ - loading   │ - current   │ - settings  │ - syncing    │
-└─────────────┴─────────────┴─────────────┴──────────────┘
+ModelStore        - Model lifecycle, loading, inference
+ChatSessionStore  - Chat sessions, messages, history
+UIStore           - Theme, language, UI preferences
+PalStore          - AI personas, system prompts
+HFStore           - HuggingFace API, model downloads
+BenchmarkStore    - Performance benchmarking
+FeedbackStore     - User feedback collection
+DeepLinkStore     - Deep link handling
 ```
 
 ### Store Responsibilities
@@ -67,7 +67,10 @@ pocketpal-ai/
 | `ChatSessionStore` | Chat sessions, message history, active conversation |
 | `UIStore` | UI state, language, theme, user preferences |
 | `PalStore` | Pal configurations, system prompts |
-| `DownloadStore` | Model downloads, progress tracking |
+| `HFStore` | HuggingFace integration, model downloads |
+| `BenchmarkStore` | Performance benchmarking |
+| `FeedbackStore` | User feedback collection |
+| `DeepLinkStore` | Deep link handling |
 
 ### Store Rules
 
@@ -209,7 +212,8 @@ DrawerNavigator (Root)
 ├── PalsScreen
 ├── BenchmarkScreen
 ├── SettingsScreen
-└── AboutScreen
+├── AboutScreen
+└── DevToolsScreen (debug only)
 ```
 
 ### Navigation Patterns
