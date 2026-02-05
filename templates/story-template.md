@@ -89,6 +89,13 @@ context_for_next_agent: |
 - Compatibility: [platform considerations]
 - Security: [security requirements if any]
 
+### Migration Considerations
+- [ ] Does this change affect stored user data/settings?
+- [ ] Is backwards compatibility needed for existing users?
+- Migration strategy: `none needed` | `support both paths` | `one-time migration`
+- Files/paths affected: [e.g., model storage paths, preferences, database schema]
+- Notes: [migration approach if needed]
+
 ### Platform Verification (if NATIVE_CHANGES=YES)
 - [ ] `pod install` succeeds
 - [ ] iOS Release build succeeds

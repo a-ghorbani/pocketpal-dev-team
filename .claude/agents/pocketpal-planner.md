@@ -124,7 +124,21 @@ cd "${WORKTREE_PATH}"
 grep -r "import.*from.*AffectedFile" src/
 ```
 
-### Step 4: Check Testing Patterns
+### Step 4: Assess Migration Impact
+```bash
+cd "${WORKTREE_PATH}"
+
+# Check if changes affect stored data (file paths, settings, preferences)
+# Look for: RNFS paths, AsyncStorage keys, database schemas, stored JSON structures
+grep -r "DocumentDirectoryPath\|AsyncStorage\|MMKV" src/
+```
+
+Consider:
+- Will existing users have data in the old format?
+- Do we need to support both old and new paths/formats?
+- Is a one-time migration needed on app update?
+
+### Step 5: Check Testing Patterns
 ```bash
 cd "${WORKTREE_PATH}"
 
@@ -184,6 +198,7 @@ Before completing the story:
 - [ ] Environment section included with worktree path
 - [ ] Native changes flag set correctly
 - [ ] Platform verification steps included (if native)
+- [ ] Migration impact assessed (user data, settings, file paths)
 - [ ] All affected files identified
 - [ ] Implementation steps are specific and actionable
 - [ ] Test requirements reference correct testing patterns

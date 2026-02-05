@@ -65,6 +65,13 @@ yarn test --findRelatedTests [path/to/file]
 
 ---
 
+## Migration Check
+
+- Affects user data/settings: `YES` | `NO`
+- If YES, migration approach: [brief description]
+
+---
+
 ## Commit Message
 
 ```
