@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 1000" width="720" height="1000">
+  <defs>
+    <rect id="step" width="176" height="34" rx="8" fill="#1c2128" stroke="#6366f1" stroke-width="1.5"/>
+  </defs>
+
+  <!-- Background -->
+  <rect width="720" height="1000" fill="#0d1117"/>
+
+  <!-- ═══ INPUT ═══ -->
+  <rect x="190" y="20" width="340" height="52" rx="10" fill="#0c2d6b" stroke="#1f6feb" stroke-width="2"/>
+  <text x="360" y="40" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#58a6ff" letter-spacing="0.04em">📥  INPUT</text>
+  <text x="360" y="57" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" fill="#58a6ff" opacity="0.8">GitHub Issue · Linear Ticket · Description</text>
+
+  <line x1="360" y1="72" x2="360" y2="96" stroke="#484f58" stroke-width="2"/>
+  <polygon points="360,102 355,94 365,94" fill="#484f58"/>
+
+  <!-- ═══ ORCHESTRATOR ═══ -->
+  <rect x="40" y="106" width="640" height="100" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <rect x="60" y="118" width="28" height="28" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
+  <text x="74" y="132" text-anchor="middle" dominant-baseline="central" font-size="14">🎯</text>
+  <text x="100" y="132" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#a5b4fc" letter-spacing="0.08em">ORCHESTRATOR</text>
+  <line x1="56" y1="152" x2="664" y2="152" stroke="#30363d" stroke-width="1"/>
+  <use href="#step" x="66" y="162"/>
+  <text x="154" y="179" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Sync &amp; create worktree</text>
+  <path d="M246,179 L264,179 L260,175 M264,179 L260,183" stroke="#484f58" stroke-width="1.5" fill="none"/>
+  <use href="#step" x="272" y="162"/>
+  <text x="360" y="179" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Parse &amp; classify task</text>
+  <path d="M452,179 L470,179 L466,175 M470,179 L466,183" stroke="#484f58" stroke-width="1.5" fill="none"/>
+  <use href="#step" x="478" y="162"/>
+  <text x="566" y="179" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Route to planner</text>
+
+  <line x1="360" y1="206" x2="360" y2="230" stroke="#484f58" stroke-width="2"/>
+  <polygon points="360,236 355,228 365,228" fill="#484f58"/>
+
+  <!-- ═══ PLANNER ═══ -->
+  <rect x="40" y="240" width="640" height="100" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <rect x="60" y="252" width="28" height="28" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
+  <text x="74" y="266" text-anchor="middle" dominant-baseline="central" font-size="14">📋</text>
+  <text x="100" y="266" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#a5b4fc" letter-spacing="0.08em">PLANNER</text>
+  <line x1="56" y1="286" x2="664" y2="286" stroke="#30363d" stroke-width="1"/>
+  <use href="#step" x="66" y="296"/>
+  <text x="154" y="313" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Research codebase</text>
+  <path d="M246,313 L264,313 L260,309 M264,313 L260,317" stroke="#484f58" stroke-width="1.5" fill="none"/>
+  <use href="#step" x="272" y="296"/>
+  <text x="360" y="313" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Identify files &amp; patterns</text>
+  <path d="M452,313 L470,313 L466,309 M470,313 L466,317" stroke="#484f58" stroke-width="1.5" fill="none"/>
+  <use href="#step" x="478" y="296"/>
+  <text x="566" y="313" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Write story file</text>
+
+  <line x1="360" y1="340" x2="360" y2="364" stroke="#484f58" stroke-width="2"/>
+  <polygon points="360,370 355,362 365,362" fill="#484f58"/>
+
+  <!-- ═══ APPROVE PLAN ═══ -->
+  <rect x="240" y="374" width="240" height="38" rx="8" fill="#3b2e00" stroke="#9e6a03" stroke-width="2"/>
+  <text x="360" y="393" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="700" fill="#d29922" letter-spacing="0.04em">👤  APPROVE PLAN</text>
+
+  <line x1="360" y1="412" x2="360" y2="436" stroke="#484f58" stroke-width="2"/>
+  <polygon points="360,442 355,434 365,434" fill="#484f58"/>
+
+  <!-- ═══ IMPLEMENTER ═══ -->
+  <rect x="40" y="446" width="640" height="100" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <rect x="60" y="458" width="28" height="28" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
+  <text x="74" y="472" text-anchor="middle" dominant-baseline="central" font-size="14">⚙️</text>
+  <text x="100" y="472" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#a5b4fc" letter-spacing="0.08em">IMPLEMENTER</text>
+  <line x1="56" y1="492" x2="664" y2="492" stroke="#30363d" stroke-width="1"/>
+  <use href="#step" x="66" y="502"/>
+  <text x="154" y="519" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Read story &amp; requirements</text>
+  <path d="M246,519 L264,519 L260,515 M264,519 L260,523" stroke="#484f58" stroke-width="1.5" fill="none"/>
+  <use href="#step" x="272" y="502"/>
+  <text x="360" y="519" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Write code following plan</text>
+  <path d="M452,519 L470,519 L466,515 M470,519 L466,523" stroke="#484f58" stroke-width="1.5" fill="none"/>
+  <use href="#step" x="478" y="502"/>
+  <text x="566" y="519" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Run builds if native</text>
+
+  <line x1="360" y1="546" x2="360" y2="570" stroke="#484f58" stroke-width="2"/>
+  <polygon points="360,576 355,568 365,568" fill="#484f58"/>
+
+  <!-- ═══ TESTER ═══ -->
+  <rect x="40" y="580" width="640" height="100" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <rect x="60" y="592" width="28" height="28" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
+  <text x="74" y="606" text-anchor="middle" dominant-baseline="central" font-size="14">🧪</text>
+  <text x="100" y="606" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#a5b4fc" letter-spacing="0.08em">TESTER</text>
+  <line x1="56" y1="626" x2="664" y2="626" stroke="#30363d" stroke-width="1"/>
+  <use href="#step" x="66" y="636"/>
+  <text x="154" y="653" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Analyze coverage needs</text>
+  <path d="M246,653 L264,653 L260,649 M264,653 L260,657" stroke="#484f58" stroke-width="1.5" fill="none"/>
+  <use href="#step" x="272" y="636"/>
+  <text x="360" y="653" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Write tests for new code</text>
+  <path d="M452,653 L470,653 L466,649 M470,653 L466,657" stroke="#484f58" stroke-width="1.5" fill="none"/>
+  <use href="#step" x="478" y="636"/>
+  <text x="566" y="653" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Run tests &amp; fix failures</text>
+
+  <line x1="360" y1="680" x2="360" y2="704" stroke="#484f58" stroke-width="2"/>
+  <polygon points="360,710 355,702 365,702" fill="#484f58"/>
+
+  <!-- ═══ REVIEWER ═══ -->
+  <rect x="40" y="714" width="640" height="100" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <rect x="60" y="726" width="28" height="28" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="1"/>
+  <text x="74" y="740" text-anchor="middle" dominant-baseline="central" font-size="14">🔍</text>
+  <text x="100" y="740" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#a5b4fc" letter-spacing="0.08em">REVIEWER</text>
+  <line x1="56" y1="760" x2="664" y2="760" stroke="#30363d" stroke-width="1"/>
+  <use href="#step" x="66" y="770"/>
+  <text x="154" y="787" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Verify builds pass</text>
+  <path d="M246,787 L264,787 L260,783 M264,787 L260,791" stroke="#484f58" stroke-width="1.5" fill="none"/>
+  <use href="#step" x="272" y="770"/>
+  <text x="360" y="787" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Check code quality</text>
+  <path d="M452,787 L470,787 L466,783 M470,787 L466,791" stroke="#484f58" stroke-width="1.5" fill="none"/>
+  <use href="#step" x="478" y="770"/>
+  <text x="566" y="787" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#e6edf3">Create draft PR</text>
+
+  <line x1="360" y1="814" x2="360" y2="838" stroke="#484f58" stroke-width="2"/>
+  <polygon points="360,844 355,836 365,836" fill="#484f58"/>
+
+  <!-- ═══ REVIEW PR ═══ -->
+  <rect x="240" y="848" width="240" height="38" rx="8" fill="#3b2e00" stroke="#9e6a03" stroke-width="2"/>
+  <text x="360" y="867" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="700" fill="#d29922" letter-spacing="0.04em">👤  REVIEW PR</text>
+
+  <line x1="360" y1="886" x2="360" y2="910" stroke="#484f58" stroke-width="2"/>
+  <polygon points="360,916 355,908 365,908" fill="#484f58"/>
+
+  <!-- ═══ OUTPUT ═══ -->
+  <rect x="190" y="920" width="340" height="52" rx="10" fill="#0a3d1e" stroke="#238636" stroke-width="2"/>
+  <text x="360" y="938" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#3fb950" letter-spacing="0.04em">✅  OUTPUT</text>
+  <text x="360" y="956" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" fill="#3fb950" opacity="0.8">Feature Merged to Main</text>
+
+</svg>

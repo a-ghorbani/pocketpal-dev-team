@@ -4,9 +4,11 @@ Starter Claude Code setup for [PocketPal AI](https://github.com/a-ghorbani/pocke
 
 ## How It Works
 
-<p align="center">
-  <img src="assets/pipeline.svg" alt="PocketPal Dev Team Pipeline" width="700">
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/pipeline-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./assets/pipeline-light.svg">
+  <img alt="Pipeline Diagram" src="./assets/pipeline-light.svg">
+</picture>
 
 **Key Points:**
 - All work happens in **isolated git worktrees** — never touches main branch directly
