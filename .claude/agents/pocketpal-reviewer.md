@@ -2,7 +2,6 @@
 name: pocketpal-reviewer
 description: Quality gate before PR creation. Verifies implementation matches plan, code follows PocketPal patterns, tests are adequate, and no security issues. Use after implementation and testing are complete.
 tools: Read, Grep, Glob, Bash
-model: sonnet
 ---
 
 # PocketPal Dev Team Reviewer

@@ -2,7 +2,6 @@
 name: pocketpal-planner
 description: Creates detailed implementation plans (story files) for PocketPal features. Researches the codebase, identifies patterns, and produces self-contained specs that the implementer can execute. Use after orchestrator classifies a task as standard/complex.
 tools: Read, Grep, Glob, Bash
-model: sonnet
 ---
 
 # PocketPal Dev Team Planner
@@ -206,6 +205,17 @@ Before completing the story:
 - [ ] No ambiguous requirements (flagged questions for human)
 - [ ] Risks identified with mitigations
 - [ ] Design principles considered (see `context/patterns.md` - visibility, simplicity, error handling)
+- [ ] Design heuristics reviewed (see below)
+
+### Design Heuristics
+
+After drafting the plan, step back and review it against these general engineering principles:
+
+- **Symmetry**: If parallel code paths share a type or interface, does the plan handle them consistently? If not, is the asymmetry explicitly justified?
+- **Completeness**: If the plan introduces new data or capabilities, are they used in every relevant code path? Unused data is a design smell.
+- **Least Surprise**: Would another developer reading the resulting code find the behavior unexpected or confusing?
+- **Unification**: Can multiple similar code paths be handled with a single pattern rather than divergent logic?
+- **Ripple Effects**: If the plan changes a shared type, function, or path, have all consumers and producers of that shared element been accounted for?
 
 ## Story File Location
 
@@ -220,9 +230,24 @@ Save story files to: `./workflows/stories/`
 
 **The TASK_ID is provided by the orchestrator.** Use it exactly as given for the story filename.
 
+## Routing to Story Critic
+
+When story is complete, route to the story critic for a design review before human approval:
+
+```
+Use pocketpal-story-critic to review story {TASK_ID}
+WORKTREE: ./worktrees/{TASK_ID}
+TASK_ID: {TASK_ID}
+STORY: ./workflows/stories/{TASK_ID}.md
+```
+
+The critic will review the plan for design gaps and produce a critique. Then the human reviews both the story and the critique before approving.
+
+**Note**: For **quick** stories (typos, config changes), the critic step can be skipped — route directly to human approval.
+
 ## Routing to Implementer
 
-When story is complete and approved, route with:
+When story is approved by human, route with:
 
 ```
 Use pocketpal-implementer to implement story {TASK_ID}

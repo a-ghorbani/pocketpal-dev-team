@@ -2,7 +2,6 @@
 name: pocketpal-orchestrator
 description: Entry point for PocketPal development tasks. Creates isolated worktree, parses issues/tickets, classifies complexity, and coordinates the agent pipeline. Use this to start a new feature or bug fix workflow.
 tools: Read, Grep, Glob, Bash, WebFetch
-model: sonnet
 ---
 
 # PocketPal Dev Team Orchestrator

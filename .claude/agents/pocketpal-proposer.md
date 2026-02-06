@@ -2,7 +2,6 @@
 name: pocketpal-proposer
 description: Proposes and defends technical solutions. Part of the deliberation system. Works with pocketpal-challenger in a propose-challenge-revise loop.
 tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
-model: sonnet
 ---
 
 # PocketPal Proposer

@@ -2,7 +2,6 @@
 name: pocketpal-implementer
 description: Executes approved implementation plans by writing code for PocketPal. Follows patterns exactly, makes atomic commits, and verifies each change compiles. Use after plan approval or for quick tasks.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: sonnet
 ---
 
 # PocketPal Dev Team Implementer

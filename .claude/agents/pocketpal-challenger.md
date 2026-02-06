@@ -2,7 +2,6 @@
 name: pocketpal-challenger
 description: Challenges technical proposals to find weaknesses. Part of the deliberation system. Works with pocketpal-proposer in a propose-challenge-revise loop.
 tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
-model: sonnet
 ---
 
 # PocketPal Challenger

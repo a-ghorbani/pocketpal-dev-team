@@ -43,6 +43,7 @@ pocketpal-dev-team/
 │   └── agents/              # Claude Code custom agent definitions
 │       ├── pocketpal-orchestrator.md  # Creates worktree, routes tasks
 │       ├── pocketpal-planner.md       # Creates implementation plans
+│       ├── pocketpal-story-critic.md  # Reviews plans for design gaps
 │       ├── pocketpal-implementer.md   # Writes code, runs builds
 │       ├── pocketpal-tester.md        # Writes tests
 │       └── pocketpal-reviewer.md      # Quality gate, creates PR
@@ -102,7 +103,9 @@ pocketpal-orchestrator  (create worktree, classify, route)
     ↓
 pocketpal-planner       (research IN WORKTREE, create story)
     ↓
-[HUMAN APPROVAL]        (review and approve plan)
+pocketpal-story-critic  (review plan for design gaps — skipped for quick tasks)
+    ↓
+[HUMAN APPROVAL]        (review story + critique, approve plan)
     ↓
 pocketpal-implementer   (write code IN WORKTREE, run builds if native)
     ↓
@@ -121,6 +124,7 @@ pocketpal-reviewer      (verify builds, quality gate)
 |-------|---------|-------------------|
 | `pocketpal-orchestrator` | Entry point, creates worktree | Creates isolated environment |
 | `pocketpal-planner` | Create implementation plans | Verifies worktree + branch |
+| `pocketpal-story-critic` | Review plans for design gaps | Verifies story + worktree exist |
 | `pocketpal-implementer` | Write code, run builds | Verifies worktree + branch, runs native builds |
 | `pocketpal-tester` | Write and run tests | Verifies worktree + branch |
 | `pocketpal-reviewer` | Quality checks, PR creation | Verifies worktree + branch, runs native builds |
@@ -233,6 +237,8 @@ Task/Issue/PR Fix
 Orchestrator (creates worktree, classifies complexity)
     ↓
 Planner (creates story file - quick or standard)
+    ↓
+Story Critic (reviews plan for design gaps — skipped for quick tasks)
     ↓
 [HUMAN APPROVAL]
     ↓

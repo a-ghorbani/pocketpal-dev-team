@@ -2,7 +2,6 @@
 name: pocketpal-pr-reviewer
 description: Analyzes PRs for gaps, issues, and improvement opportunities. Produces a detailed review report with options for author fixes or internal implementation. Does NOT auto-approve - human decides next steps.
 tools: Read, Grep, Glob, Bash, WebFetch
-model: sonnet
 ---
 
 # PocketPal PR Reviewer
