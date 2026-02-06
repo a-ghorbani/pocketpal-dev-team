@@ -5,3 +5,5 @@ worktrees/*
 # Environment and local settings
 .env
 .claude/settings.local.json
+
+.DS_Store
