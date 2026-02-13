@@ -20,9 +20,7 @@
       "Bash(git push:*)",
       "Bash(git commit:*)",
       "Bash(git reset:*)",
-      "Bash(git rebase:*)",
-      "Edit(**/pocketpal-ai/**)",
-      "Write(**/pocketpal-ai/**)"
+      "Bash(git rebase:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
@@ -36,7 +34,9 @@
       "Read(.env.*)",
       "Read(**/secrets/**)",
       "Edit(.env)",
-      "Edit(.env.*)"
+      "Edit(.env.*)",
+      "Edit(**/repos/pocketpal-ai/**)",
+      "Write(**/repos/pocketpal-ai/**)"
     ]
   },
   "hooks": {
@@ -47,6 +47,33 @@
           {
             "type": "command",
             "command": "./tools/block-commit-to-main.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./tools/guard-submodule-edit.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./tools/guard-submodule-edit.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./tools/guard-submodule-git.sh"
           }
         ]
       }
