@@ -14,7 +14,8 @@
       "Skill(start-task)",
       "Skill(start-action)",
       "Skill(review-pr)",
-      "Skill(deliberate)"
+      "Skill(deliberate)",
+      "Skill(run-e2e)"
     ],
     "ask": [
       "Bash(git push:*)",
