@@ -106,6 +106,7 @@ copy_if_exists() {
 # Root level
 copy_if_exists "${MAIN_REPO}/.env" "${WORKTREE_PATH}/.env"
 copy_if_exists "${MAIN_REPO}/e2e/.env" "${WORKTREE_PATH}/e2e/.env"
+copy_if_exists "${MAIN_REPO}/e2e/devices.json" "${WORKTREE_PATH}/e2e/devices.json"
 
 # iOS secrets
 copy_if_exists "${MAIN_REPO}/ios/.xcode.env.local" "${WORKTREE_PATH}/ios/.xcode.env.local"
