@@ -169,7 +169,12 @@ yarn test --coverage
 - [ ] Edge cases covered
 - [ ] Error cases covered
 
-### 8. Documentation
+### 8. Visual Confirmation (if Visual Confirmation = YES)
+- [ ] Visual capture spec ran successfully
+- [ ] Screenshots saved to `e2e/debug-output/screenshots/visual-captures/`
+- [ ] Screenshots attached to PR (or noted for human to run locally)
+
+### 9. Documentation
 - [ ] Code is self-documenting (clear names)
 - [ ] Complex logic has comments
 - [ ] JSDoc for public APIs if needed
@@ -222,7 +227,41 @@ yarn ios --configuration Release
 yarn android --variant=release
 ```
 
-### Step 7: Decision
+### Step 7: Visual Confirmation (if flagged)
+
+Check the story metadata for `Visual Confirmation: YES`. If set:
+
+1. Read the `Visual Confirmation` section in the story for the `VISUAL_CAPTURES` JSON
+2. Run the visual-capture E2E spec to capture screenshots:
+
+```bash
+cd "${WORKTREE_PATH}"
+
+# Build the app if not already built (or use --skip-build if recent build exists)
+yarn ios:build:e2e
+
+# Run visual capture with the prompts from the story
+cd e2e && yarn install && cd ..
+VISUAL_CAPTURES='[the JSON from the story]' yarn e2e:ios --spec visual-capture --skip-build
+```
+
+3. Screenshots are saved to `e2e/debug-output/screenshots/visual-captures/`
+4. After creating the PR, attach screenshots as a comment:
+
+```bash
+# Upload each screenshot and comment on the PR
+for img in e2e/debug-output/screenshots/visual-captures/*.png; do
+  gh pr comment <PR_NUMBER> --repo a-ghorbani/pocketpal-ai \
+    --body "### Visual Confirmation: $(basename "$img" .png)
+![$(basename "$img")]($(gh api repos/a-ghorbani/pocketpal-ai/issues/<PR_NUMBER>/comments --jq '.' 2>/dev/null || echo 'screenshot'))"
+done
+```
+
+Alternatively, if `gh` image upload is not available, note in the PR description that visual confirmation screenshots are available at the path above and the human should run the visual-capture spec locally to see them.
+
+**If the E2E visual capture fails** (model download timeout, inference error, etc.), do NOT block the PR. Note it in the review report and suggest the human run it manually. Visual confirmation is advisory, not a gate.
+
+### Step 8: Decision
 - **APPROVE**: All checks pass, builds succeed (if native), ready for PR
 - **REQUEST_CHANGES**: Issues found, needs fixes
 - **ESCALATE**: Complex issues need human review
@@ -255,6 +294,7 @@ APPROVED | REQUEST_CHANGES | ESCALATE
 | Pod Install | PASS/FAIL/N/A | |
 | iOS Build | PASS/FAIL/N/A | |
 | Android Build | PASS/FAIL/N/A | |
+| Visual Capture | PASS/FAIL/SKIP/N/A | |
 
 ### Plan Compliance
 

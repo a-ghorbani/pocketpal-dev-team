@@ -6,6 +6,7 @@
 - **Source**: github | linear | prompt
 - **Complexity**: quick | standard | complex
 - **Native Changes**: YES | NO
+- **Visual Confirmation**: YES | NO
 - **Created**: [TIMESTAMP]
 - **Status**: draft | pending_approval | approved | in_progress | complete
 
@@ -200,6 +201,18 @@ yarn test --findRelatedTests src/path/to/file.tsx
 ### Manual Testing
 - [ ] [Manual test step 1]
 - [ ] [Manual test step 2]
+
+### Visual Confirmation (if Visual Confirmation = YES)
+
+Screenshots captured automatically via `visual-capture` E2E spec during review.
+The reviewer runs this spec and attaches screenshots to the PR for human assessment.
+
+```json
+// VISUAL_CAPTURES env var value for the reviewer to use:
+[
+  {"prompt": "[Prompt that triggers the feature]", "name": "[screenshot-name]", "description": "[what to look for]"}
+]
+```
 
 ---
 

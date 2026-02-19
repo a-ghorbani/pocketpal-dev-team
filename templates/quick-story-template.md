@@ -5,6 +5,7 @@
 - **Source**: github | linear | prompt
 - **Complexity**: quick
 - **Native Changes**: YES | NO
+- **Visual Confirmation**: YES | NO
 - **Created**: [TIMESTAMP]
 - **Status**: draft | pending_approval | approved | in_progress | complete
 
