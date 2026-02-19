@@ -168,6 +168,17 @@ After code changes:
 4. Run on simulator/emulator to verify functionality
 ```
 
+## Visual Confirmation Detection
+
+If the task involves ANY of these, mark `Visual Confirmation: YES` in the story:
+- Changes to UI components (layout, styling, rendering)
+- New visual features (tables, charts, new screens, new UI elements)
+- Changes to theme or color handling
+- Changes to markdown/HTML rendering
+- Any change where visual correctness matters and can't be fully verified by unit tests
+
+When visual confirmation is flagged, fill in the `Visual Confirmation` section in the story template with a `VISUAL_CAPTURES` JSON array specifying prompts that trigger the feature and what to look for in screenshots. The reviewer will run the `visual-capture` E2E spec with these prompts and attach screenshots to the PR.
+
 ## Output: Story File
 
 Create a story file following the template. **MUST include environment section:**
@@ -178,6 +189,7 @@ Task ID: TASK-{id}
 Worktree: ./worktrees/TASK-{id}
 Branch: feature/TASK-{id}
 Native Changes: YES/NO
+Visual Confirmation: YES/NO
 ```
 
 ### Key Sections
@@ -197,6 +209,8 @@ Before completing the story:
 - [ ] Environment section included with worktree path
 - [ ] Native changes flag set correctly
 - [ ] Platform verification steps included (if native)
+- [ ] Visual confirmation flag set correctly (YES for UI changes)
+- [ ] Visual captures JSON filled in (if visual confirmation = YES)
 - [ ] Migration impact assessed (user data, settings, file paths)
 - [ ] All affected files identified
 - [ ] Implementation steps are specific and actionable
