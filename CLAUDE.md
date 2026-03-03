@@ -63,7 +63,10 @@ pocketpal-dev-team/
 │       ├── pocketpal-story-critic.md  # Reviews plans for design gaps
 │       ├── pocketpal-implementer.md   # Writes code, runs builds
 │       ├── pocketpal-tester.md        # Writes tests
-│       └── pocketpal-reviewer.md      # Quality gate, creates PR
+│       ├── pocketpal-reviewer.md      # Quality gate, creates PR
+│       ├── pocketpal-pr-reviewer.md   # Analyzes external PRs
+│       ├── pocketpal-proposer.md      # Proposes solutions (deliberation)
+│       └── pocketpal-challenger.md    # Challenges proposals (deliberation)
 ├── context/                 # Shared context for PocketPal
 │   ├── pocketpal-overview.md
 │   └── patterns.md          # Coding & testing patterns (CRITICAL)
@@ -160,6 +163,9 @@ pocketpal-reviewer      (verify builds, quality gate)
 | `pocketpal-implementer` | Write code, run builds | Verifies worktree + branch, runs native builds |
 | `pocketpal-tester` | Write and run tests | Verifies worktree + branch |
 | `pocketpal-reviewer` | Quality checks, PR creation | Verifies worktree + branch, runs native builds |
+| `pocketpal-pr-reviewer` | Analyze external PRs | Creates PR worktree, checks patterns |
+| `pocketpal-proposer` | Propose solutions (deliberation) | Grounds in source material |
+| `pocketpal-challenger` | Challenge proposals (deliberation) | Problem drift check first |
 
 ## Linked Codebases
 

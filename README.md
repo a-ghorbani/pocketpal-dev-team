@@ -12,7 +12,8 @@ Starter Claude Code setup for [PocketPal AI](https://github.com/a-ghorbani/pocke
 
 **Key Points:**
 - All work happens in **isolated git worktrees** — never touches main branch directly
-- Two **human checkpoints** (amber): plan approval before coding, PR review before merge
+- **AI review loop** catches design flaws before coding; human only needed when AI can't converge
+- **Human checkpoint**: PR review before merge
 - Each agent **verifies its environment** before starting work
 - Supports **light and dark mode** automatically
 
@@ -97,7 +98,10 @@ pocketpal-orchestrator    → Creates worktree, analyzes task, classifies
     ↓
 pocketpal-planner         → Researches IN WORKTREE, creates plan
     ↓
-[YOU APPROVE PLAN]        → Review the story file
+pocketpal-story-critic    → Reviews plan (may revise with planner, max 2 rounds)
+    ↓
+    ├── LGTM / resolved → proceed automatically
+    └── unresolved blockers → [YOU APPROVE PLAN]
     ↓
 pocketpal-implementer     → Writes code IN WORKTREE, runs builds if native
     ↓
@@ -128,11 +132,15 @@ claude "Use pocketpal-orchestrator: Implement GitHub issue #123"
 
 | Agent | Purpose |
 |-------|---------|
-| `pocketpal-orchestrator` | Entry point - creates worktree, analyzes tasks, routes to other agents |
-| `pocketpal-planner` | Researches codebase IN WORKTREE, creates detailed implementation plans |
+| `pocketpal-orchestrator` | Entry point — creates worktree, analyzes tasks, routes to other agents |
+| `pocketpal-planner` | Researches codebase IN WORKTREE, creates implementation plans |
+| `pocketpal-story-critic` | Reviews plans for design gaps, triggers revision if needed |
 | `pocketpal-implementer` | Writes code IN WORKTREE, runs platform builds for native changes |
 | `pocketpal-tester` | Writes and runs tests IN WORKTREE using PocketPal's testing patterns |
-| `pocketpal-reviewer` | Quality gate - verifies builds, code quality, creates PR |
+| `pocketpal-reviewer` | Quality gate — verifies builds, code quality, creates PR |
+| `pocketpal-pr-reviewer` | Analyzes external PRs for issues and improvement opportunities |
+| `pocketpal-proposer` | Proposes technical solutions (used in `/deliberate`) |
+| `pocketpal-challenger` | Challenges proposals to find weaknesses (used in `/deliberate`) |
 
 ## Native Changes
 
@@ -226,11 +234,11 @@ pocketpal-dev-team/
 
 ## Tips
 
-1. **Be specific** - More detail in your task = better results
-2. **Review plans** - Always check the story file before approving
-3. **Check tests** - PocketPal has specific testing patterns (centralized mocks)
-4. **Trust the guards** - Agents will refuse to work in wrong environments
-5. **Native = slow** - Tasks with native changes take longer (builds required)
+1. **Be specific** — More detail in your task = better results
+2. **Check the PR** — The story critic handles plan review; focus your attention on the final PR
+3. **Check tests** — PocketPal has specific testing patterns (centralized mocks)
+4. **Trust the guards** — Agents will refuse to work in wrong environments
+5. **Native = slow** — Tasks with native changes take longer (builds required)
 
 ## When Reviews Find Issues
 
