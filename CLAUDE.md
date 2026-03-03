@@ -118,12 +118,27 @@ Issue/Prompt
     ↓
 pocketpal-orchestrator  (create worktree, classify, route)
     ↓
-pocketpal-planner       (research IN WORKTREE, create story)
+pocketpal-planner       (research IN WORKTREE, create story v1)
     ↓
-pocketpal-story-critic  (review plan for design gaps — skipped for quick tasks)
+pocketpal-story-critic  (blind review, structured critique — skipped for quick tasks)
     ↓
-[HUMAN APPROVAL]        (review story + critique, approve plan)
-    ↓
+    ├── LGTM ──────────────────────────────────────────┐
+    └── HAS_CONCERNS / HAS_BLOCKERS                    │
+         ↓                                             │
+    pocketpal-planner   (revision mode: address each   │
+                         finding as FIXED/REJECTED/     │
+                         DEFERRED, produce story v2)    │
+         ↓                                             │
+    pocketpal-story-critic  (re-review, verify fixes,  │
+                             final verdict)             │
+         ↓                                             │
+         ├── AI_APPROVED ──────────────────────────────┤
+         └── NEEDS_HUMAN ──────────────────────────┐   │
+                                                   ↓   │
+                                    [HUMAN APPROVAL]   │
+                                        ↓              │
+                                        ├──────────────┤
+                                                       ↓
 pocketpal-implementer   (write code IN WORKTREE, run builds if native)
     ↓
 pocketpal-tester        (write/run tests IN WORKTREE)
@@ -194,7 +209,7 @@ Each agent automatically creates its own worktree = no conflicts.
 1. **Claude Code Native** - Built on Claude Code's agent system
 2. **Story Files** - Self-contained context per task (BMAD-inspired)
 3. **Centralized Mocking** - Tests use PocketPal's existing infrastructure
-4. **Human Gates** - Plan approval + PR review required
+4. **Human Gates** - PR review required; plan approval only when AI review can't converge
 5. **Pattern Compliance** - Agents must follow existing codebase patterns
 6. **Worktree Isolation** - All work in worktrees, never in main repo
 7. **Branch Protection** - Agents refuse to work on main/master
@@ -255,17 +270,16 @@ Orchestrator (creates worktree, classifies complexity)
     ↓
 Planner (creates story file - quick or standard)
     ↓
-Story Critic (reviews plan for design gaps — skipped for quick tasks)
+Story Critic (review-revise loop — skipped for quick tasks)
     ↓
-[HUMAN APPROVAL]
-    ↓
-Implementation
+LGTM / AI_APPROVED → Implementation
+NEEDS_HUMAN → Human Approval → Implementation
 ```
 
 **Agents must NEVER:**
 - Enter "plan mode" and start implementing
 - Write code without a story file
-- Skip human approval
+- Skip the review-revise loop for standard tasks
 - Create plans outside of story files
 - Route quick tasks directly to implementer (they still need a quick story)
 

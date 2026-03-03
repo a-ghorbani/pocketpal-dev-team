@@ -271,6 +271,67 @@ Issues to fix:
 Original PR: #490 by @contributor
 ```
 
+## Post-Planner: Review-Revise Loop (Standard Tasks)
+
+After the planner creates a story for a **standard** task, it enters a review-revise loop before human approval. The caller (main conversation) orchestrates this loop:
+
+```
+Planner creates story
+    |
+    v
+Story Critic ---- LGTM ---------> Implementation
+    |
+    HAS_CONCERNS / HAS_BLOCKERS
+    |
+    v
+Planner (revision mode)
+    |
+    v
+Story Critic ---- LGTM ---------> Implementation
+    |
+    still HAS_BLOCKERS (after max 2 reviews)
+    |
+    v
+Human Approval → Implementation
+```
+
+### Context Isolation (CRITICAL)
+
+When routing to the story critic, pass **ONLY** the story file path and worktree path. Do NOT pass the planner's analysis, reasoning, or the original issue discussion. The critic forms its own understanding from the codebase.
+
+### Routing Examples
+
+**Critic review (same call every time — critic doesn't know or care about rounds):**
+```
+Use pocketpal-story-critic to review story TASK-20250115-1430
+WORKTREE: ./worktrees/TASK-20250115-1430
+TASK_ID: TASK-20250115-1430
+STORY: ./workflows/stories/TASK-20250115-1430.md
+```
+
+**Planner revision (when critic returns HAS_CONCERNS / HAS_BLOCKERS):**
+```
+Use pocketpal-planner to revise story TASK-20250115-1430 based on critique
+WORKTREE: ./worktrees/TASK-20250115-1430
+BRANCH: feature/TASK-20250115-1430
+TASK_ID: TASK-20250115-1430
+MODE: revision
+STORY: ./workflows/stories/TASK-20250115-1430.md
+CRITIQUE:
+"""
+[Paste the critic's FULL output here — do not summarize]
+"""
+```
+
+### Loop Rules
+- **Quick tasks**: Skip the loop entirely, go directly to implementation
+- **Standard tasks**: Always run at least one critic review
+- **Max 2 critic reviews**: If the second review still has BLOCKERs, escalate to human
+- **LGTM**: Proceed to implementation
+- **HAS_BLOCKERS after 2 reviews**: Escalate to human with the unresolved findings
+
+---
+
 ## Escalation Triggers
 
 STOP and escalate to human when:

@@ -308,6 +308,16 @@ docs(readme): update installation instructions
 
 ---
 
+## Review History
+
+> Updated by the planner during revision. Shows what the critic found and how it was addressed.
+
+| # | Severity | Finding | Resolution | Notes |
+|---|----------|---------|------------|-------|
+| 1 | BLOCKER/CONCERN/SUGGESTION | [Short title] | FIXED/REJECTED/DEFERRED | [Brief explanation] |
+
+---
+
 ## Agent Reports
 
 ### Planner Report

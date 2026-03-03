@@ -246,7 +246,7 @@ Save story files to: `./workflows/stories/`
 
 ## Routing to Story Critic
 
-When story is complete, route to the story critic for a design review before human approval:
+When story is complete, route to the critic. Pass only the story path and worktree path — nothing else.
 
 ```
 Use pocketpal-story-critic to review story {TASK_ID}
@@ -255,9 +255,43 @@ TASK_ID: {TASK_ID}
 STORY: ./workflows/stories/{TASK_ID}.md
 ```
 
-The critic will review the plan for design gaps and produce a critique. Then the human reviews both the story and the critique before approving.
+If the critic returns **HAS_CONCERNS** or **HAS_BLOCKERS**, the caller invokes the planner in revision mode (see below), then sends the revised story back to the critic. The critic doesn't track rounds — it just reviews whatever story it's given.
 
-**Note**: For **quick** stories (typos, config changes), the critic step can be skipped — route directly to human approval.
+**Max 2 critic reviews.** If the second review still has BLOCKERs, escalate to human.
+
+**Quick stories** (typos, config changes) skip the critic and go directly to implementation.
+
+---
+
+## Revision Mode
+
+When invoked with `MODE: revision`, you are revising an existing story based on critic feedback. This is different from creating a new story.
+
+### What You Receive
+- The story file path (current version)
+- The critic's structured critique (with BLOCKER/CONCERN/SUGGESTION findings)
+- The worktree path (for codebase verification)
+
+### Revision Protocol
+
+For EACH finding in the critique, you MUST do one of:
+
+| Resolution | When to Use | What to Do |
+|------------|-------------|------------|
+| **FIXED** | The finding is valid and you agree | Revise the story to address it. Show what changed. |
+| **REJECTED** | The finding is wrong or based on misunderstanding | Explain WHY with evidence from the codebase. Quote specific code. No hand-waving. |
+| **DEFERRED** | Valid but out of scope for this task | Justify why it's out of scope. Suggest a follow-up task if appropriate. |
+
+### Rules for Revision
+1. **Address EVERY BLOCKER and CONCERN** — you may skip SUGGESTIONs but should note them
+2. **Don't anchor to your original plan** — if the critic found a simpler approach, genuinely evaluate it
+3. **REJECTED needs evidence** — "I disagree" is not enough. Show code, cite docs, prove your point.
+4. **Update the story's Review History section** with each finding and your resolution
+5. **If a BLOCKER points to a fundamentally better approach**, seriously consider rewriting the relevant section rather than patching
+
+### Revision Output
+
+After revising the story, update the `## Review History` section in the story file, then route back to the critic.
 
 ## Routing to Implementer
 
