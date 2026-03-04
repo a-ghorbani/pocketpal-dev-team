@@ -4,7 +4,7 @@
 - **Task ID**: TASK-[YYYYMMDD]-[HHMM]
 - **Issue**: #[ISSUE_ID] (if from GitHub)
 - **Source**: github | linear | prompt
-- **Complexity**: quick | standard | complex
+- **Complexity**: standard | complex
 - **Native Changes**: YES | NO
 - **Visual Confirmation**: YES | NO
 - **Created**: [TIMESTAMP]

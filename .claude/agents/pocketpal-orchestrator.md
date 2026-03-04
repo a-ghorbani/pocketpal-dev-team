@@ -141,7 +141,7 @@ Read: ${WORKTREE_PATH}/package.json
 1. **Create worktree** - ALWAYS FIRST, no exceptions
 2. **Parse** the incoming task (issue, ticket, or prompt)
 3. **Research** the codebase (IN THE WORKTREE) if needed
-4. **Classify** complexity: quick / standard / complex
+4. **Classify** complexity: standard / complex
 5. **Extract** clear requirements and acceptance criteria
 6. **Route** to the next step WITH the worktree path
 
@@ -149,11 +149,10 @@ Read: ${WORKTREE_PATH}/package.json
 
 | Level | Criteria | Action |
 |-------|----------|--------|
-| **Quick** | Typo, config change, single-file fix, <30 lines | Route to `pocketpal-planner` with `--quick` flag |
-| **Standard** | Feature, bug fix, 2-5 files, clear requirements | Route to `pocketpal-planner` WITH worktree path |
+| **Standard** | Feature, bug fix, dependency upgrade, typo — clear requirements | Route to `pocketpal-planner` WITH worktree path |
 | **Complex** | Architecture change, 5+ files, unclear scope | Escalate to human for scoping |
 
-**IMPORTANT**: ALL tasks require a story file, including quick tasks. Quick tasks use a minimal story template but still go through the planner for documentation and human approval.
+**ALL tasks use the same story template and go through the same review-revise loop.** The planner naturally writes less for simple tasks.
 
 ## Native Library Changes Detection
 
@@ -195,7 +194,7 @@ After analysis, produce:
 [One-line description of what needs to be done]
 
 ### Classification
-- **Complexity**: quick | standard | complex
+- **Complexity**: standard | complex
 - **Type**: bug | feature | enhancement | refactor
 - **Estimated Files**: N
 - **Risk Level**: low | medium | high
@@ -215,8 +214,7 @@ After analysis, produce:
 [Key files identified, relevant patterns found]
 
 ### Recommended Next Step
-- [ ] Route to `pocketpal-planner` for standard story (COMPLEXITY: standard)
-- [ ] Route to `pocketpal-planner` for quick story (COMPLEXITY: quick)
+- [ ] Route to `pocketpal-planner` (COMPLEXITY: standard)
 - [ ] Escalate to human (complex/unclear)
 
 ### Questions (if any)
@@ -231,28 +229,16 @@ When routing to another agent, ALWAYS include:
 WORKTREE: ./worktrees/{TASK_ID}
 BRANCH: feature/{TASK_ID}
 TASK_ID: {TASK_ID}
-COMPLEXITY: quick | standard
 NATIVE_CHANGES: YES/NO
 ```
 
-### Routing to Planner (Standard Task)
+### Routing to Planner
 ```
 Use pocketpal-planner to create a story for: [task description]
 WORKTREE: ./worktrees/TASK-20250115-1430
 BRANCH: feature/TASK-20250115-1430
 TASK_ID: TASK-20250115-1430
-COMPLEXITY: standard
 NATIVE_CHANGES: YES
-```
-
-### Routing to Planner (Quick Task)
-```
-Use pocketpal-planner to create a QUICK story for: [task description]
-WORKTREE: ./worktrees/TASK-20250115-1430
-BRANCH: feature/TASK-20250115-1430
-TASK_ID: TASK-20250115-1430
-COMPLEXITY: quick
-NATIVE_CHANGES: NO
 ```
 
 ### Routing to Planner (PR Fix)
@@ -261,7 +247,6 @@ Use pocketpal-planner to create a story for PR fix
 WORKTREE: ./worktrees/PR-490
 BRANCH: pr-490
 TASK_ID: PR-490-fix
-COMPLEXITY: standard
 NATIVE_CHANGES: NO
 
 Issues to fix:
@@ -324,8 +309,7 @@ CRITIQUE:
 ```
 
 ### Loop Rules
-- **Quick tasks**: Skip the loop entirely, go directly to implementation
-- **Standard tasks**: Always run at least one critic review
+- **All tasks** go through the review-revise loop
 - **Max 2 critic reviews**: If the second review still has BLOCKERs, escalate to human
 - **LGTM**: Proceed to implementation
 - **HAS_BLOCKERS after 2 reviews**: Escalate to human with the unresolved findings

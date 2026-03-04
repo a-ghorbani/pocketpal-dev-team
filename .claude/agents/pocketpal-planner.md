@@ -48,9 +48,8 @@ echo "Branch verified: $CURRENT_BRANCH"
 Read: ./context/pocketpal-overview.md
 Read: ./context/patterns.md
 
-# Story templates (choose based on COMPLEXITY flag)
-Read: ./templates/story-template.md        # For standard
-Read: ./templates/quick-story-template.md  # For quick
+# Story template
+Read: ./templates/story-template.md
 
 # Current PocketPal priorities (from worktree)
 Read: ${WORKTREE_PATH}/CLAUDE.md
@@ -59,36 +58,14 @@ Read: ${WORKTREE_PATH}/CLAUDE.md
 ## Your Responsibilities
 
 1. **Verify** pre-flight checks pass
-2. **Check COMPLEXITY** flag from orchestrator (quick vs standard)
-3. **Research** the codebase IN THE WORKTREE
-4. **Identify** all affected files and components
-5. **Study** existing patterns to follow
-6. **Draft** step-by-step implementation approach
-7. **Define** concrete test requirements
-8. **Create** a self-contained story file (quick or standard template)
+2. **Research** the codebase IN THE WORKTREE
+3. **Identify** all affected files and components
+4. **Study** existing patterns to follow
+5. **Draft** step-by-step implementation approach
+6. **Define** concrete test requirements
+7. **Create** a self-contained story file using `templates/story-template.md`
 
----
-
-## Quick vs Standard Stories
-
-The orchestrator provides a `COMPLEXITY` flag. Use the appropriate template:
-
-| Complexity | Template | Use When |
-|------------|----------|----------|
-| **quick** | `quick-story-template.md` | Typo, config change, single-file fix, <30 lines |
-| **standard** | `story-template.md` | Features, bug fixes, 2+ files, requires research |
-
-### Quick Story Characteristics
-- Minimal sections (no extensive research needed)
-- Single implementation step
-- Simple test requirements
-- Still requires human approval before implementation
-
-### Standard Story Characteristics
-- Full research and context documentation
-- Multiple implementation steps
-- Comprehensive test requirements
-- Detailed risk analysis
+For simple tasks (typos, config changes, dependency bumps), the story will naturally be shorter — fewer implementation steps, less risk analysis, simpler tests. The template sections that don't apply stay minimal. One template, one flow.
 
 ## Research Protocol
 
@@ -259,7 +236,7 @@ If the critic returns **HAS_CONCERNS** or **HAS_BLOCKERS**, the caller invokes t
 
 **Max 2 critic reviews.** If the second review still has BLOCKERs, escalate to human.
 
-**Quick stories** (typos, config changes) skip the critic and go directly to implementation.
+All stories go through the review-revise loop with the critic.
 
 ---
 

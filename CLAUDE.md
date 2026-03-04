@@ -73,8 +73,7 @@ pocketpal-dev-team/
 ├── workflows/
 │   └── stories/             # Story files (implementation plans)
 ├── templates/
-│   ├── story-template.md         # Standard story template (features, bugs)
-│   └── quick-story-template.md   # Quick story template (typos, config)
+│   └── story-template.md         # Story template (all tasks)
 ├── worktrees/               # Git worktrees for parallel development
 │   └── README.md            # Instructions for creating worktrees
 └── docs/
@@ -123,7 +122,7 @@ pocketpal-orchestrator  (create worktree, classify, route)
     ↓
 pocketpal-planner       (research IN WORKTREE, create story v1)
     ↓
-pocketpal-story-critic  (blind review, structured critique — skipped for quick tasks)
+pocketpal-story-critic  (blind review, structured critique)
     ↓
     ├── LGTM ──────────────────────────────────────────┐
     └── HAS_CONCERNS / HAS_BLOCKERS                    │
@@ -254,40 +253,29 @@ See `worktrees/README.md` for full documentation.
 
 ## CRITICAL RULE: Story Files Required
 
-**ALL implementation work requires a story file, including:**
-- New features (standard story)
-- Bug fixes (standard or quick story)
-- PR review fixes (standard story)
-- Dependency upgrades (standard story)
-- Quick fixes like typos (quick story)
-
-### Quick vs Standard Stories
-
-| Complexity | Template | Use When |
-|------------|----------|----------|
-| **quick** | `templates/quick-story-template.md` | Typo, config, single-file, <30 lines |
-| **standard** | `templates/story-template.md` | Features, bugs, 2+ files |
+**ALL implementation work requires a story file** — one template, one flow:
+- New features, bug fixes, PR fixes, dependency upgrades, typo fixes — all use `templates/story-template.md`
+- The planner naturally writes less for simple tasks; sections that don't apply stay minimal
 
 **The workflow is ALWAYS:**
 ```
 Task/Issue/PR Fix
     ↓
-Orchestrator (creates worktree, classifies complexity)
+Orchestrator (creates worktree)
     ↓
-Planner (creates story file - quick or standard)
+Planner (creates story file)
     ↓
-Story Critic (review-revise loop — skipped for quick tasks)
+Story Critic (review-revise loop)
     ↓
-LGTM / AI_APPROVED → Implementation
-NEEDS_HUMAN → Human Approval → Implementation
+LGTM → Implementation
+Still has blockers → Human Approval → Implementation
 ```
 
 **Agents must NEVER:**
 - Enter "plan mode" and start implementing
 - Write code without a story file
-- Skip the review-revise loop for standard tasks
+- Skip the review-revise loop
 - Create plans outside of story files
-- Route quick tasks directly to implementer (they still need a quick story)
 
 ---
 

@@ -55,13 +55,13 @@ The orchestrator will:
 2. Create a worktree at `worktrees/TASK-xxx`
 3. Create a feature branch
 4. Copy secrets/env files
-5. Classify complexity (quick/standard/complex)
+5. Classify complexity (standard/complex)
 6. Route to planner with worktree context
 
-After the planner creates a story file, you'll be asked to approve before implementation begins.
+After the planner creates a story file, the story critic reviews it automatically. Implementation proceeds if the critic approves (LGTM). Human is only involved if blockers persist after revision.
 
 ## Workflow
 
 ```
-/start-task → orchestrator → planner → [HUMAN APPROVAL] → implementer → tester → reviewer → PR
+/start-task → orchestrator → planner → critic (review-revise) → implementer → tester → reviewer → PR
 ```
