@@ -11,6 +11,8 @@
       "Write(**/worktrees/**)",
       "Edit(**/pocketpal-dev-team/**)",
       "Write(**/pocketpal-dev-team/**)",
+      "Edit(worktrees/**)",
+      "Write(worktrees/**)",
       "Skill(start-task)",
       "Skill(start-action)",
       "Skill(review-pr)",
