@@ -73,10 +73,12 @@ npx tsx e2e/scripts/memory-compare.ts <baseline.json> <current.json>
 ## Typical Workflow
 
 1. Check if physical devices are connected: `adb devices` and `xcrun xctrace list devices`
-2. Build IPA and APK (in parallel if both platforms needed, skip if already built)
-3. Run profiling on each device with `TEST_MODELS=qwen3-1.7b`
-4. Compare each result against the matching baseline in `e2e/baselines/`
-5. Present results side by side (baseline vs current, per checkpoint, deltas)
+2. Ensure the correct model is loaded on LM Studio: `./tools/lmstudio.sh ensure "qwen/qwen3-1.7b"`
+   (requires `REMOTE_SERVER_API_KEY` or `LMSTUDIO_API_KEY` env var — sourced from worktree's `e2e/.env`)
+3. Build IPA and APK (in parallel if both platforms needed, skip if already built)
+4. Run profiling on each device with `TEST_MODELS=qwen3-1.7b`
+5. Compare each result against the matching baseline in `e2e/baselines/`
+6. Present results side by side (baseline vs current, per checkpoint, deltas)
 
 ## Presenting Results
 
@@ -87,9 +89,24 @@ Show a table with both platforms:
 
 Include peak memory summary and PASS/FAIL status from the comparison script.
 
+## LM Studio Model Manager
+
+`tools/lmstudio.sh` manages models on the LM Studio server. Key commands:
+- `status` — show loaded models
+- `list` — list all downloaded models
+- `ensure <model-key>` — load model if not already loaded (unloads others first)
+- `load <model-key>` — force load (unloads all first)
+
+Requires `REMOTE_SERVER_API_KEY` or `LMSTUDIO_API_KEY`. Source from worktree `e2e/.env`:
+```bash
+export $(grep REMOTE_SERVER_API_KEY worktrees/TASK-xxx/e2e/.env | xargs)
+./tools/lmstudio.sh ensure "qwen/qwen3-1.7b"
+```
+
 ## Notes
 
 - Always kill stale Appium first: `lsof -ti:4723 | xargs kill -9 2>/dev/null || true`
+- Always ensure the correct model is loaded on LM Studio before running remote-server tests
 - iOS and Android runs are independent — run them in parallel or sequentially
 - `yarn install` and `pod install` may be needed after merges that change native deps
 - The comparison script exits 0 (pass) or 1 (regression) — both thresholds must be exceeded to fail
