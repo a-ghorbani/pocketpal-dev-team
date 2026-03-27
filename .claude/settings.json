@@ -80,6 +80,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash(git worktree add:*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./tools/post-worktree-copy-env.sh"
+          }
+        ]
+      }
     ]
   }
 }
