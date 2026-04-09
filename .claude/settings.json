@@ -83,7 +83,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash(git worktree add:*)",
+        "matcher": "Bash(*git worktree add*)",
         "hooks": [
           {
             "type": "command",

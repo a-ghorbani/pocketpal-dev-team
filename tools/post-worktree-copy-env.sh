@@ -29,6 +29,16 @@ MAIN_REPO="${DEV_TEAM_ROOT}/repos/pocketpal-ai"
 
 # Resolve worktree path (could be relative like ../../worktrees/TASK-xxx)
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+
+# If the command has a "cd <dir> &&" prefix, adjust CWD accordingly
+CD_PREFIX=$(echo "$COMMAND" | sed -n 's/^cd  *\([^ ]*\)  *&&.*/\1/p')
+if [ -n "$CD_PREFIX" ] && [ -n "$CWD" ]; then
+    EFFECTIVE_CWD=$(cd "$CWD" && cd "$CD_PREFIX" 2>/dev/null && pwd)
+    if [ -n "$EFFECTIVE_CWD" ]; then
+        CWD="$EFFECTIVE_CWD"
+    fi
+fi
+
 if [ -n "$CWD" ]; then
     WORKTREE_ABS=$(cd "$CWD" && realpath "$WORKTREE_REL" 2>/dev/null)
 else
