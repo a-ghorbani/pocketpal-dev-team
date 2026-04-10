@@ -62,16 +62,7 @@ cp /path/to/your/android/app/google-services.json repos/pocketpal-ai/android/app
 
 These files are gitignored by pocketpal-ai, so they won't be committed.
 
-### 4. (Optional) Configure Linear Integration
-
-For the `/start-action` skill to work with Linear:
-
-```bash
-cp .env.example .env
-# Edit .env and add your LINEAR_API_KEY
-```
-
-### 5. Start a Task
+### 4. Start a Task
 
 ```bash
 # Start a task
@@ -270,7 +261,6 @@ git worktree remove ../../worktrees/TASK-xxx
 
 | Feature | Requirement | Without It |
 |---------|-------------|------------|
-| `/start-action` skill | `LINEAR_API_KEY` in `.env` | Use `/start-task` instead |
 | Native iOS builds | Xcode + CocoaPods | Set `NATIVE_CHANGES=NO` or skip native tasks |
 | Native Android builds | Android SDK + Gradle | Set `NATIVE_CHANGES=NO` or skip native tasks |
 

@@ -26,7 +26,7 @@ The pr-reviewer will:
 1. Create a worktree at `worktrees/PR-$ARGUMENTS`
 2. Fetch the PR branch
 3. Analyze for:
-   - L10n completeness (en, ja, zh in src/utils/l10n.ts)
+   - L10n completeness (per-language JSON files in src/locales/)
    - Testing patterns (no inline store mocks, use jest/test-utils)
    - Architecture compliance (MobX patterns, component structure)
    - Code quality (lint, typecheck, tests)

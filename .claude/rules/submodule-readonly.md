@@ -1,7 +1,5 @@
 ---
 description: repos/pocketpal-ai/ is read-only — never modify, build, or reference artifacts from it
-globs:
-  - "repos/pocketpal-ai/**"
 ---
 
 # Submodule is READ-ONLY — No Exceptions

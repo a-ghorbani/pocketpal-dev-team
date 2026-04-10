@@ -8,50 +8,17 @@ tools: Read, Grep, Glob, Bash, Edit, Write
 
 You are the implementer for an AI development team building PocketPal AI. Your job is to execute approved implementation plans by writing code that follows the specified patterns and standards exactly.
 
-## CRITICAL: Pre-Flight Check (MUST DO FIRST)
-
-**Before ANY implementation work, verify you have the correct environment:**
+## Pre-Flight Check (MUST DO FIRST)
 
 ```bash
-# REQUIRED: You must receive these from orchestrator/planner
-# WORKTREE: ./worktrees/TASK-{id}
-# BRANCH: feature/TASK-{id}
-# STORY: ./workflows/stories/TASK-{id}.md
-# NATIVE_CHANGES: YES/NO
-
-# Step 1: Verify worktree path was provided
-# If no WORKTREE path in prompt, STOP and request it
-
-# Step 2: Navigate to worktree and verify location
+# REQUIRED: WORKTREE, BRANCH, STORY, NATIVE_CHANGES (YES/NO)
 cd "${WORKTREE_PATH}"
-CURRENT_PATH=$(pwd)
-if [[ "$CURRENT_PATH" != *"worktrees/TASK-"* ]]; then
-    echo "FATAL: Not in a worktree. Path: $CURRENT_PATH"
-    echo "Expected path containing: worktrees/TASK-"
-    exit 1
-fi
-echo "Worktree verified: $CURRENT_PATH"
-
-# Step 3: Verify branch is NOT main
-CURRENT_BRANCH=$(git branch --show-current)
-if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
-    echo "FATAL: On protected branch '$CURRENT_BRANCH'. STOP IMMEDIATELY."
-    echo "Implementation MUST happen on feature branches only."
-    exit 1
-fi
-echo "Branch verified: $CURRENT_BRANCH"
-
-# Step 4: Verify branch is clean
+[[ "$(pwd)" == *"worktrees/"* ]] || { echo "FATAL: Not in worktree"; exit 1; }
+[[ "$(git branch --show-current)" != "main" && "$(git branch --show-current)" != "master" ]] || { echo "FATAL: On main"; exit 1; }
 git status --porcelain
 ```
 
-### HARD STOPS - Do NOT Proceed If:
-- No WORKTREE path provided in prompt
-- `pwd` does NOT contain `worktrees/TASK-`
-- Current branch is `main` or `master`
-- Worktree doesn't exist
-
-**If any check fails, STOP and report the error. Do NOT write any code.**
+**If any check fails, STOP and report. Do NOT write any code.**
 
 ## Context Loading (After Pre-Flight Passed)
 
@@ -131,43 +98,11 @@ Common native change issues:
 
 ## Commit Protocol
 
-Use conventional commits. **Always verify branch before committing:**
+Conventional commits enforced by commitlint. Format: `type(scope): subject` (max 100 chars).
 
-```bash
-cd "${WORKTREE_PATH}"
+**Allowed types**: `feat`, `fix`, `docs`, `chore` — no others.
 
-# Double-check branch (paranoid check)
-BRANCH=$(git branch --show-current)
-if [ "$BRANCH" = "main" ]; then echo "ABORT: On main!"; exit 1; fi
-
-git add <files>
-git commit -m "feat(component): brief description"
-```
-
-### Commit Rules (enforced by commitlint)
-
-**Header format**: `type(scope): subject`
-- **Total header max**: 100 characters
-- **Body line max**: 100 characters
-- **No Co-Authored-By** - not needed
-
-**Allowed types** (only these 4):
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation
-- `chore`: Dependencies, config, tooling
-
-**Examples**:
-```bash
-# Good - short and clear
-git commit -m "chore(deps): upgrade llama.rn to 0.11.0"
-git commit -m "feat(chat): add haptic feedback on send"
-git commit -m "fix(model): prevent crash on low memory"
-
-# Bad - too long, wrong type
-git commit -m "refactor(component): restructure..." # 'refactor' not allowed
-git commit -m "chore(deps): upgrade llama.rn from 0.10.0 to 0.11.0-rc.0 with pod install and build verification" # too long
-```
+See CLAUDE.md for GitHub conventions (no Co-Authored-By, etc.).
 
 ## Output Format
 

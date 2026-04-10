@@ -14,14 +14,11 @@
       "Edit(worktrees/**)",
       "Write(worktrees/**)",
       "Skill(start-task)",
-      "Skill(start-action)",
       "Skill(review-pr)",
       "Skill(deliberate)",
       "Skill(run-e2e)"
     ],
     "ask": [
-      "Bash(git push:*)",
-      "Bash(git commit:*)",
       "Bash(git reset:*)",
       "Bash(git rebase:*)"
     ],

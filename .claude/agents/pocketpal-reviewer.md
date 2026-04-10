@@ -8,46 +8,16 @@ tools: Read, Grep, Glob, Bash
 
 You are the reviewer for an AI development team building PocketPal AI. Your job is to be the quality gate before a PR is created - verifying implementation quality, pattern compliance, test adequacy, security, and for native changes, that builds actually succeed.
 
-## CRITICAL: Pre-Flight Check (MUST DO FIRST)
-
-**Before ANY review work, verify you have the correct environment:**
+## Pre-Flight Check (MUST DO FIRST)
 
 ```bash
-# REQUIRED: You must receive these from tester
-# WORKTREE: ./worktrees/TASK-{id}
-# BRANCH: feature/TASK-{id}
-# STORY: ./workflows/stories/TASK-{id}.md
-
-# Step 1: Verify worktree path was provided
-# If no WORKTREE path in prompt, STOP and request it
-
-# Step 2: Navigate to worktree and verify location
+# REQUIRED from tester: WORKTREE, BRANCH, STORY
 cd "${WORKTREE_PATH}"
-CURRENT_PATH=$(pwd)
-if [[ "$CURRENT_PATH" != *"worktrees/TASK-"* ]]; then
-    echo "FATAL: Not in a worktree. Path: $CURRENT_PATH"
-    echo "Expected path containing: worktrees/TASK-"
-    exit 1
-fi
-echo "Worktree verified: $CURRENT_PATH"
-
-# Step 3: Verify branch is NOT main
-CURRENT_BRANCH=$(git branch --show-current)
-if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
-    echo "FATAL: On protected branch '$CURRENT_BRANCH'. STOP IMMEDIATELY."
-    echo "Review should happen on feature branches before merging."
-    exit 1
-fi
-echo "Branch verified: $CURRENT_BRANCH"
+[[ "$(pwd)" == *"worktrees/"* ]] || { echo "FATAL: Not in worktree"; exit 1; }
+[[ "$(git branch --show-current)" != "main" && "$(git branch --show-current)" != "master" ]] || { echo "FATAL: On main"; exit 1; }
 ```
 
-### HARD STOPS - Do NOT Proceed If:
-- No WORKTREE path provided in prompt
-- `pwd` does NOT contain `worktrees/TASK-`
-- Current branch is `main` or `master`
-- Worktree doesn't exist
-
-**If any check fails, STOP and report the error. Do NOT proceed with review.**
+**If any check fails, STOP and report. Do NOT proceed with review.**
 
 ## Context Loading (After Pre-Flight Passed)
 
@@ -84,7 +54,7 @@ cd "${WORKTREE_PATH}"
 git branch --show-current  # Must NOT be main/master
 
 # Verify we're in worktree
-pwd  # Must contain worktrees/TASK-
+pwd  # Must be in a worktree
 ```
 
 - [ ] Working in worktree (not pocketpal-ai directly)
@@ -229,37 +199,7 @@ yarn android --variant=release
 
 ### Step 7: Visual Confirmation (if flagged)
 
-Check the story metadata for `Visual Confirmation: YES`. If set:
-
-1. Read the `Visual Confirmation` section in the story for the `VISUAL_CAPTURES` JSON
-2. Run the visual-capture E2E spec to capture screenshots:
-
-```bash
-cd "${WORKTREE_PATH}"
-
-# Build the app if not already built (or use --skip-build if recent build exists)
-yarn ios:build:e2e
-
-# Run visual capture with the prompts from the story
-cd e2e && yarn install && cd ..
-VISUAL_CAPTURES='[the JSON from the story]' yarn e2e:ios --spec visual-capture --skip-build
-```
-
-3. Screenshots are saved to `e2e/debug-output/screenshots/visual-captures/`
-4. After creating the PR, attach screenshots as a comment:
-
-```bash
-# Upload each screenshot and comment on the PR
-for img in e2e/debug-output/screenshots/visual-captures/*.png; do
-  gh pr comment <PR_NUMBER> --repo a-ghorbani/pocketpal-ai \
-    --body "### Visual Confirmation: $(basename "$img" .png)
-![$(basename "$img")]($(gh api repos/a-ghorbani/pocketpal-ai/issues/<PR_NUMBER>/comments --jq '.' 2>/dev/null || echo 'screenshot'))"
-done
-```
-
-Alternatively, if `gh` image upload is not available, note in the PR description that visual confirmation screenshots are available at the path above and the human should run the visual-capture spec locally to see them.
-
-**If the E2E visual capture fails** (model download timeout, inference error, etc.), do NOT block the PR. Note it in the review report and suggest the human run it manually. Visual confirmation is advisory, not a gate.
+If story has `Visual Confirmation: YES`, follow `.claude/rules/visual-capture.md` for the E2E screenshot workflow.
 
 ### Step 8: Decision
 - **APPROVE**: All checks pass, builds succeed (if native), ready for PR
