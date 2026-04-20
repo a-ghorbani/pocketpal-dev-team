@@ -5,5 +5,10 @@ worktrees/*
 # Environment and local settings
 .env
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Machine-local config/secret stash used for populating worktrees
+# (keystores, GoogleService-*, Env.xcconfig, e2e/.env, devices.json, etc.)
+repos/pocketpal-ai.configs/
 
 .DS_Store
