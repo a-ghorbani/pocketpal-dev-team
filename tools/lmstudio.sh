@@ -14,7 +14,7 @@
 #   ./tools/lmstudio.sh ensure <model-key>        # Load model only if not already loaded
 #
 # Environment:
-#   LMSTUDIO_HOST     - Server host (default: 192.168.68.68)
+#   LMSTUDIO_HOST     - Server host (default: 192.168.0.92)
 #   LMSTUDIO_PORT     - Server port (default: 1234)
 #   LMSTUDIO_API_KEY  - API key (default: lm-studio)
 #
@@ -26,7 +26,7 @@
 
 set -euo pipefail
 
-HOST="${LMSTUDIO_HOST:-192.168.68.68}"
+HOST="${LMSTUDIO_HOST:-192.168.0.92}"
 PORT="${LMSTUDIO_PORT:-1234}"
 API_KEY="${LMSTUDIO_API_KEY:-${REMOTE_SERVER_API_KEY:-lm-studio}}"
 BASE_URL="http://${HOST}:${PORT}"
@@ -62,7 +62,7 @@ cmd_status() {
 
 cmd_list() {
   check_reachable
-  curl_get "${BASE_URL}/api/v1/models" | jq -r '.models[] | .key' 2>/dev/null
+  curl_get "${BASE_URL}/api/v1/models" | jq -r '.models[] | .key' 2>/dev/null || true
 }
 
 cmd_loaded() {
@@ -77,7 +77,7 @@ cmd_unload() {
   if [[ -z "$instance_id" ]]; then
     # Unload all
     local ids
-    ids=$(curl_get "${BASE_URL}/v1/models" | jq -r '.data[].id' 2>/dev/null)
+    ids=$(curl_get "${BASE_URL}/v1/models" | jq -r '.data[].id' 2>/dev/null || true)
     if [[ -z "$ids" ]]; then
       echo "No models loaded"
       return
