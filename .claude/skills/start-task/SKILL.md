@@ -52,9 +52,9 @@ Repository: ./repos/pocketpal-ai
 
 The orchestrator will:
 1. Generate a task ID (TASK-YYYYMMDD-HHMM)
-2. Create a worktree at `worktrees/TASK-xxx`
+2. Create a worktree at `worktrees/TASK-xxx` using the repo helper scripts
 3. Create a feature branch
-4. Copy secrets/env files
+4. Sync the allowlisted gitignored config/env files into the worktree
 5. Classify complexity (standard/complex)
 6. Route to planner with worktree context
 

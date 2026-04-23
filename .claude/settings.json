@@ -31,10 +31,18 @@
       "Bash(git push origin main:*)",
       "Bash(git push origin master:*)",
       "Read(.env)",
+      "Read(**/.env)",
       "Read(.env.*)",
+      "Read(**/.env.*)",
       "Read(**/secrets/**)",
       "Edit(.env)",
+      "Edit(**/.env)",
       "Edit(.env.*)",
+      "Edit(**/.env.*)",
+      "Write(.env)",
+      "Write(**/.env)",
+      "Write(.env.*)",
+      "Write(**/.env.*)",
       "Edit(**/repos/pocketpal-ai/**)",
       "Write(**/repos/pocketpal-ai/**)"
     ]
@@ -71,6 +79,10 @@
       {
         "matcher": "Bash",
         "hooks": [
+          {
+            "type": "command",
+            "command": "./tools/guard-worktree-ops.sh"
+          },
           {
             "type": "command",
             "command": "./tools/guard-submodule-git.sh"

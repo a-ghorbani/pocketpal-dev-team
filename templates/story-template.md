@@ -8,7 +8,7 @@
 - **Native Changes**: YES | NO
 - **Visual Confirmation**: YES | NO
 - **Created**: [TIMESTAMP]
-- **Status**: draft | pending_approval | approved | in_progress | complete
+- **Status**: draft | pending_review | approved | in_progress | complete
 
 ## Environment
 - **Worktree**: `./worktrees/TASK-[id]`
@@ -20,14 +20,14 @@
 ## Progress Tracking
 
 ### Current Phase
-`[ ] Planning → [ ] Approved → [ ] Implementing → [ ] Testing → [ ] Reviewing → [ ] PR Created`
+`[ ] Planning → [ ] In Review → [ ] Approved → [ ] Implementing → [ ] Testing → [ ] Reviewing → [ ] PR Created`
 
 ### Checkpoints (Updated by Agents)
 
 | Checkpoint | Status | Agent | Commit | Notes |
 |------------|--------|-------|--------|-------|
 | Worktree created | DONE | orchestrator | - | |
-| Story approved | PENDING | human | - | |
+| Story approved | PENDING | critic/human | - | |
 | Step 1 complete | PENDING | implementer | - | |
 | Step 2 complete | PENDING | implementer | - | |
 | Tests written | PENDING | tester | - | |
@@ -40,13 +40,14 @@
 from_agent: orchestrator
 to_agent: planner
 timestamp: [ISO timestamp]
-status: "Story created, awaiting approval"
+status: "Story created, awaiting critic review"
 completed:
   - Created worktree at worktrees/TASK-xxx
   - Analyzed requirements
   - Classified as standard complexity
 next_steps:
-  - Human review and approve story
+  - Critic review the story
+  - Escalate to human only if blockers persist
   - Then route to implementer
 blockers: []
 context_for_next_agent: |

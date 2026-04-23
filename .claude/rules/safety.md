@@ -26,6 +26,9 @@ Enforced by `.claude/settings.json`:
 | **Block commits to main** | Hook: `tools/block-commit-to-main.sh` |
 | **Submodule read-only** | Hook: `tools/guard-submodule-edit.sh` blocks Edit/Write to `repos/pocketpal-ai/` |
 | **Submodule git guard** | Hook: `tools/guard-submodule-git.sh` blocks mutating git commands in `repos/pocketpal-ai/` |
+| **Worktree operation guard** | Hook: `tools/guard-worktree-ops.sh` blocks raw worktree removal/pruning, direct deletion of `worktrees/`, and invalid `git worktree add` targets |
 | **Path-scoped edits** | Permission: Edit/Write denied for `repos/pocketpal-ai/**`, allowed in `worktrees/**` |
 | **Block force push** | Permission: Denies `git push -f` and `git push origin main` |
 | **Secrets protection** | Permission: Denies Read/Edit of `.env` files |
+
+For worktree lifecycle and allowlisted secret/config sync, prefer the helper scripts in `tools/` over raw git or manual copy commands.

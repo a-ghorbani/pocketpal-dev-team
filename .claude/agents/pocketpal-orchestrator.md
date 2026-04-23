@@ -48,12 +48,9 @@ Before ANY analysis or routing, you MUST:
 TASK_ID="TASK-$(date +%Y%m%d-%H%M)"
 BRANCH_NAME="feature/${TASK_ID}"
 WORKTREE_PATH="./worktrees/${TASK_ID}"
-MAIN_REPO="./repos/pocketpal-ai"
 
 # Step 2: Create worktree with feature branch FROM MAIN
-cd "${MAIN_REPO}"
-git fetch origin
-git worktree add "${WORKTREE_PATH}" -b "${BRANCH_NAME}" origin/main
+./tools/create-worktree.sh "${TASK_ID}" --branch "${BRANCH_NAME}" --ref origin/main
 ```
 
 ---
@@ -76,7 +73,8 @@ else
   # Create new worktree from PR branch
   cd "${MAIN_REPO}"
   git fetch origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}"
-  git worktree add "${WORKTREE_PATH}" "pr-${PR_NUMBER}"
+  cd - >/dev/null
+  ./tools/create-worktree.sh "PR-${PR_NUMBER}" --branch "pr-${PR_NUMBER}" --ref "pr-${PR_NUMBER}"
 fi
 
 # Branch name for routing
@@ -93,30 +91,12 @@ cd "${WORKTREE_PATH}"
 git branch --show-current  # Must NOT be main
 pwd  # Must show worktrees path
 
-# Step 4: Copy secrets/env files (gitignored, won't be in worktree)
-copy_if_exists() {
-  local src="$1" dst="$2"
-  if [ -f "$src" ]; then
-    mkdir -p "$(dirname "$dst")"
-    cp "$src" "$dst"
-    echo "Copied: $(basename "$src")"
-  fi
-}
-
-# Root level
-copy_if_exists "${MAIN_REPO}/.env" "${WORKTREE_PATH}/.env"
-copy_if_exists "${MAIN_REPO}/e2e/.env" "${WORKTREE_PATH}/e2e/.env"
-copy_if_exists "${MAIN_REPO}/e2e/devices.json" "${WORKTREE_PATH}/e2e/devices.json"
-
-# iOS secrets
-copy_if_exists "${MAIN_REPO}/ios/.xcode.env.local" "${WORKTREE_PATH}/ios/.xcode.env.local"
-copy_if_exists "${MAIN_REPO}/ios/GoogleService-Info.plist" "${WORKTREE_PATH}/ios/GoogleService-Info.plist"
-copy_if_exists "${MAIN_REPO}/ios/Config/Env.xcconfig" "${WORKTREE_PATH}/ios/Config/Env.xcconfig"
-
-# Android secrets
-copy_if_exists "${MAIN_REPO}/android/local.properties" "${WORKTREE_PATH}/android/local.properties"
-copy_if_exists "${MAIN_REPO}/android/app/google-services.json" "${WORKTREE_PATH}/android/app/google-services.json"
-copy_if_exists "${MAIN_REPO}/android/app/pocketpal-release-key.keystore" "${WORKTREE_PATH}/android/app/pocketpal-release-key.keystore"
+# Step 4: Sync allowlisted env/config files
+# create-worktree.sh already does this for new worktrees; rerun it here to
+# refresh reused worktrees safely without manual bulk copying.
+cd - >/dev/null
+./tools/sync-worktree-config.sh "${WORKTREE_PATH}"
+cd "${WORKTREE_PATH}"
 
 # Step 5: Install dependencies in worktree
 yarn install
@@ -258,7 +238,7 @@ Original PR: #490 by @contributor
 
 ## Post-Planner: Review-Revise Loop (Standard Tasks)
 
-After the planner creates a story for a **standard** task, it enters a review-revise loop before human approval. The caller (main conversation) orchestrates this loop:
+After the planner creates a story for a **standard** task, it enters a review-revise loop before implementation approval. The caller (main conversation) orchestrates this loop:
 
 ```
 Planner creates story
@@ -277,7 +257,7 @@ Story Critic ---- LGTM ---------> Implementation
     still HAS_BLOCKERS (after max 2 reviews)
     |
     v
-Human Approval → Implementation
+Human Escalation → Implementation
 ```
 
 ### Context Isolation (CRITICAL)

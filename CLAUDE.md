@@ -1,5 +1,7 @@
 # PocketPal Dev Team
 
+@AGENTS.md
+
 AI-powered autonomous development team for PocketPal AI.
 
 ## Quick Start
@@ -53,33 +55,34 @@ pocketpal-reviewer      (verify builds, quality gate)
 
 ## Safety Rules
 
+`@AGENTS.md` is the shared contract for all coding agents in this repo. Claude-specific enforcement details live in `.claude/rules/safety.md`.
+
+Claude agents still rely on the same guarantees:
 - All work happens in worktrees, never in main repo or on main/master branch
 - `repos/pocketpal-ai/` is READ-ONLY — only for reading source and creating worktrees (see `.claude/rules/submodule-readonly.md`)
 - Agents refuse to work without `WORKTREE` and `BRANCH` params
 - `NATIVE_CHANGES=YES` triggers mandatory `pod install` + builds
-- Full safety details in `.claude/rules/safety.md`
 
 ## Story Files Required
 
-**ALL implementation work requires a story file** — no exceptions. Use `templates/story-template.md`.
-
-Agents must NEVER:
-- Enter "plan mode" and start implementing
-- Write code without a story file
-- Skip the review-revise loop
+All implementation work requires a story file. Use `templates/story-template.md`. The review-revise loop is mandatory; do not implement directly from ad hoc plans.
 
 ## Worktree Management
 
-**CRITICAL**: Run worktree commands from `repos/pocketpal-ai` (the submodule), NOT from project root.
+Use the repo helper scripts from the dev-team repo root. They enforce the intended `repos/pocketpal-ai` → `worktrees/` workflow and the allowlisted config sync.
 
 ```bash
-# Create (from repos/pocketpal-ai)
-cd repos/pocketpal-ai
-git worktree add ../../worktrees/TASK-xxx -b feature/TASK-xxx
+# New task
+./tools/create-worktree.sh TASK-xxx
 
-# Remove (from repos/pocketpal-ai)
-cd repos/pocketpal-ai
-git worktree remove ../../worktrees/TASK-xxx
+# PR branch after fetch
+./tools/create-worktree.sh PR-490 --branch pr-490 --ref pr-490
+
+# Detached E2E worktree
+./tools/create-worktree.sh PR-490-e2e --detach --ref origin/feature/reset-model-name
+
+# Deliberate cleanup only when explicitly requested
+./tools/remove-worktree.sh TASK-xxx --yes
 ```
 
 ## Naming Conventions

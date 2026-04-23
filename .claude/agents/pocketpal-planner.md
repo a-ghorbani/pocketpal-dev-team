@@ -250,7 +250,7 @@ After revising the story, update the `## Review History` section in the story fi
 
 ## Routing to Implementer
 
-When story is approved by human, route with:
+When the story is approved for implementation (critic LGTM or human escalation), route with:
 
 ```
 Use pocketpal-implementer to implement story {TASK_ID}

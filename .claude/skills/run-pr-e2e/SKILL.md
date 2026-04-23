@@ -128,16 +128,20 @@ if [ -d "$WORKTREE" ]; then
 else
   cd ./repos/pocketpal-ai
   git fetch origin "$PR_BRANCH"
-  # Detached HEAD on origin/<branch> — we never commit from the e2e worktree
-  git worktree add --detach "../../worktrees/PR-${PR}-e2e" "origin/$PR_BRANCH"
   cd - >/dev/null
+  # Detached HEAD on origin/<branch> — we never commit from the e2e worktree
+  ./tools/create-worktree.sh "PR-${PR}-e2e" --detach --ref "origin/$PR_BRANCH"
 fi
 ```
 
-**Important:** `git worktree add` fires the `post-worktree-copy-env.sh`
-PostToolUse hook, which copies `.env`, `e2e/.env`, `e2e/devices.json`,
-keystores, etc. from `repos/pocketpal-ai/` into the new worktree. If you
-reuse an existing worktree, those were copied on first creation — they stay.
+**Important:** `./tools/create-worktree.sh` already syncs the allowlisted
+`.env`, `e2e/.env`, `e2e/devices.json`, keystores, and related config from
+`repos/pocketpal-ai/` into the new worktree. If you reuse an existing
+worktree, refresh that allowlisted sync explicitly:
+
+```bash
+./tools/sync-worktree-config.sh "$WORKTREE"
+```
 
 Verify critical config is present:
 
@@ -230,8 +234,7 @@ Leave the worktree in place after the run so the user can inspect reports,
 screenshots, and app logs. Only remove it if the user explicitly asks:
 
 ```bash
-cd ./repos/pocketpal-ai
-git worktree remove "../../worktrees/PR-${PR}-e2e"
+./tools/remove-worktree.sh "PR-${PR}-e2e" --yes
 ```
 
 ## Error Handling
@@ -240,8 +243,8 @@ git worktree remove "../../worktrees/PR-${PR}-e2e"
 |--------|-----|
 | "no completed CI runs found for PR #N" | PR's CI still running/failed. `gh run watch` or pick another run. |
 | "artifact 'android-release-apk' not found" | Android build job failed in that run. `gh run view <id>`. |
-| `devices.json` not copied | PostToolUse hook didn't run (wrong cwd for `git worktree add`?). Run the Step 2-hook copy commands manually. |
-| Connected device isn't in `devices.json` | User edits `repos/pocketpal-ai/e2e/devices.json` themselves, then re-create worktree (or `cp` the file into the existing worktree). |
+| `devices.json` not copied | Run `./tools/sync-worktree-config.sh "$WORKTREE"` and re-check. |
+| Connected device isn't in `devices.json` | User updates `repos/pocketpal-ai/e2e/devices.json` themselves, then rerun `./tools/sync-worktree-config.sh "$WORKTREE"` or recreate the worktree. |
 | MIUI device refuses install | Start `miui-install-watcher.sh` for that serial. |
 | Port 4723 in use | Pre-flight kills it; if it came back, some other Appium is running. |
 
@@ -257,11 +260,10 @@ Resolves to (run from the dev-team repo root):
 PR=688
 PR_BRANCH=$(gh pr view "$PR" --repo a-ghorbani/pocketpal-ai --json headRefName -q .headRefName)
 
-cd ./repos/pocketpal-ai && git fetch origin "$PR_BRANCH"
-git worktree add --detach "../../worktrees/PR-${PR}-e2e" "origin/$PR_BRANCH"
-cd -
+cd ./repos/pocketpal-ai && git fetch origin "$PR_BRANCH" && cd -
+./tools/create-worktree.sh "PR-${PR}-e2e" --detach --ref "origin/$PR_BRANCH"
 
-# PostToolUse hook auto-copies e2e/devices.json + secrets into the worktree
+# Helper script auto-syncs e2e/devices.json + allowlisted secrets into the worktree
 
 cd "./worktrees/PR-${PR}-e2e" && yarn install && (cd e2e && yarn install) && cd -
 

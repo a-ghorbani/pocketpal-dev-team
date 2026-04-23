@@ -10,13 +10,41 @@ INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
 
 # Only act on git worktree add commands
-if ! echo "$COMMAND" | grep -q 'git worktree add'; then
+if ! echo "$COMMAND" | grep -qE 'git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+worktree[[:space:]]+add\b'; then
     exit 0
 fi
 
-# Extract the worktree path from the command
-# Handles: git worktree add <path> ...
-WORKTREE_REL=$(echo "$COMMAND" | sed -n 's/.*git worktree add  *\([^ ]*\).*/\1/p')
+# Extract the worktree path from the command.
+# Handles both:
+#   git worktree add <path> ...
+#   git worktree add --detach <path> ...
+WORKTREE_REL=""
+GIT_C_DIR=""
+read -r -a TOKENS <<< "$COMMAND"
+for ((i = 0; i < ${#TOKENS[@]}; i++)); do
+    if [ "${TOKENS[$i]}" != "git" ]; then
+        continue
+    fi
+
+    IDX=$((i + 1))
+    if [ "${TOKENS[$IDX]:-}" = "-C" ]; then
+        GIT_C_DIR="${TOKENS[$((IDX + 1))]:-}"
+        IDX=$((IDX + 2))
+    fi
+
+    if [ "${TOKENS[$IDX]:-}" != "worktree" ] || [ "${TOKENS[$((IDX + 1))]:-}" != "add" ]; then
+        continue
+    fi
+
+    IDX=$((IDX + 2))
+    if [ "${TOKENS[$IDX]:-}" = "--detach" ]; then
+        IDX=$((IDX + 1))
+    fi
+
+    WORKTREE_REL="${TOKENS[$IDX]:-}"
+    break
+done
+
 if [ -z "$WORKTREE_REL" ]; then
     exit 0
 fi
@@ -39,6 +67,13 @@ if [ -n "$CD_PREFIX" ] && [ -n "$CWD" ]; then
     fi
 fi
 
+if [ -n "$GIT_C_DIR" ] && [ -n "$CWD" ]; then
+    EFFECTIVE_CWD=$(cd "$CWD" && cd "$GIT_C_DIR" 2>/dev/null && pwd)
+    if [ -n "$EFFECTIVE_CWD" ]; then
+        CWD="$EFFECTIVE_CWD"
+    fi
+fi
+
 if [ -n "$CWD" ]; then
     WORKTREE_ABS=$(cd "$CWD" && realpath "$WORKTREE_REL" 2>/dev/null)
 else
@@ -49,35 +84,6 @@ if [ -z "$WORKTREE_ABS" ] || [ ! -d "$WORKTREE_ABS" ]; then
     exit 0
 fi
 
-# Copy helper — silent, no error if source missing
-copy_if_exists() {
-    local src="$1" dst="$2"
-    if [ -f "$src" ]; then
-        mkdir -p "$(dirname "$dst")"
-        cp "$src" "$dst"
-        echo "  Copied $(basename "$src")"
-    fi
-}
-
 echo ""
-echo "Copying gitignored env/config files to worktree..."
-
-# Root-level
-copy_if_exists "${MAIN_REPO}/.env" "${WORKTREE_ABS}/.env"
-
-# E2E
-copy_if_exists "${MAIN_REPO}/e2e/.env" "${WORKTREE_ABS}/e2e/.env"
-copy_if_exists "${MAIN_REPO}/e2e/devices.json" "${WORKTREE_ABS}/e2e/devices.json"
-
-# iOS
-copy_if_exists "${MAIN_REPO}/ios/.xcode.env.local" "${WORKTREE_ABS}/ios/.xcode.env.local"
-copy_if_exists "${MAIN_REPO}/ios/GoogleService-Info.plist" "${WORKTREE_ABS}/ios/GoogleService-Info.plist"
-copy_if_exists "${MAIN_REPO}/ios/Config/Env.xcconfig" "${WORKTREE_ABS}/ios/Config/Env.xcconfig"
-
-# Android
-copy_if_exists "${MAIN_REPO}/android/local.properties" "${WORKTREE_ABS}/android/local.properties"
-copy_if_exists "${MAIN_REPO}/android/app/google-services.json" "${WORKTREE_ABS}/android/app/google-services.json"
-copy_if_exists "${MAIN_REPO}/android/app/pocketpal-release-key.keystore" "${WORKTREE_ABS}/android/app/pocketpal-release-key.keystore"
-
-echo "Done."
-exit 0
+echo "Syncing allowlisted env/config files to worktree..."
+"${SCRIPT_DIR}/sync-worktree-config.sh" "${WORKTREE_ABS}"

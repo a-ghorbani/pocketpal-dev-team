@@ -15,11 +15,9 @@ Custom agents are defined in `/.claude/agents/`:
 
 ### 2. Start a Development Task
 
-From the PocketPal repo, invoke the orchestrator:
+From the dev-team repo root, invoke the orchestrator:
 
 ```bash
-cd repos/pocketpal-ai
-
 # Start with a GitHub issue
 claude "Use pocketpal-orchestrator to analyze and implement GitHub issue #123"
 
@@ -33,11 +31,11 @@ claude "Use pocketpal-orchestrator to implement Linear ticket ABC-123"
 ### 3. Workflow
 
 ```
-Orchestrator → Planner → [Human Approval] → Implementer → Tester → Reviewer → PR
+Orchestrator → Planner → Story Critic (review-revise loop) → Implementer → Tester → Reviewer → PR
 ```
 
 **Human checkpoints:**
-1. After Planner creates story - approve the implementation plan
+1. If the critic loop still has blockers after revision
 2. After Reviewer approves - review and merge the PR
 
 ## Agent Invocation

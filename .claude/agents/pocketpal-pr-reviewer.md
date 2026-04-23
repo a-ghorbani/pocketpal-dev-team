@@ -35,28 +35,17 @@ PR_BRANCH=$(echo "$PR_INFO" | jq -r '.headRefName')
 REVIEW_ID="PR-${PR_NUMBER}"
 WORKTREE_PATH="./worktrees/${REVIEW_ID}"
 
-# Fetch and create worktree from PR branch
+# Fetch PR branch and create/reuse the dedicated review worktree
 git fetch origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}"
-git worktree add "${WORKTREE_PATH}" "pr-${PR_NUMBER}"
+cd - >/dev/null
 
-# Copy secrets/env files
-copy_if_exists() {
-  local src="$1" dst="$2"
-  if [ -f "$src" ]; then
-    mkdir -p "$(dirname "$dst")"
-    cp "$src" "$dst"
-    echo "Copied: $(basename "$src")"
-  fi
-}
+if [ -d "${WORKTREE_PATH}" ]; then
+  echo "Reusing existing review worktree: ${WORKTREE_PATH}"
+else
+  ./tools/create-worktree.sh "${REVIEW_ID}" --branch "pr-${PR_NUMBER}" --ref "pr-${PR_NUMBER}"
+fi
 
-copy_if_exists "${MAIN_REPO}/.env" "${WORKTREE_PATH}/.env"
-copy_if_exists "${MAIN_REPO}/e2e/.env" "${WORKTREE_PATH}/e2e/.env"
-copy_if_exists "${MAIN_REPO}/ios/.xcode.env.local" "${WORKTREE_PATH}/ios/.xcode.env.local"
-copy_if_exists "${MAIN_REPO}/ios/GoogleService-Info.plist" "${WORKTREE_PATH}/ios/GoogleService-Info.plist"
-copy_if_exists "${MAIN_REPO}/ios/Config/Env.xcconfig" "${WORKTREE_PATH}/ios/Config/Env.xcconfig"
-copy_if_exists "${MAIN_REPO}/android/local.properties" "${WORKTREE_PATH}/android/local.properties"
-copy_if_exists "${MAIN_REPO}/android/app/google-services.json" "${WORKTREE_PATH}/android/app/google-services.json"
-copy_if_exists "${MAIN_REPO}/android/app/pocketpal-release-key.keystore" "${WORKTREE_PATH}/android/app/pocketpal-release-key.keystore"
+./tools/sync-worktree-config.sh "${WORKTREE_PATH}"
 
 # Install dependencies
 cd "${WORKTREE_PATH}"
@@ -380,7 +369,7 @@ Native Changes: NO
 The orchestrator will:
 1. Reuse existing `worktrees/PR-{number}` from review (or create if needed)
 2. Route to planner → creates story file `PR-{number}-fix.md`
-3. Human approves story
+3. Story goes through critic review and only escalates to human if blockers persist
 4. Implementer fixes all issues
 5. Tester verifies
 6. Reviewer approves
@@ -404,9 +393,7 @@ gh pr review {PR_NUMBER} --approve
 After PR is merged or closed, clean up the worktree:
 
 ```bash
-cd ./repos/pocketpal-ai
-git worktree remove ../pocketpal-dev-team/worktrees/PR-{number}
-git branch -D pr-{number}  # Delete local branch
+./tools/remove-worktree.sh PR-{number} --yes
 ```
 
 ---
@@ -415,9 +402,9 @@ git branch -D pr-{number}  # Delete local branch
 
 - **NEVER** work directly in `./repos/pocketpal-ai`
 - **NEVER** skip worktree setup
-- **NEVER** run builds without copying secrets first
+- **NEVER** run builds without syncing the allowlisted worktree config first
 - **NEVER** start implementing fixes without creating a story file first
-- **NEVER** skip human approval before implementing
+- **NEVER** bypass the critic review flow before implementing
 - **NEVER** use "plan mode" or create plans outside of story files
 - Do NOT automatically approve or post comments
 - Do NOT dismiss issues as "minor" if they break patterns
@@ -432,12 +419,12 @@ git branch -D pr-{number}  # Delete local branch
 When human says "implement it" or "fix it" or "go ahead":
 
 1. **Create story file** at `workflows/stories/PR-{number}-fix.md`
-2. **Present to human** for approval
-3. **Wait for explicit approval**
-4. **Then route to implementer** with story file
+2. **Send it through story critic review**
+3. **Escalate to human only if the critic loop still has blockers**
+4. **Then route to implementer** with the approved story
 
 Do NOT:
 - Enter "plan mode"
 - Start writing code
 - Create plans outside story files
-- Skip the story → approval → implement flow
+- Skip the story → critic review → implement flow
