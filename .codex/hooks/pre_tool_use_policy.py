@@ -49,6 +49,28 @@ SHELL_WRITE_COMMANDS = {
     "vim",
     "vi",
 }
+BLOCKED_COMMAND_PATTERNS = (
+    (
+        re.compile(r"(^|[;&|]\s*)curl\b"),
+        "BLOCKED: direct curl usage is blocked for this repo.",
+    ),
+    (
+        re.compile(r"(^|[;&|]\s*)wget\b"),
+        "BLOCKED: direct wget usage is blocked for this repo.",
+    ),
+    (
+        re.compile(r"(^|[;&|]\s*)rm\s+-(?:[^\s-]*r[^\s-]*f|[^\s-]*f[^\s-]*r)\b"),
+        "BLOCKED: destructive recursive deletion is blocked. Use ./tools/remove-worktree.sh for explicit worktree cleanup.",
+    ),
+    (
+        re.compile(r"(^|[;&|]\s*)git\s+push\s+(-f|--force)\b"),
+        "BLOCKED: force pushes are blocked.",
+    ),
+    (
+        re.compile(r"(^|[;&|]\s*)git\s+push\s+origin\s+(main|master)\b"),
+        "BLOCKED: direct pushes to origin main/master are blocked.",
+    ),
+)
 
 
 def deny(reason: str) -> None:
@@ -140,6 +162,10 @@ def command_uses_sensitive_redirection(command: str) -> bool:
 
 
 def should_block_shell(command: str) -> str | None:
+    for pattern, reason in BLOCKED_COMMAND_PATTERNS:
+        if pattern.search(command):
+            return reason
+
     tokens = shell_tokens(command)
     if not tokens:
         return None

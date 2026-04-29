@@ -11,6 +11,42 @@
             "statusMessage": "Checking PocketPal Codex policy"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/tools/block-commit-to-main.sh\"",
+            "timeout": 30,
+            "statusMessage": "Checking commit policy"
+          },
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/tools/guard-worktree-ops.sh\"",
+            "timeout": 30,
+            "statusMessage": "Checking worktree policy"
+          },
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/tools/guard-submodule-git.sh\"",
+            "timeout": 30,
+            "statusMessage": "Checking submodule git policy"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/tools/post-worktree-copy-env.sh\"",
+            "timeout": 60,
+            "statusMessage": "Syncing worktree config"
+          }
+        ]
       }
     ]
   }
