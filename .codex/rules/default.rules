@@ -1,0 +1,42 @@
+prefix_rule(
+    pattern = ["rm", "-rf"],
+    decision = "forbidden",
+    justification = "Destructive recursive deletion is blocked. Use ./tools/remove-worktree.sh for explicit worktree cleanup.",
+    match = ["rm -rf worktrees/TASK-20260429-1200"],
+)
+
+prefix_rule(
+    pattern = ["rm", "-fr"],
+    decision = "forbidden",
+    justification = "Destructive recursive deletion is blocked. Use ./tools/remove-worktree.sh for explicit worktree cleanup.",
+    match = ["rm -fr worktrees/TASK-20260429-1200"],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "-f"],
+    decision = "forbidden",
+    justification = "Force pushes are blocked.",
+    match = ["git push -f origin feature/example"],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--force"],
+    decision = "forbidden",
+    justification = "Force pushes are blocked.",
+    match = ["git push --force origin feature/example"],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "origin", "main"],
+    decision = "forbidden",
+    justification = "Direct pushes to origin main are blocked.",
+    match = ["git push origin main"],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "origin", "master"],
+    decision = "forbidden",
+    justification = "Direct pushes to origin master are blocked.",
+    match = ["git push origin master"],
+)
+
