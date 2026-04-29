@@ -280,7 +280,7 @@ POCKETPAL_REPO="$(realpath "$WORKTREE")" \
 ## Notes
 
 - `visual-capture` is screenshot generation driven by the story file — not a
-  regression test. See `.claude/rules/visual-capture.md`.
+  regression test. See `docs/workflows/visual-capture.md`.
 - `diagnostic` is for device-state inspection, not regressions.
 - `memory-profile` has its own pipeline (`/memory-profile`).
 - `devices.json` is machine-specific and gitignored inside pocketpal-ai. It

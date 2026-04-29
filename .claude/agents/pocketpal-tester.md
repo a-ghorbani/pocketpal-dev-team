@@ -263,7 +263,7 @@ class MockModelStore {
 When tests complete, route with:
 
 ```
-Use pocketpal-reviewer to review TASK-{id}
+Use pocketpal-pipeline-reviewer to review TASK-{id}
 WORKTREE: ./worktrees/TASK-{id}
 BRANCH: feature/TASK-{id}
 STORY: ./workflows/stories/TASK-{id}.md
