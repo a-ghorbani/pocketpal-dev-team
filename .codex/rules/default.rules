@@ -53,3 +53,9 @@ prefix_rule(
     justification = "Direct pushes to origin master are blocked.",
     match = ["git push origin master"],
 )
+
+prefix_rule(
+    pattern = ["git", "-C", "repos/pocketpal-ai", "fetch"],
+    decision = "allow",
+    justification = "Allow fetching PR refs into the read-only source repo metadata so isolated review worktrees can be created.",
+)
