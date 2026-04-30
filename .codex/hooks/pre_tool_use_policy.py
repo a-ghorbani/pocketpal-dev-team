@@ -13,6 +13,7 @@ from typing import Any
 
 
 PROTECTED_SOURCE_SEGMENT = "repos/pocketpal-ai"
+DEV_TEAM_ROOT = Path(__file__).resolve().parents[2]
 SENSITIVE_PATTERNS = (
     re.compile(r"(^|/)\.env($|\.)"),
     re.compile(r"(^|/)GoogleService-Info\.plist$"),
@@ -22,19 +23,6 @@ SENSITIVE_PATTERNS = (
     re.compile(r"(^|/)secrets(/|$)"),
 )
 
-SHELL_READ_COMMANDS = {
-    "awk",
-    "bat",
-    "cat",
-    "grep",
-    "head",
-    "less",
-    "more",
-    "nl",
-    "rg",
-    "sed",
-    "tail",
-}
 SHELL_WRITE_COMMANDS = {
     "chmod",
     "chown",
@@ -53,14 +41,6 @@ SHELL_WRITE_COMMANDS = {
     "vi",
 }
 BLOCKED_COMMAND_PATTERNS = (
-    (
-        re.compile(r"(^|[;&|]\s*)curl\b"),
-        "BLOCKED: direct curl usage is blocked for this repo.",
-    ),
-    (
-        re.compile(r"(^|[;&|]\s*)wget\b"),
-        "BLOCKED: direct wget usage is blocked for this repo.",
-    ),
     (
         re.compile(r"(^|[;&|]\s*)rm\s+-(?:[^\s-]*r[^\s-]*f|[^\s-]*f[^\s-]*r)\b"),
         "BLOCKED: destructive recursive deletion is blocked. Use ./tools/remove-worktree.sh for explicit worktree cleanup.",
@@ -100,10 +80,10 @@ def normalize_path(raw: str, cwd: str) -> str:
     if not path.is_absolute():
         path = Path(cwd) / path
 
+    resolved = path.resolve(strict=False)
+
     try:
-        repo = Path(cwd).resolve()
-        resolved = path.resolve(strict=False)
-        return resolved.relative_to(repo).as_posix()
+        return resolved.relative_to(DEV_TEAM_ROOT).as_posix()
     except Exception:
         return raw.replace(os.sep, "/")
 
@@ -166,12 +146,19 @@ def shell_tokens(command: str) -> list[str]:
         return command.split()
 
 
-def command_mentions_sensitive_path(tokens: list[str]) -> bool:
-    return any(is_sensitive_path(token) for token in tokens)
+def command_mentions_sensitive_path(tokens: list[str], cwd: str) -> bool:
+    return any(
+        is_sensitive_path(token) or is_sensitive_path(normalize_path(token, cwd))
+        for token in tokens
+    )
 
 
-def command_mentions_protected_source_path(tokens: list[str]) -> bool:
-    return any(is_protected_source_path(token) for token in tokens)
+def command_mentions_protected_source_path(tokens: list[str], cwd: str) -> bool:
+    return any(
+        is_protected_source_path(token)
+        or is_protected_source_path(normalize_path(token, cwd))
+        for token in tokens
+    )
 
 
 def sed_is_mutating(tokens: list[str]) -> bool:
@@ -191,7 +178,7 @@ def command_uses_protected_source_output_redirection(command: str) -> bool:
     )
 
 
-def should_block_shell(command: str) -> str | None:
+def should_block_shell(command: str, cwd: str) -> str | None:
     for pattern, reason in BLOCKED_COMMAND_PATTERNS:
         if pattern.search(command):
             return reason
@@ -201,12 +188,10 @@ def should_block_shell(command: str) -> str | None:
         return None
 
     executable = Path(tokens[0]).name
-    mentions_sensitive = command_mentions_sensitive_path(tokens)
-    mentions_protected_source = command_mentions_protected_source_path(tokens)
+    mentions_sensitive = command_mentions_sensitive_path(tokens, cwd)
+    mentions_protected_source = command_mentions_protected_source_path(tokens, cwd)
 
-    if mentions_sensitive and (
-        executable in SHELL_WRITE_COMMANDS or executable in SHELL_READ_COMMANDS
-    ):
+    if mentions_sensitive:
         return "BLOCKED: shell command may read or modify a sensitive path. Do not read .env files or secrets."
 
     if mentions_protected_source and (
@@ -256,7 +241,7 @@ def main() -> int:
     if tool_name == "Bash" and isinstance(tool_input, dict):
         command = tool_input.get("command")
         if isinstance(command, str):
-            reason = should_block_shell(command)
+            reason = should_block_shell(command, cwd)
             if reason:
                 deny(reason)
 
