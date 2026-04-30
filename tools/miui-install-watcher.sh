@@ -15,17 +15,21 @@ echo "MIUI Install Watcher started (device: ${DEVICE:-all})"
 echo "Press Ctrl+C to stop"
 
 while true; do
+  # Check if the MIUI security center install dialog is in the foreground
   FOCUS=$($ADB_CMD shell dumpsys window 2>/dev/null | grep "mCurrentFocus" || true)
 
   if echo "$FOCUS" | grep -q "com.miui.securitycenter"; then
     echo "$(date '+%H:%M:%S') Install dialog detected"
 
+    # Check "Remember my choice" checkbox
     $ADB_CMD shell uiautomator dump /sdcard/_miui_ui.xml 2>/dev/null
     CHECKED=$($ADB_CMD shell cat /sdcard/_miui_ui.xml 2>/dev/null | grep -o 'resource-id="com.miui.securitycenter:id/do_not_ask_checkbox"[^/]*checked="true"' || true)
 
     if [[ -z "$CHECKED" ]]; then
+      # Extract checkbox bounds and tap it
       BOUNDS=$($ADB_CMD shell cat /sdcard/_miui_ui.xml 2>/dev/null | grep -o 'resource-id="com.miui.securitycenter:id/do_not_ask_checkbox"[^/]*bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' | grep -o 'bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' || true)
       if [[ -n "$BOUNDS" ]]; then
+        # Parse bounds and tap center
         X1=$(echo "$BOUNDS" | grep -o '\[[0-9]*,' | head -1 | tr -d '[,')
         Y1=$(echo "$BOUNDS" | grep -o ',[0-9]*\]' | head -1 | tr -d ',]')
         X2=$(echo "$BOUNDS" | grep -o '\[[0-9]*,' | tail -1 | tr -d '[,')
@@ -38,6 +42,7 @@ while true; do
       fi
     fi
 
+    # Tap "Install" button (android:id/button2)
     $ADB_CMD shell uiautomator dump /sdcard/_miui_ui.xml 2>/dev/null
     BOUNDS=$($ADB_CMD shell cat /sdcard/_miui_ui.xml 2>/dev/null | grep -o 'resource-id="android:id/button2"[^/]*bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' | grep -o 'bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' || true)
     if [[ -n "$BOUNDS" ]]; then

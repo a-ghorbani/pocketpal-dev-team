@@ -27,8 +27,8 @@ Profiles memory usage across 7 app lifecycle checkpoints (app_launch, models_scr
 - `memory-profile.sh` — orchestration script (build → run spec → compare)
 - `memory-compare.ts` — compares two reports, flags regressions (exit 1 if >10% AND >200 MB)
 
-### Baselines (in `e2e/baselines/`)
-Named `<device_id>-<model_id>.json`. Current baselines:
+### Baselines (in `e2e/baselines/memory/`)
+Named `<device_id>-<model_id>.json`. (Sibling `e2e/baselines/benchmark/` holds the unrelated benchmark-matrix baselines.) Current baselines:
 - `iphone-13-pro-qwen3-1.7b.json` — iPhone 13 Pro (device ID: `agh`) — **tracked**
 - `pixel-9-qwen3-1.7b.json` — Pixel 9 (device ID: `pixel-9-real`) — **tracked**
 - `xiaomi-22126rn91y-qwen3-0.6b.json` — Xiaomi 22126RN91Y — **not yet captured**, see "Capturing a new baseline" below
@@ -77,7 +77,7 @@ Reports land in timestamped dirs under `e2e/reports/<timestamp>/<device-id>/memo
 ### Via the orchestration script
 ```bash
 cd <project-root>
-e2e/scripts/memory-profile.sh --platform ios --skip-build --model qwen3-1.7b --baseline e2e/baselines/iphone-13-pro-qwen3-1.7b.json
+e2e/scripts/memory-profile.sh --platform ios --skip-build --model qwen3-1.7b --baseline e2e/baselines/memory/iphone-13-pro-qwen3-1.7b.json
 ```
 
 ### Comparing results
@@ -96,12 +96,12 @@ npx tsx e2e/scripts/memory-compare.ts <baseline.json> <current.json>
 3. Build IPA and APK (in parallel if both platforms needed, skip if already built)
 4. Run profiling on each device with the **device's** `TEST_MODELS` from the
    mapping (do not use a single global model)
-5. Compare each result against the matching baseline in `e2e/baselines/`
+5. Compare each result against the matching baseline in `e2e/baselines/memory/`
 6. Present results side by side (baseline vs current, per checkpoint, deltas)
 
 ## Capturing a new baseline (e.g. new device or new model)
 
-Baselines are committed to the pocketpal-ai repo (`e2e/baselines/` is
+Baselines are committed to the pocketpal-ai repo (`e2e/baselines/memory/` is
 tracked). Adding one is a small task, not a one-off local capture:
 
 1. `/start-task "Capture memory-profile baseline for <device>"` — gets a
@@ -119,7 +119,7 @@ tracked). Adding one is a small task, not a one-off local capture:
    - Run twice; per-checkpoint deltas should be <10% (if not, something is
      unstable — investigate before committing).
 4. Copy the clean report to
-   `e2e/baselines/<device-id>-<model-id>.json`, commit, open a PR to
+   `e2e/baselines/memory/<device-id>-<model-id>.json`, commit, open a PR to
    pocketpal-ai.
 
 Do this on a device under its **normal load profile** (screen on, typical

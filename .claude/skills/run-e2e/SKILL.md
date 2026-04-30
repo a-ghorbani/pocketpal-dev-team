@@ -73,47 +73,55 @@ git branch --show-current
 
 Skip to Step 3 (no checkout needed — the code is already there).
 
-### Option B: Shared Repo (for independent/standalone runs)
+### Option B: Dedicated E2E Worktree (for independent/standalone runs)
 
-Use `repos/pocketpal-ai` when testing code that ISN'T in a worktree:
+Create a dedicated E2E worktree when testing code that is not already in an
+active task worktree:
 - `main` branch
 - A PR number
 - A branch with no corresponding worktree
 
-```bash
-TEST_DIR=./repos/pocketpal-ai
-cd "${TEST_DIR}"
-```
-
-Then checkout the requested source:
+Never checkout, build, or test directly inside `repos/pocketpal-ai/`.
 
 **For a PR:**
 ```bash
-gh pr checkout [number]
+PR=[number]
+cd ./repos/pocketpal-ai
+PR_BRANCH=$(gh pr view "$PR" --json headRefName --jq '.headRefName')
+git fetch origin "$PR_BRANCH"
+cd - >/dev/null
+./tools/create-worktree.sh "PR-${PR}-e2e" --detach --ref "origin/$PR_BRANCH"
+TEST_DIR="./worktrees/PR-${PR}-e2e"
 ```
 
 **For a branch:**
 ```bash
-git fetch origin
-git checkout [branch-name] 2>&1
+BRANCH=[branch-name]
+SAFE_NAME=$(printf '%s' "$BRANCH" | tr '/ ' '--')
+cd ./repos/pocketpal-ai
+git fetch origin "$BRANCH"
+cd - >/dev/null
+./tools/create-worktree.sh "E2E-${SAFE_NAME}" --detach --ref "origin/$BRANCH"
+TEST_DIR="./worktrees/E2E-${SAFE_NAME}"
 ```
 
-If checkout fails with "already used by worktree", this means a worktree exists — switch to Option A instead:
+If a matching worktree already exists, reuse it:
 ```bash
-# Find the worktree for this branch
-WORKTREE=$(git worktree list | grep "[branch-name]" | awk '{print $1}')
+WORKTREE=$(git -C ./repos/pocketpal-ai worktree list | grep "[branch-name]" | awk '{print $1}')
 TEST_DIR="${WORKTREE}"
 cd "${TEST_DIR}"
 ```
 
 **For main:**
 ```bash
-git checkout main
-git pull origin main
+./tools/create-worktree.sh E2E-main --detach --ref origin/main
+TEST_DIR="./worktrees/E2E-main"
 ```
 
-After checkout, confirm:
+After creating or selecting the worktree, sync allowlisted config and confirm:
 ```bash
+./tools/sync-worktree-config.sh "${TEST_DIR}"
+cd "${TEST_DIR}"
 git log --oneline -1
 git branch --show-current || echo "(detached HEAD)"
 ```
