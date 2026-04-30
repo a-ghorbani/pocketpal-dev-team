@@ -12,9 +12,13 @@ from pathlib import Path
 from typing import Any
 
 
-PROTECTED_SEGMENT = "repos/pocketpal-ai"
+PROTECTED_SOURCE_SEGMENT = "repos/pocketpal-ai"
 SENSITIVE_PATTERNS = (
     re.compile(r"(^|/)\.env($|\.)"),
+    re.compile(r"(^|/)GoogleService-Info\.plist$"),
+    re.compile(r"(^|/)Env\.xcconfig$"),
+    re.compile(r"(^|/)google-services\.json$"),
+    re.compile(r"(^|/)pocketpal-release-key\.keystore$"),
     re.compile(r"(^|/)secrets(/|$)"),
 )
 
@@ -42,7 +46,6 @@ SHELL_WRITE_COMMANDS = {
     "python",
     "python3",
     "ruby",
-    "sed",
     "tee",
     "touch",
     "truncate",
@@ -105,12 +108,22 @@ def normalize_path(raw: str, cwd: str) -> str:
         return raw.replace(os.sep, "/")
 
 
-def is_sensitive_path(path: str) -> bool:
+def normalize_relative_path(path: str) -> str:
     normalized = path.replace("\\", "/")
     while normalized.startswith("./"):
         normalized = normalized[2:]
-    if normalized == PROTECTED_SEGMENT or normalized.startswith(PROTECTED_SEGMENT + "/"):
-        return True
+    return normalized
+
+
+def is_protected_source_path(path: str) -> bool:
+    normalized = normalize_relative_path(path)
+    return normalized == PROTECTED_SOURCE_SEGMENT or normalized.startswith(
+        PROTECTED_SOURCE_SEGMENT + "/"
+    )
+
+
+def is_sensitive_path(path: str) -> bool:
+    normalized = normalize_relative_path(path)
     return any(pattern.search(normalized) for pattern in SENSITIVE_PATTERNS)
 
 
@@ -129,19 +142,19 @@ def patch_paths(patch_text: str) -> list[str]:
     return paths
 
 
-def explicit_tool_paths(tool_input: Any) -> list[str]:
+def explicit_tool_paths(tool_input: Any) -> list[tuple[str, str]]:
     if not isinstance(tool_input, dict):
         return []
 
-    paths: list[str] = []
+    paths: list[tuple[str, str]] = []
     for key in ("file_path", "path"):
         value = tool_input.get(key)
         if isinstance(value, str):
-            paths.append(value)
+            paths.append((value, "explicit"))
 
     command = tool_input.get("command")
     if isinstance(command, str):
-        paths.extend(patch_paths(command))
+        paths.extend((path, "patch") for path in patch_paths(command))
 
     return paths
 
@@ -153,12 +166,29 @@ def shell_tokens(command: str) -> list[str]:
         return command.split()
 
 
-def command_mentions_protected_path(tokens: list[str]) -> bool:
+def command_mentions_sensitive_path(tokens: list[str]) -> bool:
     return any(is_sensitive_path(token) for token in tokens)
+
+
+def command_mentions_protected_source_path(tokens: list[str]) -> bool:
+    return any(is_protected_source_path(token) for token in tokens)
+
+
+def sed_is_mutating(tokens: list[str]) -> bool:
+    return any(token == "-i" or token.startswith("-i") for token in tokens[1:])
 
 
 def command_uses_sensitive_redirection(command: str) -> bool:
     return bool(re.search(r"(^|\s)(>|>>|<)\s*(\.?/)?(\.env($|\.)|.*?/\.env($|\.)|.*?/secrets(/|$))", command))
+
+
+def command_uses_protected_source_output_redirection(command: str) -> bool:
+    return bool(
+        re.search(
+            rf"(^|\s)(>|>>)\s*(\.?/)?{re.escape(PROTECTED_SOURCE_SEGMENT)}(/|$)",
+            command,
+        )
+    )
 
 
 def should_block_shell(command: str) -> str | None:
@@ -171,18 +201,27 @@ def should_block_shell(command: str) -> str | None:
         return None
 
     executable = Path(tokens[0]).name
-    mentioned = command_mentions_protected_path(tokens)
+    mentions_sensitive = command_mentions_sensitive_path(tokens)
+    mentions_protected_source = command_mentions_protected_source_path(tokens)
 
-    if mentioned and executable in SHELL_WRITE_COMMANDS:
+    if mentions_sensitive and (
+        executable in SHELL_WRITE_COMMANDS or executable in SHELL_READ_COMMANDS
+    ):
+        return "BLOCKED: shell command may read or modify a sensitive path. Do not read .env files or secrets."
+
+    if mentions_protected_source and (
+        executable in SHELL_WRITE_COMMANDS
+        or (executable == "sed" and sed_is_mutating(tokens))
+    ):
         return "BLOCKED: shell command may modify a protected path. Work in worktrees/ and do not edit repos/pocketpal-ai, .env files, or secrets."
-
-    if mentioned and executable in SHELL_READ_COMMANDS:
-        return "BLOCKED: shell command may read a protected path. Do not read .env files or secrets, and only inspect repos/pocketpal-ai through non-mutating source reads when needed."
 
     if command_uses_sensitive_redirection(command):
         return "BLOCKED: shell redirection references .env or secrets paths."
 
-    if PROTECTED_SEGMENT in command and re.search(r"\b(git\s+-C|git)\b", command):
+    if command_uses_protected_source_output_redirection(command):
+        return "BLOCKED: shell redirection may modify repos/pocketpal-ai. Create/use a worktree instead."
+
+    if PROTECTED_SOURCE_SEGMENT in command and re.search(r"\b(git\s+-C|git)\b", command):
         mutating_git = re.search(
             r"\bgit\b(?:\s+-C\s+\S+)?\s+(add|am|apply|branch|checkout|clean|commit|merge|mv|pull|push|rebase|reset|restore|rm|switch|worktree)\b",
             command,
@@ -203,11 +242,15 @@ def main() -> int:
     tool_name = event.get("tool_name") or ""
     tool_input = event.get("tool_input") or {}
 
-    for raw_path in explicit_tool_paths(tool_input):
+    for raw_path, path_kind in explicit_tool_paths(tool_input):
         normalized = normalize_path(raw_path, cwd)
         if is_sensitive_path(normalized):
             deny(
-                "BLOCKED: Codex cannot read or modify protected paths: repos/pocketpal-ai, .env files, or secrets."
+                "BLOCKED: Codex cannot read or modify sensitive paths: .env files or secrets."
+            )
+        if path_kind == "patch" and is_protected_source_path(normalized):
+            deny(
+                "BLOCKED: Codex cannot modify repos/pocketpal-ai directly. Create/use a worktree instead."
             )
 
     if tool_name == "Bash" and isinstance(tool_input, dict):

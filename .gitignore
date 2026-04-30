@@ -12,3 +12,6 @@ worktrees/*
 repos/pocketpal-ai.configs/
 
 .DS_Store
+
+__pycache__
+
