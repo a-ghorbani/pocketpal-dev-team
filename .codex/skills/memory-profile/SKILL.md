@@ -1,8 +1,7 @@
 ---
 name: memory-profile
 description: Run memory profiling on physical devices and compare against baselines.
-user-invocable: true
 argument-hint: "[ios|android|both] [options]"
 ---
 
-@skills/memory-profile/SKILL.md
+Read @skills/memory-profile/SKILL.md first. It defines the workflow.
