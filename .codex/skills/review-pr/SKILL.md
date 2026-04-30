@@ -5,5 +5,5 @@ description: Review an external PocketPal PR or code change using the shared rev
 
 # Codex Review PR Adapter
 
-Read @skills/review-pr/SKILL.md first — it defines the workflow and points
+Read @skills/review-pr/SKILL.md first. It defines the workflow.
 

@@ -1,8 +1,6 @@
 ---
 name: run-e2e
 description: Run E2E tests for a PR, branch, or main across multiple devices on the test laptop.
-user-invocable: true
-argument-hint: "[PR #number | branch-name | main] [options]"
 ---
 
-@skills/run-e2e/SKILL.md
+Read @skills/run-e2e/SKILL.md first. It defines the workflow.

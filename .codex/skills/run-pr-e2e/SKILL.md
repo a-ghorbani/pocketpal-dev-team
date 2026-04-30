@@ -1,8 +1,7 @@
 ---
 name: run-pr-e2e
 description: Run Android E2E tests for a PR using the CI-built APK, inside a dedicated worktree under the dev-team repo.
-user-invocable: true
 argument-hint: "<PR #number> [options]"
 ---
 
-@skills/run-pr-e2e/SKILL.md
+Read @skills/run-pr-e2e/SKILL.md first. It defines the workflow.
