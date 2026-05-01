@@ -18,7 +18,6 @@ workflows/reviews/
       ux.md
       local-invariants.md
       verification.md
-      aggregation.md
       final.md
 ```
 
