@@ -7,6 +7,7 @@ This folder contains setup and configuration for the AI development team.
 ### 1. Agents are Ready
 
 Custom agents are defined in `/.claude/agents/`:
+
 - `pocketpal-orchestrator` - Entry point, task analysis
 - `pocketpal-planner` - Creates implementation plans
 - `pocketpal-implementer` - Writes code
@@ -35,6 +36,7 @@ Orchestrator → Planner → Story Critic (review-revise loop) → Implementer �
 ```
 
 **Human checkpoints:**
+
 1. If the critic loop still has blockers after revision
 2. After Reviewer approves - review and merge the PR
 
@@ -71,19 +73,20 @@ workflows/stories/
 
 ### Agent Tools
 
-| Agent | Tools |
-|-------|-------|
-| orchestrator | Read, Grep, Glob, Bash, WebFetch |
-| planner | Read, Grep, Glob, Bash |
-| implementer | Read, Grep, Glob, Bash, Edit, Write |
-| tester | Read, Grep, Glob, Bash, Edit, Write |
-| reviewer | Read, Grep, Glob, Bash |
+| Agent        | Tools                               |
+| ------------ | ----------------------------------- |
+| orchestrator | Read, Grep, Glob, Bash, WebFetch    |
+| planner      | Read, Grep, Glob, Bash              |
+| implementer  | Read, Grep, Glob, Bash, Edit, Write |
+| tester       | Read, Grep, Glob, Bash, Edit, Write |
+| reviewer     | Read, Grep, Glob, Bash              |
 
 ### Model
 
 All agents use `sonnet` by default for cost/speed balance.
 
 For complex architectural decisions, you can override:
+
 ```bash
 claude --model opus "Use pocketpal-planner for complex feature X"
 ```
@@ -93,12 +96,14 @@ claude --model opus "Use pocketpal-planner for complex feature X"
 ### Agent Not Found
 
 Ensure you're in a directory where Claude Code can see the `.claude/agents/` folder:
+
 - `./` (where agents are defined)
 - Or symlink/copy to your working directory
 
 ### Context Issues
 
 If agents seem to lack context:
+
 1. Check that context files exist in `/context/`
 2. Ensure PocketPal repo is accessible at expected path
 3. Verify story file exists in `/workflows/stories/`
@@ -106,6 +111,7 @@ If agents seem to lack context:
 ### Test Failures
 
 If tester produces wrong patterns:
+
 1. Ensure it read `jest/setup.ts` and `jest/test-utils.tsx`
 2. Check the patterns doc in `/context/patterns.md`
 3. Review the "CRITICAL MISTAKES TO AVOID" section
@@ -113,6 +119,7 @@ If tester produces wrong patterns:
 ## Phase 2: Parallel Execution (Coming Soon)
 
 Future enhancements will include:
+
 - Git worktree management for parallel work
 - Task queue for multiple issues
 - Progress dashboard

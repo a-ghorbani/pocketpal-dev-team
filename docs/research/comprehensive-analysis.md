@@ -13,6 +13,7 @@ This document synthesizes research on AI agent development workflows to design a
 **Source**: [BMAD-METHOD GitHub](https://github.com/bmad-code-org/BMAD-METHOD)
 
 **Core Concepts**:
+
 - 21 specialized agents across 34 workflows in 4 phases
 - Scale-adaptive (Quick Flow ~5min, BMad Method ~15min, Enterprise ~30min)
 - Two key innovations:
@@ -26,6 +27,7 @@ This document synthesizes research on AI agent development workflows to design a
 **Source**: [Claude-Flow GitHub](https://github.com/ruvnet/claude-flow)
 
 **Architecture**:
+
 - 7-layer system: Entry → Routing → Swarm → Agents (54+) → Resources → Intelligence → Learning
 - Swarm topologies: Mesh, Hierarchical, Ring, Star
 - Claims system for task ownership and human-agent handoff
@@ -38,6 +40,7 @@ This document synthesizes research on AI agent development workflows to design a
 **Source**: [DEV.to - Running 10+ Claude Instances](https://dev.to/bredmond1019/multi-agent-orchestration-running-10-claude-instances-in-parallel-part-3-29da)
 
 **Architecture**:
+
 ```
 Meta-Agent Orchestrator
     ↓
@@ -81,6 +84,7 @@ File Locking + Dependency Triggers
 **Problem**: Agents "fill in gaps" with fabricated code when context is incomplete.
 
 **Solutions**:
+
 - **Context precision over volume** - Don't dump entire codebase
 - **Forced attribution** - Require agents to cite source files
 - **"I don't know" fallbacks** - Configure agents to ask rather than guess
@@ -91,6 +95,7 @@ File Locking + Dependency Triggers
 **Problem**: As conversations grow, older context is truncated, causing errors.
 
 **Solutions**:
+
 - **Context isolation** - Each agent gets fresh context window
 - **Story files** - Self-contained task specs with all needed context
 - **RAG for retrieval** - Fetch relevant code on demand vs preloading
@@ -102,6 +107,7 @@ File Locking + Dependency Triggers
 **Source**: [Surge AI Blog](https://surgehq.ai/blog/when-coding-agents-spiral-into-693-lines-of-hallucinations)
 
 **Solutions**:
+
 - **Plan approval gate** - Human reviews approach before execution
 - **Iteration limits** - Max retries before escalating to human
 - **Checkpoint reviews** - Validate intermediate outputs
@@ -113,6 +119,7 @@ File Locking + Dependency Triggers
 **Source**: [Galileo AI Blog](https://galileo.ai/blog/multi-agent-coordination-failure-mitigation)
 
 **Solutions**:
+
 - **Single source of truth** - Shared context files
 - **File locking** - Prevent concurrent edits
 - **Dependency graphs** - Explicit ordering
@@ -122,6 +129,7 @@ File Locking + Dependency Triggers
 **Problem**: AI re-ingests its own errors, compounding mistakes.
 
 **Solutions**:
+
 - **Small increments with reviews** - Fix "5-second issues" as you go
 - **Automated quality gates** - Tests, linting, type checking before merge
 - **Easy rollback** - Better to revert than patch bad code
@@ -132,24 +140,26 @@ File Locking + Dependency Triggers
 
 ### 3.1 Codebase Characteristics
 
-| Aspect | Detail |
-|--------|--------|
-| Size | ~79,000 lines TypeScript |
-| Framework | React Native 0.82.1 |
-| State | MobX (10 stores) |
-| Database | WatermelonDB |
-| Testing | Jest (60% coverage threshold) + Appium E2E |
-| CI/CD | GitHub Actions |
-| Platforms | iOS + Android |
+| Aspect    | Detail                                     |
+| --------- | ------------------------------------------ |
+| Size      | ~79,000 lines TypeScript                   |
+| Framework | React Native 0.82.1                        |
+| State     | MobX (10 stores)                           |
+| Database  | WatermelonDB                               |
+| Testing   | Jest (60% coverage threshold) + Appium E2E |
+| CI/CD     | GitHub Actions                             |
+| Platforms | iOS + Android                              |
 
 ### 3.2 Critical Context Files for Agents
 
 **Tier 1 - All Agents Need**:
+
 - `README.md`, `CLAUDE.md`, `CONTRIBUTING.md`
 - `package.json`, `tsconfig.json`
 - `.eslintrc.js`, `.prettierrc.js`
 
 **Tier 2 - Specialization**:
+
 - Frontend: `/src/components/`, `/src/screens/`
 - State: `/src/store/`, `/src/hooks/`
 - Services: `/src/services/`, `/src/api/`
@@ -180,7 +190,7 @@ File Locking + Dependency Triggers
 ### 4.2 Agent Roles (v1 - Minimal)
 
 | Agent | Responsibility | When Invoked |
-|-------|---------------|--------------|
+| --- | --- | --- |
 | **Orchestrator** | Parse issue, create plan, coordinate agents | Entry point |
 | **Planner** | Research codebase, define implementation approach | Before coding |
 | **Implementer** | Write code following the plan | After plan approval |
@@ -270,35 +280,43 @@ Each worktree = isolated branch = isolated agent context = no conflicts.
 # Story: [Issue Title]
 
 ## Context
+
 - Issue: #123
 - Complexity: standard
 - Estimated files: 3-5
 
 ## Background
+
 [Relevant architectural context from codebase analysis]
 
 ## Requirements
+
 1. [Requirement 1]
 2. [Requirement 2]
 
 ## Affected Files
+
 - `src/components/Foo.tsx` - Modify
 - `src/store/BarStore.ts` - Modify
 - `src/components/Foo.test.tsx` - Create
 
 ## Implementation Approach
+
 [Step-by-step plan]
 
 ## Test Requirements
+
 - Unit: [list]
 - Integration: [list]
 
 ## Coding Standards
+
 - Use MobX observer pattern
 - Follow existing component structure
 - Conventional commit: feat(component): description
 
 ## Reference Files
+
 [Key files to read for patterns]
 ```
 
@@ -311,6 +329,7 @@ Each worktree = isolated branch = isolated agent context = no conflicts.
 **Goal**: Single-agent workflow, issue → PR
 
 **Deliverables**:
+
 1. Project structure with agent definitions
 2. Orchestrator that parses GitHub issues
 3. Planner that creates story files
@@ -324,6 +343,7 @@ Each worktree = isolated branch = isolated agent context = no conflicts.
 **Goal**: Multiple agents working on different issues concurrently
 
 **Deliverables**:
+
 1. Git worktree management
 2. Task queue for job distribution
 3. Progress monitoring dashboard (simple)
@@ -336,6 +356,7 @@ Each worktree = isolated branch = isolated agent context = no conflicts.
 **Goal**: Domain-specific expertise
 
 **Deliverables**:
+
 1. Separate implementer for frontend vs services
 2. Dedicated tester agent with PocketPal test patterns
 3. Reviewer with PocketPal-specific checks
@@ -348,6 +369,7 @@ Each worktree = isolated branch = isolated agent context = no conflicts.
 **Goal**: 10+ parallel agents, self-improvement
 
 **Deliverables**:
+
 1. Scale to 10+ concurrent agents
 2. Learning from successful/failed runs
 3. Linear/GitHub integration
@@ -386,7 +408,7 @@ Each worktree = isolated branch = isolated agent context = no conflicts.
 ## Part 7: Risk Mitigation
 
 | Risk | Mitigation |
-|------|------------|
+| --- | --- |
 | Agent produces broken code | Automated tests gate, reviewer agent, human PR approval |
 | Context window exhaustion | Story files with focused context, agent specialization |
 | Spiral failures | Plan approval, iteration limits, easy rollback |

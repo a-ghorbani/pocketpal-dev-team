@@ -189,13 +189,7 @@ status: FINDINGS | NOTHING_FOUND
 
 ### <ID>: <Title>
 
-severity: BLOCKER | CONCERN | SUGGESTION
-lens: Correctness | Architecture | Maintainability | Tests | Security | Data / Migration | Performance/Resources | UX / Accessibility | Platform / Native
-path: relative/path.ts
-line: 123
-impact: One sentence.
-evidence: Short quote or concrete code reference.
-fix: One sentence.
+severity: BLOCKER | CONCERN | SUGGESTION lens: Correctness | Architecture | Maintainability | Tests | Security | Data / Migration | Performance/Resources | UX / Accessibility | Platform / Native path: relative/path.ts line: 123 impact: One sentence. evidence: Short quote or concrete code reference. fix: One sentence.
 ```
 
 ## Verification

@@ -11,6 +11,7 @@ Starter Claude Code setup for [PocketPal AI](https://github.com/a-ghorbani/pocke
 </picture>
 
 **Key Points:**
+
 - All work happens in **isolated git worktrees** — never touches main branch directly
 - **AI review loop** catches design flaws before coding; human only needed when AI can't converge
 - **Human checkpoint**: PR review before merge
@@ -27,6 +28,7 @@ cd pocketpal-dev-team
 ```
 
 If you already cloned without `--recursive`:
+
 ```bash
 git submodule update --init --recursive
 ```
@@ -74,7 +76,7 @@ claude "Use pocketpal-orchestrator: <your task description>"
 The dev team has **built-in safeguards** to prevent common mistakes:
 
 | Protection | How It Works |
-|------------|--------------|
+| --- | --- |
 | **Worktree Isolation** | All work happens in `worktrees/TASK-xxx/`, never in `pocketpal-ai` directly |
 | **Branch Protection** | Agents refuse to work on `main`/`master` - only feature branches |
 | **Native Build Verification** | For native changes, agents MUST run `pod install` and actual builds |
@@ -122,7 +124,7 @@ claude "Use pocketpal-orchestrator: Implement GitHub issue #123"
 ## Agents
 
 | Agent | Purpose |
-|-------|---------|
+| --- | --- |
 | `pocketpal-orchestrator` | Entry point — creates worktree, analyzes tasks, routes to other agents |
 | `pocketpal-planner` | Researches codebase IN WORKTREE, creates implementation plans |
 | `pocketpal-story-critic` | Reviews plans for design gaps, triggers revision if needed |
@@ -135,7 +137,7 @@ claude "Use pocketpal-orchestrator: Implement GitHub issue #123"
 
 ## Native Changes
 
-When a task involves native dependencies (llama.rn, react-native-*, etc.):
+When a task involves native dependencies (llama.rn, react-native-\*, etc.):
 
 1. Orchestrator flags `NATIVE_CHANGES: YES`
 2. Implementer runs `pod install` and verifies iOS/Android builds
@@ -181,6 +183,7 @@ claude "Use pocketpal-orchestrator: Refactor component C"
 ```
 
 Each orchestrator automatically creates an isolated worktree:
+
 ```
 worktrees/
 ├── TASK-20250115-1430/   # Feature A
@@ -236,7 +239,7 @@ pocketpal-dev-team/
 During PR review, you may find problems with the implementation:
 
 | Issue Size | Action |
-|------------|--------|
+| --- | --- |
 | **Minor** (typos, small tweaks) | Ask the agent to fix directly |
 | **Significant** (wrong approach, missing requirements) | Update the story file, discard the PR, and re-run the workflow |
 
@@ -260,7 +263,7 @@ git worktree remove ../../worktrees/TASK-xxx
 ## Optional Features
 
 | Feature | Requirement | Without It |
-|---------|-------------|------------|
+| --- | --- | --- |
 | Native iOS builds | Xcode + CocoaPods | Set `NATIVE_CHANGES=NO` or skip native tasks |
 | Native Android builds | Android SDK + Gradle | Set `NATIVE_CHANGES=NO` or skip native tasks |
 

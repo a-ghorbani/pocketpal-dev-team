@@ -10,16 +10,16 @@ Location: `./repos/pocketpal-ai`
 
 ## Technology Stack
 
-| Category | Technology | Version |
-|----------|------------|---------|
-| Framework | React Native | 0.82.1 |
-| Language | TypeScript | 5.0.4 |
-| State | MobX | 6.15.0 |
-| Navigation | React Navigation | 7.x |
-| Database | WatermelonDB | 0.28.0 |
-| UI Kit | React Native Paper | 5.14.5 |
-| LLM | llama.rn (llama.cpp) | 0.12.0-rc.9 |
-| Testing | Jest + Appium | 29.6.3 |
+| Category   | Technology           | Version     |
+| ---------- | -------------------- | ----------- |
+| Framework  | React Native         | 0.82.1      |
+| Language   | TypeScript           | 5.0.4       |
+| State      | MobX                 | 6.15.0      |
+| Navigation | React Navigation     | 7.x         |
+| Database   | WatermelonDB         | 0.28.0      |
+| UI Kit     | React Native Paper   | 5.14.5      |
+| LLM        | llama.rn (llama.cpp) | 0.12.0-rc.9 |
+| Testing    | Jest + Appium        | 29.6.3      |
 
 ## Project Structure
 
@@ -75,11 +75,13 @@ pocketpal-ai/
 ## Testing
 
 ### Unit Tests
+
 - Framework: Jest + @testing-library/react-native
 - Coverage requirement: 60% minimum
 - Run: `yarn test`
 
 ### E2E Tests
+
 - Framework: Appium + WebDriverIO
 - Platforms: iOS simulator, Android emulator, AWS Device Farm
 - Run: See `/e2e/README.md`
@@ -87,6 +89,7 @@ pocketpal-ai/
 ## CI/CD
 
 GitHub Actions workflows:
+
 - `ci.yml` - Lint, typecheck, tests, build
 - `e2e-tests.yml` - End-to-end testing
 - `release.yml` - App store deployment
@@ -94,34 +97,40 @@ GitHub Actions workflows:
 ## Coding Standards
 
 ### Commits
+
 Conventional commits: `feat|fix|docs|chore(scope): message`
 
 ### TypeScript
+
 - Strict mode (with some relaxations)
 - Experimental decorators enabled (for MobX)
 
 ### Linting
+
 - ESLint with React Native config
 - Prettier for formatting
 
 ## Key Dependencies
 
 ### State Management
+
 ```typescript
-import {makeAutoObservable} from 'mobx';
-import {observer} from 'mobx-react';
+import { makeAutoObservable } from "mobx";
+import { observer } from "mobx-react";
 ```
 
 ### Navigation
+
 ```typescript
-import {useNavigation} from '@react-navigation/native';
-import {DrawerNavigationProp} from '@react-navigation/drawer';
+import { useNavigation } from "@react-navigation/native";
+import { DrawerNavigationProp } from "@react-navigation/drawer";
 ```
 
 ### UI
+
 ```typescript
-import {Button, Card, Text} from 'react-native-paper';
-import BottomSheet from '@gorhom/bottom-sheet';
+import { Button, Card, Text } from "react-native-paper";
+import BottomSheet from "@gorhom/bottom-sheet";
 ```
 
 ## Important Files

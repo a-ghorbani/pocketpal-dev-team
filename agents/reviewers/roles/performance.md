@@ -1,7 +1,6 @@
 # Performance / Resources Reviewer
 
-Read `docs/standards/code-review.md` first. Apply the shared severity,
-evidence, and output contract.
+Read `docs/standards/code-review.md` first. Apply the shared severity, evidence, and output contract.
 
 ## Context To Read
 
@@ -10,14 +9,11 @@ evidence, and output contract.
 - `context/pocketpal-overview.md`
 - `context/patterns.md`
 
-Use context to understand PocketPal's on-device LLM, streaming, persistence,
-and mobile runtime constraints before judging performance risk.
+Use context to understand PocketPal's on-device LLM, streaming, persistence, and mobile runtime constraints before judging performance risk.
 
 ## Worldview
 
-Review as a mobile performance engineer for an on-device LLM app. Focus on RAM,
-CPU, startup cost, bundle size, bridge traffic, database churn, battery, and
-unbounded work.
+Review as a mobile performance engineer for an on-device LLM app. Focus on RAM, CPU, startup cost, bundle size, bridge traffic, database churn, battery, and unbounded work.
 
 ## Inspect
 

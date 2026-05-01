@@ -50,6 +50,7 @@ For simple tasks (typos, config changes, dependency bumps), the story will natur
 **ALL research must happen in the WORKTREE, not pocketpal-ai:**
 
 ### Step 1: Understand the Domain
+
 ```bash
 cd "${WORKTREE_PATH}"  # Always start with this
 
@@ -63,6 +64,7 @@ find . -name "*RelatedComponent*" -type f
 ```
 
 ### Step 2: Study Patterns
+
 ```bash
 cd "${WORKTREE_PATH}"
 
@@ -71,6 +73,7 @@ grep -r "similar_pattern" src/
 ```
 
 ### Step 3: Map Dependencies
+
 ```bash
 cd "${WORKTREE_PATH}"
 
@@ -79,6 +82,7 @@ grep -r "import.*from.*AffectedFile" src/
 ```
 
 ### Step 4: Assess Migration Impact
+
 ```bash
 cd "${WORKTREE_PATH}"
 
@@ -88,11 +92,13 @@ grep -r "DocumentDirectoryPath\|AsyncStorage\|MMKV" src/
 ```
 
 Consider:
+
 - Will existing users have data in the old format?
 - Do we need to support both old and new paths/formats?
 - Is a one-time migration needed on app update?
 
 ### Step 5: Check Testing Patterns
+
 ```bash
 cd "${WORKTREE_PATH}"
 
@@ -107,16 +113,19 @@ find src -name "*.test.tsx" | xargs grep -l "SimilarComponent"
 ## Native Changes Detection
 
 If the task involves ANY of these, mark `NATIVE_CHANGES: YES` in the story:
+
 - Changes to `package.json` dependencies (especially native modules)
 - Changes to `llama.rn`, `react-native-*` packages
 - Changes to `ios/` or `android/` directories
 - Changes to Podfile or build.gradle
 
 When native changes detected, add to Implementation Plan:
+
 ```markdown
 ### Platform Verification (Required for Native Changes)
 
 After code changes:
+
 1. Run `cd ios && pod install && cd ..`
 2. Build iOS: `yarn ios --configuration Release`
 3. Build Android: `yarn android --variant=release`
@@ -126,6 +135,7 @@ After code changes:
 ## Visual Confirmation Detection
 
 If the task involves ANY of these, mark `Visual Confirmation: YES` in the story:
+
 - Changes to UI components (layout, styling, rendering)
 - New visual features (tables, charts, new screens, new UI elements)
 - Changes to theme or color handling
@@ -139,6 +149,7 @@ When visual confirmation is flagged, fill in the `Visual Confirmation` section i
 Create a story file following the template. **MUST include environment section:**
 
 ### Metadata
+
 ```yaml
 Task ID: TASK-{id}
 Worktree: ./worktrees/TASK-{id}
@@ -148,6 +159,7 @@ Visual Confirmation: YES/NO
 ```
 
 ### Key Sections
+
 - Issue reference, complexity, status
 - **Environment** (worktree path, branch name)
 - **Native Changes** flag
@@ -160,6 +172,7 @@ Visual Confirmation: YES/NO
 ## Quality Checklist
 
 Before completing the story:
+
 - [ ] Pre-flight checks passed (worktree, branch)
 - [ ] Environment section included with worktree path
 - [ ] Native changes flag set correctly
@@ -192,10 +205,10 @@ Save story files to: `./workflows/stories/`
 
 ### Naming Convention (CRITICAL)
 
-| Task Type | Story File Name | Example |
-|-----------|-----------------|---------|
-| New Task | `{TASK_ID}.md` | `TASK-20250120-1430.md` |
-| PR Fix | `{TASK_ID}.md` | `PR-490-fix.md` |
+| Task Type | Story File Name | Example                 |
+| --------- | --------------- | ----------------------- |
+| New Task  | `{TASK_ID}.md`  | `TASK-20250120-1430.md` |
+| PR Fix    | `{TASK_ID}.md`  | `PR-490-fix.md`         |
 
 **The TASK_ID is provided by the orchestrator.** Use it exactly as given for the story filename.
 
@@ -223,6 +236,7 @@ All stories go through the review-revise loop with the critic.
 When invoked with `MODE: revision`, you are revising an existing story based on critic feedback. This is different from creating a new story.
 
 ### What You Receive
+
 - The story file path (current version)
 - The critic's structured critique (with BLOCKER/CONCERN/SUGGESTION findings)
 - The worktree path (for codebase verification)
@@ -232,12 +246,13 @@ When invoked with `MODE: revision`, you are revising an existing story based on 
 For EACH finding in the critique, you MUST do one of:
 
 | Resolution | When to Use | What to Do |
-|------------|-------------|------------|
+| --- | --- | --- |
 | **FIXED** | The finding is valid and you agree | Revise the story to address it. Show what changed. |
 | **REJECTED** | The finding is wrong or based on misunderstanding | Explain WHY with evidence from the codebase. Quote specific code. No hand-waving. |
 | **DEFERRED** | Valid but out of scope for this task | Justify why it's out of scope. Suggest a follow-up task if appropriate. |
 
 ### Rules for Revision
+
 1. **Address EVERY BLOCKER and CONCERN** — you may skip SUGGESTIONs but should note them
 2. **Don't anchor to your original plan** — if the critic found a simpler approach, genuinely evaluate it
 3. **REJECTED needs evidence** — "I disagree" is not enough. Show code, cite docs, prove your point.
@@ -262,6 +277,7 @@ STORY: ./workflows/stories/{TASK_ID}.md
 ```
 
 **Examples:**
+
 - New task: `TASK_ID: TASK-20250120-1430`, story: `TASK-20250120-1430.md`
 - PR fix: `TASK_ID: PR-490-fix`, story: `PR-490-fix.md`
 

@@ -21,8 +21,7 @@ Before ANY analysis or routing, you MUST:
 
 ### Detect Task Type
 
-**PR Fix** (from PR reviewer): Contains "PR #" or "PR Branch:" in the prompt
-**New Task**: Everything else (features, bugs, issues)
+**PR Fix** (from PR reviewer): Contains "PR #" or "PR Branch:" in the prompt **New Task**: Everything else (features, bugs, issues)
 
 ---
 
@@ -31,11 +30,12 @@ Before ANY analysis or routing, you MUST:
 **Consistent naming across the entire workflow:**
 
 | Type | Worktree Path | Branch Name | Story File |
-|------|---------------|-------------|------------|
+| --- | --- | --- | --- |
 | New Task | `worktrees/TASK-YYYYMMDD-HHMM` | `feature/TASK-YYYYMMDD-HHMM` | `TASK-YYYYMMDD-HHMM.md` |
 | PR Fix | `worktrees/PR-{number}` | `pr-{number}` | `PR-{number}-fix.md` |
 
 **Examples:**
+
 - New feature: `TASK-20250120-1430` → worktree, branch, and story all use this ID
 - PR #490 fix: `PR-490` → worktree `PR-490`, branch `pr-490`, story `PR-490-fix.md`
 
@@ -128,7 +128,7 @@ Read: ${WORKTREE_PATH}/package.json
 ## Complexity Classification
 
 | Level | Criteria | Action |
-|-------|----------|--------|
+| --- | --- | --- |
 | **Standard** | Feature, bug fix, dependency upgrade, typo — clear requirements | Route to `pocketpal-planner` WITH worktree path |
 | **Complex** | Architecture change, 5+ files, unclear scope | Escalate to human for scoping |
 
@@ -137,12 +137,14 @@ Read: ${WORKTREE_PATH}/package.json
 ## Native Library Changes Detection
 
 If the task involves ANY of these, flag as **requires platform verification**:
+
 - Changes to `package.json` dependencies (especially native modules)
 - Changes to `llama.rn`, `react-native-*` packages
 - Changes to `ios/` or `android/` directories
 - Changes to Podfile or build.gradle
 
 When flagged, add to requirements:
+
 - `pod install` must succeed
 - iOS build must succeed: `yarn ios --configuration Release`
 - Android build must succeed: `yarn android --variant=release`
@@ -166,14 +168,17 @@ After analysis, produce:
 ## Task Analysis
 
 ### Environment
+
 - **Task ID**: TASK-{id}
 - **Worktree**: ./worktrees/TASK-{id}
 - **Branch**: feature/TASK-{id}
 
 ### Summary
+
 [One-line description of what needs to be done]
 
 ### Classification
+
 - **Complexity**: standard | complex
 - **Type**: bug | feature | enhancement | refactor
 - **Estimated Files**: N
@@ -181,23 +186,28 @@ After analysis, produce:
 - **Native Changes**: YES | NO (requires platform builds)
 
 ### Requirements
+
 1. [Requirement 1]
 2. [Requirement 2]
 
 ### Acceptance Criteria
+
 - [ ] [Testable criterion 1]
 - [ ] [Testable criterion 2]
 - [ ] iOS builds successfully (if native)
 - [ ] Android builds successfully (if native)
 
 ### Initial Research
+
 [Key files identified, relevant patterns found]
 
 ### Recommended Next Step
+
 - [ ] Route to `pocketpal-planner` (COMPLEXITY: standard)
 - [ ] Escalate to human (complex/unclear)
 
 ### Questions (if any)
+
 [Questions that need human input before proceeding]
 ```
 
@@ -213,6 +223,7 @@ NATIVE_CHANGES: YES/NO
 ```
 
 ### Routing to Planner
+
 ```
 Use pocketpal-planner to create a story for: [task description]
 WORKTREE: ./worktrees/TASK-20250115-1430
@@ -222,6 +233,7 @@ NATIVE_CHANGES: YES
 ```
 
 ### Routing to Planner (PR Fix)
+
 ```
 Use pocketpal-planner to create a story for PR fix
 WORKTREE: ./worktrees/PR-490
@@ -267,6 +279,7 @@ When routing to the story critic, pass **ONLY** the story file path and worktree
 ### Routing Examples
 
 **Critic review (same call every time — critic doesn't know or care about rounds):**
+
 ```
 Use pocketpal-story-critic to review story TASK-20250115-1430
 WORKTREE: ./worktrees/TASK-20250115-1430
@@ -275,6 +288,7 @@ STORY: ./workflows/stories/TASK-20250115-1430.md
 ```
 
 **Planner revision (when critic returns HAS_CONCERNS / HAS_BLOCKERS):**
+
 ```
 Use pocketpal-planner to revise story TASK-20250115-1430 based on critique
 WORKTREE: ./worktrees/TASK-20250115-1430
@@ -289,6 +303,7 @@ CRITIQUE:
 ```
 
 ### Loop Rules
+
 - **All tasks** go through the review-revise loop
 - **Max 2 critic reviews**: If the second review still has BLOCKERs, escalate to human
 - **LGTM**: Proceed to implementation
@@ -299,6 +314,7 @@ CRITIQUE:
 ## Escalation Triggers
 
 STOP and escalate to human when:
+
 - Worktree creation fails
 - Requirements are ambiguous
 - Security-sensitive changes (auth, encryption, data handling)

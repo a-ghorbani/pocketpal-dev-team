@@ -11,7 +11,7 @@ Inspired by Don Norman (human-centered design) and Dieter Rams (less but better)
 **When designing features, follow these principles:**
 
 | Principle | Guideline | Example |
-|-----------|-----------|---------|
+| --- | --- | --- |
 | **Visibility** | Show system status clearly | Loading indicators, memory usage, model state |
 | **Feedback** | Respond to actions immediately | Haptic on send, progress during download |
 | **Simplicity** | Don't add options unless necessary | Sensible defaults over settings screens |
@@ -20,6 +20,7 @@ Inspired by Don Norman (human-centered design) and Dieter Rams (less but better)
 | **Accessibility** | Works for everyone | Proper contrast, screen reader support, touch targets |
 
 **Questions to ask before adding UI:**
+
 - Can we use a sensible default instead of a setting?
 - Is this visible enough without being intrusive?
 - What happens when this fails? Is the error helpful?
@@ -31,7 +32,7 @@ Inspired by Don Norman (human-centered design) and Dieter Rams (less but better)
 
 ```typescript
 // src/store/ExampleStore.ts
-import {makeAutoObservable, runInAction} from 'mobx';
+import { makeAutoObservable, runInAction } from "mobx";
 
 class ExampleStore {
   // Observable state
@@ -141,7 +142,7 @@ export const ExampleComponent: React.FC<ExampleComponentProps> = observer(
 
 ```typescript
 // src/hooks/useExample.ts
-import {useState, useCallback, useEffect} from 'react';
+import { useState, useCallback, useEffect } from "react";
 
 interface UseExampleOptions {
   initialValue?: string;
@@ -156,27 +157,32 @@ interface UseExampleReturn {
   reset: () => void;
 }
 
-export const useExample = (options: UseExampleOptions = {}): UseExampleReturn => {
-  const {initialValue = '', onSuccess} = options;
+export const useExample = (
+  options: UseExampleOptions = {},
+): UseExampleReturn => {
+  const { initialValue = "", onSuccess } = options;
 
   const [value, setValue] = useState(initialValue);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const process = useCallback(async (input: string) => {
-    setIsProcessing(true);
-    setError(null);
+  const process = useCallback(
+    async (input: string) => {
+      setIsProcessing(true);
+      setError(null);
 
-    try {
-      const result = await someAsyncOperation(input);
-      setValue(result);
-      onSuccess?.(result);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [onSuccess]);
+      try {
+        const result = await someAsyncOperation(input);
+        setValue(result);
+        onSuccess?.(result);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Unknown error");
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [onSuccess],
+  );
 
   const reset = useCallback(() => {
     setValue(initialValue);
@@ -184,7 +190,7 @@ export const useExample = (options: UseExampleOptions = {}): UseExampleReturn =>
     setIsProcessing(false);
   }, [initialValue]);
 
-  return {value, isProcessing, error, process, reset};
+  return { value, isProcessing, error, process, reset };
 };
 ```
 
@@ -197,7 +203,7 @@ PocketPal uses a **centralized mocking system**. Understanding this is critical 
 ### Key Files
 
 | File | Purpose |
-|------|---------|
+| --- | --- |
 | `jest.config.js` | Jest configuration, module name mappings |
 | `jest/setup.ts` | Global mocks applied to ALL tests |
 | `jest/setupFilesAfterEnv.ts` | Test lifecycle hooks (afterEach cleanup) |
@@ -214,12 +220,12 @@ PocketPal uses a **centralized mocking system**. Understanding this is critical 
 
 ```typescript
 // jest/setup.ts (simplified)
-import {mockUiStore} from '../__mocks__/stores/uiStore';
-import {mockModelStore} from '../__mocks__/stores/modelStore';
-import {mockChatSessionStore} from '../__mocks__/stores/chatSessionStore';
+import { mockUiStore } from "../__mocks__/stores/uiStore";
+import { mockModelStore } from "../__mocks__/stores/modelStore";
+import { mockChatSessionStore } from "../__mocks__/stores/chatSessionStore";
 // ... other mock imports
 
-jest.mock('../src/store', () => ({
+jest.mock("../src/store", () => ({
   modelStore: mockModelStore,
   uiStore: mockUiStore,
   chatSessionStore: mockChatSessionStore,
@@ -233,8 +239,8 @@ Mock stores in `__mocks__/stores/` follow this pattern:
 
 ```typescript
 // __mocks__/stores/modelStore.ts
-import {makeAutoObservable} from 'mobx';
-import {modelsList} from '../../jest/fixtures/models';
+import { makeAutoObservable } from "mobx";
+import { modelsList } from "../../jest/fixtures/models";
 
 class MockModelStore {
   // Observable state with fixture data
@@ -266,7 +272,7 @@ class MockModelStore {
 
   // Computed values
   get activeModel() {
-    return this.models.find(model => model.id === this.activeModelId);
+    return this.models.find((model) => model.id === this.activeModelId);
   }
 }
 
@@ -402,12 +408,12 @@ import {
   imageMessage,
   fileMessage,
   user,
-} from '../../../../jest/fixtures';
+} from "../../../../jest/fixtures";
 
 // Import from jest/fixtures/ subfolder (domain fixtures)
-import {modelsList} from '../../../../jest/fixtures/models';
-import {palFixtures} from '../../../../jest/fixtures/pals';
-import {themeFixtures} from '../../../../jest/fixtures/theme';
+import { modelsList } from "../../../../jest/fixtures/models";
+import { palFixtures } from "../../../../jest/fixtures/pals";
+import { themeFixtures } from "../../../../jest/fixtures/theme";
 ```
 
 ### Module Name Mapper (External Mocks)
@@ -432,16 +438,16 @@ For testing store logic directly (not through components):
 
 ```typescript
 // src/store/__tests__/ExampleStore.test.ts
-import {ExampleStore} from '../ExampleStore';
+import { ExampleStore } from "../ExampleStore";
 
 // Mock external dependencies this store uses
-jest.mock('../../api', () => ({
+jest.mock("../../api", () => ({
   getItems: jest.fn(),
 }));
 
-import {getItems} from '../../api';
+import { getItems } from "../../api";
 
-describe('ExampleStore', () => {
+describe("ExampleStore", () => {
   let store: ExampleStore;
 
   beforeEach(() => {
@@ -450,26 +456,26 @@ describe('ExampleStore', () => {
     jest.clearAllMocks();
   });
 
-  describe('initial state', () => {
-    it('should have empty items', () => {
+  describe("initial state", () => {
+    it("should have empty items", () => {
       expect(store.items).toEqual([]);
     });
 
-    it('should not be loading', () => {
+    it("should not be loading", () => {
       expect(store.isLoading).toBe(false);
     });
   });
 
-  describe('computed values', () => {
-    it('should compute item count', () => {
-      store.items = [{id: '1'}, {id: '2'}];
+  describe("computed values", () => {
+    it("should compute item count", () => {
+      store.items = [{ id: "1" }, { id: "2" }];
       expect(store.itemCount).toBe(2);
     });
   });
 
-  describe('fetchItems', () => {
-    it('should fetch and set items', async () => {
-      const mockItems = [{id: '1', name: 'Item 1'}];
+  describe("fetchItems", () => {
+    it("should fetch and set items", async () => {
+      const mockItems = [{ id: "1", name: "Item 1" }];
       (getItems as jest.Mock).mockResolvedValue(mockItems);
 
       await store.fetchItems();
@@ -478,12 +484,12 @@ describe('ExampleStore', () => {
       expect(store.isLoading).toBe(false);
     });
 
-    it('should handle errors', async () => {
-      (getItems as jest.Mock).mockRejectedValue(new Error('API Error'));
+    it("should handle errors", async () => {
+      (getItems as jest.Mock).mockRejectedValue(new Error("API Error"));
 
       await store.fetchItems();
 
-      expect(store.error).toBe('API Error');
+      expect(store.error).toBe("API Error");
       expect(store.isLoading).toBe(false);
     });
   });
@@ -498,13 +504,15 @@ describe('ExampleStore', () => {
 
 ```typescript
 // WRONG - stores are globally mocked
-jest.mock('../../store', () => ({
-  modelStore: { isLoading: false }
+jest.mock("../../store", () => ({
+  modelStore: { isLoading: false },
 }));
 
 // RIGHT - import and modify the global mock
-import {modelStore} from '../../store';
-runInAction(() => { modelStore.isLoading = true; });
+import { modelStore } from "../../store";
+runInAction(() => {
+  modelStore.isLoading = true;
+});
 ```
 
 ### 2. Missing Provider Wrappers
@@ -524,13 +532,17 @@ render(<ChatView messages={[]} />, {
 
 ```typescript
 // WRONG - mock calls accumulate across tests
-describe('MyComponent', () => {
-  it('first test', () => { /* calls mock */ });
-  it('second test', () => { /* mock has calls from first test */ });
+describe("MyComponent", () => {
+  it("first test", () => {
+    /* calls mock */
+  });
+  it("second test", () => {
+    /* mock has calls from first test */
+  });
 });
 
 // RIGHT - clear in beforeEach
-describe('MyComponent', () => {
+describe("MyComponent", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -542,11 +554,11 @@ describe('MyComponent', () => {
 
 ```typescript
 // WRONG - may not trigger MobX reactions
-modelStore.activeModelId = 'test-id';
+modelStore.activeModelId = "test-id";
 
 // RIGHT - ensures MobX reactions fire
 runInAction(() => {
-  modelStore.activeModelId = 'test-id';
+  modelStore.activeModelId = "test-id";
 });
 ```
 
@@ -556,7 +568,7 @@ runInAction(() => {
 
 ```typescript
 // src/api/example.ts
-import {API_BASE_URL} from '../config';
+import { API_BASE_URL } from "../config";
 
 interface ExampleResponse {
   data: Item[];
@@ -567,14 +579,14 @@ export const fetchExamples = async (params: {
   page: number;
   limit: number;
 }): Promise<ExampleResponse> => {
-  const {page, limit} = params;
+  const { page, limit } = params;
 
   const response = await fetch(
     `${API_BASE_URL}/examples?page=${page}&limit=${limit}`,
     {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     },
   );

@@ -1,7 +1,6 @@
 # Security Reviewer
 
-Read `docs/standards/code-review.md` first. Apply the shared severity,
-evidence, and output contract.
+Read `docs/standards/code-review.md` first. Apply the shared severity, evidence, and output contract.
 
 ## Context To Read
 
@@ -9,15 +8,11 @@ evidence, and output contract.
 - `context/architecture.md`
 - `context/pocketpal-overview.md`
 
-Use repo instructions for secrets/config and worktree constraints. Use
-architecture context to identify trust boundaries, native surfaces, model/tool
-execution paths, and data exposure paths.
+Use repo instructions for secrets/config and worktree constraints. Use architecture context to identify trust boundaries, native surfaces, model/tool execution paths, and data exposure paths.
 
 ## Worldview
 
-Review as an application security engineer. Focus on trust boundaries, input
-handling, secrets, unsafe logging, injection, data exposure, dependency risk,
-and attacker-controlled content.
+Review as an application security engineer. Focus on trust boundaries, input handling, secrets, unsafe logging, injection, data exposure, dependency risk, and attacker-controlled content.
 
 ## Inspect
 

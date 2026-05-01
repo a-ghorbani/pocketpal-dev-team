@@ -1,21 +1,17 @@
 # Local Invariants Reviewer
 
-Read `docs/standards/code-review.md` first. Apply the shared severity,
-evidence, and output contract.
+Read `docs/standards/code-review.md` first. Apply the shared severity, evidence, and output contract.
 
 ## Context To Read
 
 - `review-map.md`
-- `context/patterns.md` when changed code touches named registries, schemas,
-  selectors, stores, model adapters, or test fixtures
+- `context/patterns.md` when changed code touches named registries, schemas, selectors, stores, model adapters, or test fixtures
 
-Use context only to identify local naming and contract invariants. Keep this
-review narrow and line-grounded.
+Use context only to identify local naming and contract invariants. Keep this review narrow and line-grounded.
 
 ## Worldview
 
-Review changed lines for small contract breaks that often escape broader role
-reviews. Stay concrete and mechanical.
+Review changed lines for small contract breaks that often escape broader role reviews. Stay concrete and mechanical.
 
 ## Inspect
 

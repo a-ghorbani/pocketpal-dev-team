@@ -7,53 +7,33 @@ argument-hint: "<PR #number> [options]"
 
 # Run PR E2E (CI APK)
 
-Run Android E2E tests against the **CI-built APK** for a PocketPal AI PR,
-inside a dedicated worktree of the dev-team repo. iOS is out of scope (iOS CI
-doesn't publish a reusable simulator build — use `/run-e2e` for iOS).
+Run Android E2E tests against the **CI-built APK** for a PocketPal AI PR, inside a dedicated worktree of the dev-team repo. iOS is out of scope (iOS CI doesn't publish a reusable simulator build — use `/run-e2e` for iOS).
 
 ## Input
+
 Request: $ARGUMENTS
 
 ## Hard Rules
 
-1. **Stay inside the dev-team repo.** All work happens under the current
-   dev-team checkout (the repo containing this skill). Never use another
-   standalone pocketpal-ai clone on the machine.
-2. **Never modify `./repos/pocketpal-ai/` directly.** It's the shared read-only
-   submodule. It's only used as the source for creating worktrees and for
-   copying gitignored config (`e2e/devices.json`, `e2e/.env`, keystore, etc.).
-3. **Always use a fresh `./worktrees/PR-<N>-e2e` worktree** on `origin/<branch>`
-   — not an in-flight `PR-<N>` fix worktree. The CI APK was built from
-   `origin/<branch>`, so the specs must match that commit to avoid
-   APK-vs-specs drift.
-4. If any pre-flight fails, STOP and report. Do not fall back silently to
-   another checkout.
+1. **Stay inside the dev-team repo.** All work happens under the current dev-team checkout (the repo containing this skill). Never use another standalone pocketpal-ai clone on the machine.
+2. **Never modify `./repos/pocketpal-ai/` directly.** It's the shared read-only submodule. It's only used as the source for creating worktrees and for copying gitignored config (`e2e/devices.json`, `e2e/.env`, keystore, etc.).
+3. **Always use a fresh `./worktrees/PR-<N>-e2e` worktree** on `origin/<branch>` — not an in-flight `PR-<N>` fix worktree. The CI APK was built from `origin/<branch>`, so the specs must match that commit to avoid APK-vs-specs drift.
+4. If any pre-flight fails, STOP and report. Do not fall back silently to another checkout.
 
 ## Parse Input
 
 From the user's request extract:
 
 1. **PR number** (required): `#688`, `PR 688`, or `688`.
-2. **Specs** (optional): **default = every `*.spec.ts` found in the
-   worktree's `e2e/specs/**/` minus `visual-capture`, `diagnostic`, and
-   `memory-profile`** (see enumeration below). This is "all E2E except
-   visual-capture and diagnostic" — `memory-profile` is also dropped because
-   it has its own pipeline (`/memory-profile`) and needs a device-specific
-   model + baseline comparison to be meaningful.
-   - User can override with an explicit list (e.g. "just quick-smoke") or
-     add excluded specs back explicitly (e.g. "include memory-profile").
-3. **Devices** (optional): `connected` (default), `virtual-only`, `real-only`,
-   `all`, or comma-separated IDs from `devices.json`.
-4. **Skip fetch** (optional): `--no-fetch` if user wants to reuse an
-   already-installed APK.
-5. **MIUI watcher** (optional): if a connected Xiaomi device is detected AND
-   will be used, offer to run `tools/miui-install-watcher.sh` in background.
+2. **Specs** (optional): **default = every `*.spec.ts` found in the worktree's `e2e/specs/**/`minus`visual-capture`, `diagnostic`, and `memory-profile`** (see enumeration below). This is "all E2E except visual-capture and diagnostic" — `memory-profile` is also dropped because it has its own pipeline (`/memory-profile`) and needs a device-specific model + baseline comparison to be meaningful.
+   - User can override with an explicit list (e.g. "just quick-smoke") or add excluded specs back explicitly (e.g. "include memory-profile").
+3. **Devices** (optional): `connected` (default), `virtual-only`, `real-only`, `all`, or comma-separated IDs from `devices.json`.
+4. **Skip fetch** (optional): `--no-fetch` if user wants to reuse an already-installed APK.
+5. **MIUI watcher** (optional): if a connected Xiaomi device is detected AND will be used, offer to run `tools/miui-install-watcher.sh` in background.
 
 ## Step 1 — Pre-flight
 
-Run all commands from the dev-team repo root (the directory containing
-`./repos/pocketpal-ai/` and `./tools/run-pr-e2e.sh`). Use relative paths so
-this skill works on any machine.
+Run all commands from the dev-team repo root (the directory containing `./repos/pocketpal-ai/` and `./tools/run-pr-e2e.sh`). Use relative paths so this skill works on any machine.
 
 ```bash
 # Confirm we're in the dev-team root — look for its fingerprints.
@@ -94,12 +74,10 @@ jq -r '.devices[] | select(.platform=="android" and .enabled) | "\(.id)\t\(.udid
   ./repos/pocketpal-ai/e2e/devices.json
 ```
 
-If a connected serial has no matching `udid` in `devices.json`, tell the user
-and ask whether to:
-  - proceed with only the matching devices, or
-  - stop so they can add the new device to `repos/pocketpal-ai/e2e/devices.json`
-    (they must edit it themselves — the submodule is guarded against
-    Edit/Write from agents).
+If a connected serial has no matching `udid` in `devices.json`, tell the user and ask whether to:
+
+- proceed with only the matching devices, or
+- stop so they can add the new device to `repos/pocketpal-ai/e2e/devices.json` (they must edit it themselves — the submodule is guarded against Edit/Write from agents).
 
 ## Step 2 — Resolve PR branch
 
@@ -112,9 +90,7 @@ echo "PR #$PR → branch: $PR_BRANCH"
 
 ## Step 3 — Create/reuse the E2E worktree
 
-Always use a dedicated `PR-<N>-e2e` worktree to avoid colliding with any
-in-flight `PR-<N>` fix worktree, and always check out `origin/<branch>` (the
-exact commit CI built).
+Always use a dedicated `PR-<N>-e2e` worktree to avoid colliding with any in-flight `PR-<N>` fix worktree, and always check out `origin/<branch>` (the exact commit CI built).
 
 ```bash
 WORKTREE="./worktrees/PR-${PR}-e2e"
@@ -134,10 +110,7 @@ else
 fi
 ```
 
-**Important:** `./tools/create-worktree.sh` already syncs the allowlisted
-`.env`, `e2e/.env`, `e2e/devices.json`, keystores, and related config from
-`repos/pocketpal-ai/` into the new worktree. If you reuse an existing
-worktree, refresh that allowlisted sync explicitly:
+**Important:** `./tools/create-worktree.sh` already syncs the allowlisted `.env`, `e2e/.env`, `e2e/devices.json`, keystores, and related config from `repos/pocketpal-ai/` into the new worktree. If you reuse an existing worktree, refresh that allowlisted sync explicitly:
 
 ```bash
 ./tools/sync-worktree-config.sh "$WORKTREE"
@@ -160,8 +133,7 @@ test -d e2e/node_modules || (cd e2e && yarn install)
 cd -
 ```
 
-(The hook `block-commit-to-main.sh` is fine here — we're on a detached HEAD,
-not main.)
+(The hook `block-commit-to-main.sh` is fine here — we're on a detached HEAD, not main.)
 
 ## Step 5 — (Optional) MIUI watcher
 
@@ -175,8 +147,7 @@ trap 'kill $WATCHER_PID 2>/dev/null || true' EXIT
 
 ## Step 6 — Enumerate specs and run
 
-Compute the default spec list dynamically from the worktree (so newly-added
-specs on the PR are picked up automatically):
+Compute the default spec list dynamically from the worktree (so newly-added specs on the PR are picked up automatically):
 
 ```bash
 EXCLUDE='^(visual-capture|diagnostic|memory-profile)$'
@@ -190,9 +161,7 @@ SPECS=$(
 echo "Running specs: $SPECS"
 ```
 
-The runner's `resolveSpecPath()` accepts bare basenames and checks both
-`e2e/specs/<name>.spec.ts` and `e2e/specs/features/<name>.spec.ts`, so the
-list doesn't need to encode directory structure.
+The runner's `resolveSpecPath()` accepts bare basenames and checks both `e2e/specs/<name>.spec.ts` and `e2e/specs/features/<name>.spec.ts`, so the list doesn't need to encode directory structure.
 
 Then invoke:
 
@@ -204,17 +173,13 @@ POCKETPAL_REPO="$(realpath "$WORKTREE")" \
   --devices connected
 ```
 
-If the user passed an explicit spec list or override, use that instead of the
-enumerated default.
+If the user passed an explicit spec list or override, use that instead of the enumerated default.
 
 What the script does:
-1. `fetch-pr-apk.sh` — locates the newest completed `ci.yml` run for the PR,
-   downloads `android-release-apk`, drops it at
-   `$WORKTREE/android/app/build/outputs/apk/release/app-release.apk`.
-2. For each spec in `--specs`, runs
-   `yarn e2e:android --skip-build --spec <name> <pass-through>`.
-3. Continues through spec failures so you get full coverage; exits non-zero
-   if any spec failed.
+
+1. `fetch-pr-apk.sh` — locates the newest completed `ci.yml` run for the PR, downloads `android-release-apk`, drops it at `$WORKTREE/android/app/build/outputs/apk/release/app-release.apk`.
+2. For each spec in `--specs`, runs `yarn e2e:android --skip-build --spec <name> <pass-through>`.
+3. Continues through spec failures so you get full coverage; exits non-zero if any spec failed.
 
 ## Step 7 — Report
 
@@ -225,13 +190,11 @@ ls -td "$WORKTREE/e2e/reports"/*/ | head -1
 cat "<latest>/summary.json"  # if present
 ```
 
-Summarize per-spec × per-device: pass/fail, duration, links to JUnit XML or
-screenshots for failures.
+Summarize per-spec × per-device: pass/fail, duration, links to JUnit XML or screenshots for failures.
 
 ## Step 8 — Cleanup (don't by default)
 
-Leave the worktree in place after the run so the user can inspect reports,
-screenshots, and app logs. Only remove it if the user explicitly asks:
+Leave the worktree in place after the run so the user can inspect reports, screenshots, and app logs. Only remove it if the user explicitly asks:
 
 ```bash
 ./tools/remove-worktree.sh "PR-${PR}-e2e" --yes
@@ -240,7 +203,7 @@ screenshots, and app logs. Only remove it if the user explicitly asks:
 ## Error Handling
 
 | Symptom | Fix |
-|--------|-----|
+| --- | --- |
 | "no completed CI runs found for PR #N" | PR's CI still running/failed. `gh run watch` or pick another run. |
 | "artifact 'android-release-apk' not found" | Android build job failed in that run. `gh run view <id>`. |
 | `devices.json` not copied | Run `./tools/sync-worktree-config.sh "$WORKTREE"` and re-check. |
@@ -279,11 +242,7 @@ POCKETPAL_REPO="$(realpath "$WORKTREE")" \
 
 ## Notes
 
-- `visual-capture` is screenshot generation driven by the story file — not a
-  regression test. See `docs/workflows/visual-capture.md`.
+- `visual-capture` is screenshot generation driven by the story file — not a regression test. See `docs/workflows/visual-capture.md`.
 - `diagnostic` is for device-state inspection, not regressions.
 - `memory-profile` has its own pipeline (`/memory-profile`).
-- `devices.json` is machine-specific and gitignored inside pocketpal-ai. It
-  lives in `repos/pocketpal-ai/e2e/devices.json` on this machine as the
-  source of truth, and the post-worktree hook copies it into every new
-  worktree.
+- `devices.json` is machine-specific and gitignored inside pocketpal-ai. It lives in `repos/pocketpal-ai/e2e/devices.json` on this machine as the source of truth, and the post-worktree hook copies it into every new worktree.

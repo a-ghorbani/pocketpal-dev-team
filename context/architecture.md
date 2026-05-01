@@ -6,16 +6,16 @@ Reference document for architectural decisions and standards in PocketPal AI.
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Framework | React Native |
-| State Management | MobX |
-| UI Components | React Native Paper |
-| Navigation | React Navigation (Drawer + Stack) |
-| Database | WatermelonDB |
-| LLM Runtime | llama.rn (llama.cpp bindings) |
-| Testing | Jest + React Native Testing Library |
-| Build | Metro, Gradle (Android), Xcode (iOS) |
+| Layer            | Technology                           |
+| ---------------- | ------------------------------------ |
+| Framework        | React Native                         |
+| State Management | MobX                                 |
+| UI Components    | React Native Paper                   |
+| Navigation       | React Navigation (Drawer + Stack)    |
+| Database         | WatermelonDB                         |
+| LLM Runtime      | llama.rn (llama.cpp bindings)        |
+| Testing          | Jest + React Native Testing Library  |
+| Build            | Metro, Gradle (Android), Xcode (iOS) |
 
 ---
 
@@ -64,7 +64,7 @@ TTSStore          - Text-to-speech engines and runtime
 ### Store Responsibilities
 
 | Store | Responsibility |
-|-------|----------------|
+| --- | --- |
 | `ModelStore` | Model lifecycle, loading, inference context |
 | `ChatSessionStore` | Chat sessions, message history, active conversation |
 | `UIStore` | UI state, language, theme, user preferences |
@@ -119,11 +119,11 @@ export const exampleStore = new ExampleStore();
 
 ### Component Types
 
-| Type | Location | Purpose |
-|------|----------|---------|
-| Screen | `src/screens/` | Full-screen views, navigation targets |
-| Component | `src/components/` | Reusable UI building blocks |
-| Sheet | `src/components/*Sheet/` | Bottom sheet modals |
+| Type      | Location                 | Purpose                               |
+|------     |--------------------------|---------------------------------------|
+| Screen    | `src/screens/`           | Full-screen views, navigation targets |
+| Component | `src/components/`        | Reusable UI building blocks           |
+| Sheet     | `src/components/*Sheet/` | Bottom sheet modals                   |
 
 ### Component Structure
 
@@ -162,9 +162,7 @@ export const MyComponent: React.FC<Props> = observer(({prop1, prop2}) => {
 
 ### Structure
 
-L10n lives in `src/locales/` as per-language JSON files plus a TypeScript loader.
-Translations for non-English languages are lazy-loaded on first access via getters
-(Metro bundles them at build time, but `require()` doesn't run until the property is read).
+L10n lives in `src/locales/` as per-language JSON files plus a TypeScript loader. Translations for non-English languages are lazy-loaded on first access via getters (Metro bundles them at build time, but `require()` doesn't run until the property is read).
 
 ```
 src/locales/
@@ -183,9 +181,7 @@ src/locales/
 └── zh_Hant.json
 ```
 
-`languageRegistry` in `src/locales/index.ts` is the single source of truth for
-keys, display names, and the `supportedLanguages` array. Non-English files fall
-back to English via `_.merge({}, enData, langData)` (overlay semantics).
+`languageRegistry` in `src/locales/index.ts` is the single source of truth for keys, display names, and the `supportedLanguages` array. Non-English files fall back to English via `_.merge({}, enData, langData)` (overlay semantics).
 
 ### Supported Languages
 
@@ -213,16 +209,15 @@ back to English via `_.merge({}, enData, langData)` (overlay semantics).
 
 ```typescript
 // Usage in component
-import {l10n, t} from '../../locales';
-import {uiStore} from '../../store';
+import { l10n, t } from "../../locales";
+import { uiStore } from "../../store";
 
 const cancel = l10n[uiStore.language].common.cancel;
 
 // With placeholder
-const progressText = t(
-  l10n[uiStore.language].models.downloadProgress,
-  {progress: '45%'},
-);
+const progressText = t(l10n[uiStore.language].models.downloadProgress, {
+  progress: "45%",
+});
 ```
 
 ---
@@ -245,13 +240,13 @@ DrawerNavigator (Root)
 ### Navigation Patterns
 
 ```typescript
-import {useNavigation} from '@react-navigation/native';
-import {DrawerNavigationProp} from '@react-navigation/drawer';
+import { useNavigation } from "@react-navigation/native";
+import { DrawerNavigationProp } from "@react-navigation/drawer";
 
 type NavigationProp = DrawerNavigationProp<RootDrawerParamList>;
 
 const navigation = useNavigation<NavigationProp>();
-navigation.navigate('ScreenName', {param: 'value'});
+navigation.navigate("ScreenName", { param: "value" });
 ```
 
 ---
@@ -266,17 +261,17 @@ Download → Load → Initialize Context → Inference → Release
 
 ### Key Concepts
 
-| Concept | Description |
-|---------|-------------|
-| Context | llama.cpp inference context, holds model state |
-| Completion | Text generation from prompt |
-| Tokenization | Converting text to/from tokens |
-| GPU Layers | Number of layers offloaded to GPU |
+| Concept      | Description                                    |
+| ------------ | ---------------------------------------------- |
+| Context      | llama.cpp inference context, holds model state |
+| Completion   | Text generation from prompt                    |
+| Tokenization | Converting text to/from tokens                 |
+| GPU Layers   | Number of layers offloaded to GPU              |
 
 ### Native Module Access
 
 ```typescript
-import {initLlama, LlamaContext} from 'llama.rn';
+import { initLlama, LlamaContext } from "llama.rn";
 
 // Initialize context
 const context = await initLlama({
@@ -287,7 +282,7 @@ const context = await initLlama({
 
 // Run completion
 const result = await context.completion({
-  prompt: 'Hello',
+  prompt: "Hello",
   n_predict: 100,
 });
 
@@ -297,11 +292,11 @@ await context.release();
 
 ### Platform Considerations
 
-| Platform | GPU Acceleration | Notes |
-|----------|------------------|-------|
-| iOS | Metal | Requires iOS 18+ for full Metal |
-| Android | OpenCL (Adreno) | Experimental, Adreno GPUs only |
-| Android | Hexagon NPU | Qualcomm devices only |
+| Platform | GPU Acceleration | Notes                           |
+| -------- | ---------------- | ------------------------------- |
+| iOS      | Metal            | Requires iOS 18+ for full Metal |
+| Android  | OpenCL (Adreno)  | Experimental, Adreno GPUs only  |
+| Android  | Hexagon NPU      | Qualcomm devices only           |
 
 ---
 
@@ -355,7 +350,7 @@ class Store {
       // ...
     } catch (e) {
       runInAction(() => {
-        this.error = e instanceof Error ? e.message : 'Unknown error';
+        this.error = e instanceof Error ? e.message : "Unknown error";
       });
     }
   }
@@ -426,26 +421,26 @@ class Store {
 
 ### Naming
 
-| Type | Convention | Example |
-|------|------------|---------|
-| Components | PascalCase | `ChatInput.tsx` |
-| Hooks | camelCase + use | `useMemoryCheck.ts` |
-| Stores | PascalCase + Store | `ModelStore.ts` |
-| Utils | camelCase | `formatters.ts` |
-| Constants | SCREAMING_SNAKE | `MAX_CONTEXT_SIZE` |
+| Type       | Convention         | Example             |
+| ---------- | ------------------ | ------------------- |
+| Components | PascalCase         | `ChatInput.tsx`     |
+| Hooks      | camelCase + use    | `useMemoryCheck.ts` |
+| Stores     | PascalCase + Store | `ModelStore.ts`     |
+| Utils      | camelCase          | `formatters.ts`     |
+| Constants  | SCREAMING_SNAKE    | `MAX_CONTEXT_SIZE`  |
 
 ### Imports
 
 ```typescript
 // Order: external → internal → relative
-import React from 'react';
-import {View} from 'react-native';
-import {observer} from 'mobx-react';
+import React from "react";
+import { View } from "react-native";
+import { observer } from "mobx-react";
 
-import {useTheme} from '../../hooks';
-import {modelStore} from '../../store';
+import { useTheme } from "../../hooks";
+import { modelStore } from "../../store";
 
-import {ChildComponent} from './ChildComponent';
+import { ChildComponent } from "./ChildComponent";
 ```
 
 ---
@@ -465,6 +460,7 @@ import {ChildComponent} from './ChildComponent';
 **Types**: `feat`, `fix`, `docs`, `chore` (only these 4)
 
 **Example**:
+
 ```
 feat(chat): add voice input button
 fix(model): prevent crash on context release

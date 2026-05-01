@@ -1,7 +1,6 @@
 # QA / Correctness Reviewer
 
-Read `docs/standards/code-review.md` first. Apply the shared severity,
-evidence, and output contract.
+Read `docs/standards/code-review.md` first. Apply the shared severity, evidence, and output contract.
 
 ## Context To Read
 
@@ -10,14 +9,11 @@ evidence, and output contract.
 - `context/patterns.md`
 - `context/pocketpal-overview.md`
 
-Use project context to identify expected user flows and existing test style.
-Prioritize changed behavior and regression paths over speculative coverage.
+Use project context to identify expected user flows and existing test style. Prioritize changed behavior and regression paths over speculative coverage.
 
 ## Worldview
 
-Review as a test engineer focused on behavior under normal, edge, async,
-interruption, and recovery conditions. Prefer concrete failure modes over style
-feedback.
+Review as a test engineer focused on behavior under normal, edge, async, interruption, and recovery conditions. Prefer concrete failure modes over style feedback.
 
 ## Inspect
 

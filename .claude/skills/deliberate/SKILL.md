@@ -10,11 +10,13 @@ argument-hint: "[topic or question to deliberate]"
 You are orchestrating a structured technical debate between two agents for PocketPal AI development.
 
 ## Input
+
 Topic: $ARGUMENTS
 
 ## The Deliberation Process
 
 This is a **multi-agent debate**. You will orchestrate back-and-forth between:
+
 - **pocketpal-proposer**: Proposes and defends solutions
 - **pocketpal-challenger**: Challenges proposals to find weaknesses
 
@@ -155,10 +157,12 @@ INSTRUCTION: Evaluate if challenges were adequately addressed. Accept, request r
 **If challenger says ACCEPT**: Deliberation complete. Proceed to synthesis.
 
 **If challenger says NEEDS REVISION**:
+
 - Run one more round (Steps 4-5)
 - Maximum 3 total rounds to prevent infinite loops
 
 **If challenger says MAJOR CONCERNS**:
+
 - Escalate to human for decision
 - Present both perspectives
 
@@ -170,6 +174,7 @@ After convergence (or max rounds), output the final summary:
 # Deliberation Complete: [Topic]
 
 ## Rounds: [N]
+
 ## Status: CONVERGED / MAX ROUNDS / ESCALATED
 
 ---
@@ -179,14 +184,17 @@ After convergence (or max rounds), output the final summary:
 [The final agreed-upon approach, or if not converged, the proposer's last position]
 
 ### Key Trade-offs Accepted
+
 - [Trade-off 1]
 - [Trade-off 2]
 
 ### Challenges That Shaped the Solution
+
 1. [Challenge] → Led to [change]
 2. [Challenge] → Addressed by [approach]
 
 ### Remaining Concerns
+
 [Any unresolved issues, if applicable]
 
 ### Confidence: HIGH / MEDIUM / LOW
@@ -194,6 +202,7 @@ After convergence (or max rounds), output the final summary:
 ---
 
 ## Next Steps
+
 1. [Concrete action]
 2. [Another action]
 
@@ -237,6 +246,7 @@ After convergence (or max rounds), output the final summary:
 ### When Triggered by Planner
 
 After deliberation completes, inform the planner:
+
 ```
 Deliberation complete.
 Recommendation: [summary]
@@ -248,6 +258,7 @@ The planner should incorporate this into the story file.
 ### When Triggered by Implementer
 
 After deliberation completes, inform the implementer:
+
 ```
 Deliberation complete.
 Recommendation: [summary]
@@ -260,6 +271,7 @@ Update the story file with this deliberation outcome.
 ### When Triggered Manually
 
 Output the full deliberation record. Offer:
+
 - Save to decision log?
 - Any follow-up actions?
 
@@ -299,12 +311,14 @@ You (orchestrator):
 ## When NOT to Deliberate
 
 If the topic is trivial, output:
+
 ```
 This doesn't require deliberation: [reason]
 Direct answer: [solution]
 ```
 
 Examples of trivial topics:
+
 - Typo fixes
 - Single obvious approach
 - Already established patterns

@@ -126,9 +126,7 @@ handleSendPress()
 Completion runs with enable_thinking=false  ← CORRECT for model
 ```
 
-**But the session.completionSettings in DB still has the GLOBAL values
-(enable_thinking: true, temperature: 0.7) — this matters later!**
-
+**But the session.completionSettings in DB still has the GLOBAL values (enable_thinking: true, temperature: 0.7) — this matters later!**
 
 ## Thinking Toggle Display vs Reality
 

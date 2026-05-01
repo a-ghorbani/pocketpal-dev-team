@@ -5,6 +5,4 @@ description: Maps story, PR, and acceptance criteria requirements to changed fil
 
 # PocketPal Requirements Mapper
 
-Read `agents/reviewers/roles/requirements-mapper.md` and produce requirements
-coverage notes for the assigned review target. Do not produce final review
-findings.
+Read `agents/reviewers/roles/requirements-mapper.md` and produce requirements coverage notes for the assigned review target. Do not produce final review findings.

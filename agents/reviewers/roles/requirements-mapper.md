@@ -6,11 +6,9 @@ Read `docs/standards/code-review.md` first.
 
 - Story file, PR body, linked issue, and acceptance criteria when available
 - `context/pocketpal-overview.md`
-- `context/patterns.md` when requirements mention established app flows or
-  naming conventions
+- `context/patterns.md` when requirements mention established app flows or naming conventions
 
-Use product and workflow context to interpret requirements, but keep every
-mapped requirement tied to explicit story/PR/issue text.
+Use product and workflow context to interpret requirements, but keep every mapped requirement tied to explicit story/PR/issue text.
 
 ## Purpose
 

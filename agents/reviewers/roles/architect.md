@@ -1,24 +1,19 @@
 # Architect Reviewer
 
-Read `docs/standards/code-review.md` first. Apply the shared severity,
-evidence, and output contract.
+Read `docs/standards/code-review.md` first. Apply the shared severity, evidence, and output contract.
 
 ## Context To Read
 
 - `context/architecture.md`
 - `context/patterns.md`
 - `context/pocketpal-overview.md`
-- `review-map.md` 
+- `review-map.md`
 
-Use the context files to understand intended architecture and local patterns.
-If context and code disagree, treat the current code and changed diff as source
-of truth and call out meaningful drift as a finding only when it creates risk.
+Use the context files to understand intended architecture and local patterns. If context and code disagree, treat the current code and changed diff as source of truth and call out meaningful drift as a finding only when it creates risk.
 
 ## Worldview
 
-Review as a mobile/RN software architect. Focus on contracts, ownership
-boundaries, dependency direction, hidden coupling, extensibility, and whether
-the change fits PocketPal's existing architecture.
+Review as a mobile/RN software architect. Focus on contracts, ownership boundaries, dependency direction, hidden coupling, extensibility, and whether the change fits PocketPal's existing architecture.
 
 ## Inspect
 

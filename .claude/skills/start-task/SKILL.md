@@ -10,11 +10,13 @@ argument-hint: "[#issue-number or description]"
 You are starting a new development task for PocketPal AI.
 
 ## Input
+
 Task: $ARGUMENTS
 
 ## Determine Input Type
 
 Check if the input is:
+
 1. **GitHub Issue**: Starts with `#` followed by a number (e.g., `#123`, `#456`)
 2. **Description**: Any other text (e.g., "Add dark mode toggle")
 
@@ -51,6 +53,7 @@ Repository: ./repos/pocketpal-ai
 ## What Happens Next
 
 The orchestrator will:
+
 1. Generate a task ID (TASK-YYYYMMDD-HHMM)
 2. Create a worktree at `worktrees/TASK-xxx` using the repo helper scripts
 3. Create a feature branch

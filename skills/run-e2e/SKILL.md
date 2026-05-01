@@ -10,6 +10,7 @@ argument-hint: "[PR #number | branch-name | main] [options]"
 You are running E2E tests for PocketPal AI on the local test machine.
 
 ## Input
+
 Request: $ARGUMENTS
 
 ## Parse Input
@@ -53,17 +54,20 @@ The E2E tests can run from two locations depending on context:
 If there is an active worktree for the current task (e.g., `worktrees/TASK-xxx`), AND the requested source matches the worktree's branch, run tests directly from the worktree. This avoids touching the shared `repos/pocketpal-ai` submodule.
 
 **How to detect**: Check if a worktree exists for the current task:
+
 ```bash
 # Look for active worktrees
 ls ./worktrees/TASK-*/package.json 2>/dev/null
 ```
 
 **When to use the worktree**:
+
 - The user invokes `/run-e2e` without specifying a source (implicit: test current work)
 - The user specifies a branch that matches the worktree's branch (e.g., `feature/TASK-xxx`)
 - The user is in the middle of a task workflow (orchestrator → planner → implementer → **E2E**)
 
 If using the worktree:
+
 ```bash
 TEST_DIR=./worktrees/TASK-xxx
 cd "${TEST_DIR}"
@@ -75,8 +79,8 @@ Skip to Step 3 (no checkout needed — the code is already there).
 
 ### Option B: Dedicated E2E Worktree (for independent/standalone runs)
 
-Create a dedicated E2E worktree when testing code that is not already in an
-active task worktree:
+Create a dedicated E2E worktree when testing code that is not already in an active task worktree:
+
 - `main` branch
 - A PR number
 - A branch with no corresponding worktree
@@ -84,6 +88,7 @@ active task worktree:
 Never checkout, build, or test directly inside `repos/pocketpal-ai/`.
 
 **For a PR:**
+
 ```bash
 PR=[number]
 cd ./repos/pocketpal-ai
@@ -95,6 +100,7 @@ TEST_DIR="./worktrees/PR-${PR}-e2e"
 ```
 
 **For a branch:**
+
 ```bash
 BRANCH=[branch-name]
 SAFE_NAME=$(printf '%s' "$BRANCH" | tr '/ ' '--')
@@ -106,6 +112,7 @@ TEST_DIR="./worktrees/E2E-${SAFE_NAME}"
 ```
 
 If a matching worktree already exists, reuse it:
+
 ```bash
 WORKTREE=$(git -C ./repos/pocketpal-ai worktree list | grep "[branch-name]" | awk '{print $1}')
 TEST_DIR="${WORKTREE}"
@@ -113,12 +120,14 @@ cd "${TEST_DIR}"
 ```
 
 **For main:**
+
 ```bash
 ./tools/create-worktree.sh E2E-main --detach --ref origin/main
 TEST_DIR="./worktrees/E2E-main"
 ```
 
 After creating or selecting the worktree, sync allowlisted config and confirm:
+
 ```bash
 ./tools/sync-worktree-config.sh "${TEST_DIR}"
 cd "${TEST_DIR}"
@@ -155,7 +164,7 @@ npx ts-node scripts/run-e2e.ts \
 ### Available Flags
 
 | Flag | Values | Default | Description |
-|------|--------|---------|-------------|
+| --- | --- | --- | --- |
 | `--platform` | `ios`, `android`, `both` | _(required)_ | Which platform(s) to test |
 | `--spec` | `quick-smoke`, `load-stress`, `diagnostic`, `language`, `all` | `quick-smoke` | Which test spec to run |
 | `--models` | comma-separated model IDs | _(all)_ | Specific model(s) to test |
@@ -170,6 +179,7 @@ npx ts-node scripts/run-e2e.ts \
 | `--list-models` | _(flag)_ | off | List all available models and exit |
 
 **IMPORTANT**: The runner will:
+
 - Build the app (unless `--skip-build`)
 - Run tests on each matched device/model combination
 - Generate reports in a timestamped directory under `e2e/reports/`
@@ -186,6 +196,7 @@ ls -td "${TEST_DIR}/e2e/reports"/*/ | head -1
 ```
 
 Read the `summary.json` from that directory and present:
+
 - Overall pass/fail status
 - Per-device/model results (device name, platform, pass/fail, duration)
 - Total duration

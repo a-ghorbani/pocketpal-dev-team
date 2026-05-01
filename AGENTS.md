@@ -1,27 +1,17 @@
 # Agent Instructions
 
-This repo is the workflow control plane for PocketPal AI. The target app code
-is in `repos/pocketpal-ai`, but that submodule is read-only.
+This repo is the workflow control plane for PocketPal AI. The target app code is in `repos/pocketpal-ai`, but that submodule is read-only.
 
 ## Non-Negotiables
 
-- Never edit, build, commit, or switch branches inside `repos/pocketpal-ai/`.
-  Use it only as the source repo for creating worktrees and reading source.
+- Never edit, build, commit, or switch branches inside `repos/pocketpal-ai/`. Use it only as the source repo for creating worktrees and reading source.
 - All task work happens in `worktrees/<TASK-or-PR>/` on a non-`main` branch.
-- Never create a worktree from the dev-team repo itself. Worktrees must come
-  from `repos/pocketpal-ai`.
-- Never remove or prune worktrees with raw `git worktree remove`,
-  `git worktree prune`, `rm -r`, or `rmdir`. Use
-  `./tools/remove-worktree.sh <name> --yes` only when the user explicitly asked
-  for cleanup.
-- Never bulk-copy secrets or config into a worktree. Only use the allowlisted
-  sync in `./tools/sync-worktree-config.sh` or `./tools/create-worktree.sh`.
+- Never create a worktree from the dev-team repo itself. Worktrees must come from `repos/pocketpal-ai`.
+- Never remove or prune worktrees with raw `git worktree remove`, `git worktree prune`, `rm -r`, or `rmdir`. Use `./tools/remove-worktree.sh <name> --yes` only when the user explicitly asked for cleanup.
+- Never bulk-copy secrets or config into a worktree. Only use the allowlisted sync in `./tools/sync-worktree-config.sh` or `./tools/create-worktree.sh`.
 - Never implement without a story file in `workflows/stories/`.
-- Keep the pipeline intact: orchestrate -> plan -> critique -> implement -> test
-  -> review -> draft PR.
-- If a task changes native dependencies or native code, treat it as
-  `NATIVE_CHANGES=YES`: `pod install`, iOS build, and Android build are
-  required before calling it ready.
+- Keep the pipeline intact: orchestrate -> plan -> critique -> implement -> test -> review -> draft PR.
+- If a task changes native dependencies or native code, treat it as `NATIVE_CHANGES=YES`: `pod install`, iOS build, and Android build are required before calling it ready.
 
 ## Workflow
 
@@ -78,11 +68,10 @@ HUMAN REVIEW & MERGE
 
 ### Worktree Isolation
 
-Every implementation, test, or PR review of PocketPal app code must happen in a
-dedicated worktree under `worktrees/`. The `repos/pocketpal-ai/` submodule is
-only the source used to create worktrees and read source code.
+Every implementation, test, or PR review of PocketPal app code must happen in a dedicated worktree under `worktrees/`. The `repos/pocketpal-ai/` submodule is only the source used to create worktrees and read source code.
 
 Agents must stop and report instead of proceeding when:
+
 - `pwd` is inside `repos/pocketpal-ai/`
 - the current branch is `main` or `master`
 - expected `WORKTREE`, `BRANCH`, or story context is missing for pipeline work
@@ -93,43 +82,36 @@ Agents must stop and report instead of proceeding when:
 `repos/pocketpal-ai/` is read-only with no exceptions.
 
 Agents must never:
+
 - edit files in `repos/pocketpal-ai/`
 - switch branches, commit, merge, rebase, or stash inside `repos/pocketpal-ai/`
 - run builds, tests, E2E specs, or package installs from the submodule
 - reference submodule build artifacts in environment variables or reports
 - upload or commit submodule files as generated assets
 
-If a task needs a build, test run, screenshot, or report, create or reuse a
-worktree and produce the artifact there.
+If a task needs a build, test run, screenshot, or report, create or reuse a worktree and produce the artifact there.
 
 ### Story Gate
 
-Implementation work requires a story file in `workflows/stories/`. Do not
-implement directly from ad hoc plans.
+Implementation work requires a story file in `workflows/stories/`. Do not implement directly from ad hoc plans.
 
 ### Native Verification
 
-When a story or diff touches native dependencies or native code, mark it
-`NATIVE_CHANGES=YES`. Before calling the work ready, run:
+When a story or diff touches native dependencies or native code, mark it `NATIVE_CHANGES=YES`. Before calling the work ready, run:
+
 - `pod install`
 - an iOS build
 - an Android build
 
-Missing native verification is a blocking review issue unless the user
-explicitly changes the requirement.
+Missing native verification is a blocking review issue unless the user explicitly changes the requirement.
 
 ### Secrets And Config
 
-Do not read, copy, or bulk-sync `.env` files or private config by hand. Use only
-the allowlisted sync behavior in `./tools/create-worktree.sh` or
-`./tools/sync-worktree-config.sh`.
+Do not read, copy, or bulk-sync `.env` files or private config by hand. Use only the allowlisted sync behavior in `./tools/create-worktree.sh` or `./tools/sync-worktree-config.sh`.
 
 ### Cleanup
 
-Never remove worktrees with raw `git worktree remove`, `git worktree prune`,
-`rm -r`, `rm -rf`, `rmdir`, or Finder/manual deletion. Use
-`./tools/remove-worktree.sh <name> --yes` only when the user explicitly asks for
-cleanup.
+Never remove worktrees with raw `git worktree remove`, `git worktree prune`, `rm -r`, `rm -rf`, `rmdir`, or Finder/manual deletion. Use `./tools/remove-worktree.sh <name> --yes` only when the user explicitly asks for cleanup.
 
 ## Request Handling
 
@@ -149,8 +131,7 @@ cleanup.
 
 ## GitHub Conventions
 
-**Signature** - include at the end of all GitHub content such as PRs, issues,
-and comments:
+**Signature** - include at the end of all GitHub content such as PRs, issues, and comments:
 
 ```text
 Generated by [PocketPal Dev Team](https://github.com/a-ghorbani/pocketpal-dev-team)
@@ -160,11 +141,11 @@ Generated by [PocketPal Dev Team](https://github.com/a-ghorbani/pocketpal-dev-te
 
 **Title formats:**
 
-| Type | Format | Label |
-|------|--------|-------|
-| Bug | `[Bug]: <description>` | `bug` |
-| Feature | `[Feat]: <description>` | `enhancement` |
-| PR | Short description under 70 chars | - |
+| Type    | Format                           | Label         |
+| ------- | -------------------------------- | ------------- |
+| Bug     | `[Bug]: <description>`           | `bug`         |
+| Feature | `[Feat]: <description>`          | `enhancement` |
+| PR      | Short description under 70 chars | -             |
 
 ## Commands
 
@@ -175,6 +156,7 @@ Generated by [PocketPal Dev Team](https://github.com/a-ghorbani/pocketpal-dev-te
 ```
 
 Defaults:
+
 - worktree: `worktrees/TASK-...`
 - branch: `feature/TASK-...`
 - base ref: `origin/main`
@@ -189,8 +171,7 @@ Defaults:
 ./tools/create-worktree.sh PR-490-e2e --detach --ref origin/my-pr-branch
 ```
 
-The custom examples assume the requested ref already exists locally or on
-`origin`. For PR reviews, fetch the PR branch first, then create the worktree.
+The custom examples assume the requested ref already exists locally or on `origin`. For PR reviews, fetch the PR branch first, then create the worktree.
 
 ### Sync allowlisted config into an existing worktree
 
@@ -208,7 +189,7 @@ The custom examples assume the requested ref already exists locally or on
 ## Naming Conventions
 
 | Type | Worktree | Branch | Story File |
-|------|----------|--------|------------|
+| --- | --- | --- | --- |
 | New task | `worktrees/TASK-YYYYMMDD-HHMM` | `feature/TASK-YYYYMMDD-HHMM` | `TASK-YYYYMMDD-HHMM.md` |
 | PR fix | `worktrees/PR-<number>` | `pr-<number>` | `PR-<number>-fix.md` |
 | PR E2E | `worktrees/PR-<number>-e2e` | detached | n/a |

@@ -5,5 +5,4 @@ description: Builds review-map structure by grouping changed files into coherent
 
 # PocketPal Review Map Architect
 
-Read `agents/reviewers/roles/map-architect.md` and produce map sections for the
-assigned review target. Do not produce final review findings.
+Read `agents/reviewers/roles/map-architect.md` and produce map sections for the assigned review target. Do not produce final review findings.

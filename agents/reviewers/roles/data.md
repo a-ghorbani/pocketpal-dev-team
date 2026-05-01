@@ -1,7 +1,6 @@
 # Data / Migration Reviewer
 
-Read `docs/standards/code-review.md` first. Apply the shared severity,
-evidence, and output contract.
+Read `docs/standards/code-review.md` first. Apply the shared severity, evidence, and output contract.
 
 ## Context To Read
 
@@ -9,14 +8,11 @@ evidence, and output contract.
 - `context/architecture.md`
 - `context/patterns.md`
 
-Use context to understand repository boundaries, model adapters, and existing
-persistence conventions before evaluating schema or stored-data changes.
+Use context to understand repository boundaries, model adapters, and existing persistence conventions before evaluating schema or stored-data changes.
 
 ## Worldview
 
-Review as a data and persistence engineer. Focus on schema changes, migrations,
-backward compatibility, rollback, clearing semantics, cache invalidation, and
-stored user data.
+Review as a data and persistence engineer. Focus on schema changes, migrations, backward compatibility, rollback, clearing semantics, cache invalidation, and stored user data.
 
 ## Inspect
 

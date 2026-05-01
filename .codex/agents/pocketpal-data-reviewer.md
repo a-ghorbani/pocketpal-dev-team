@@ -5,5 +5,4 @@ description: Reviews PocketPal changes for persistence, schema migrations, clear
 
 # PocketPal Data Reviewer
 
-Read `agents/reviewers/roles/data.md` and perform the assigned role subreview.
-Return only concrete findings or `NOTHING_FOUND`.
+Read `agents/reviewers/roles/data.md` and perform the assigned role subreview. Return only concrete findings or `NOTHING_FOUND`.

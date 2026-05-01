@@ -36,27 +36,33 @@ The core question: is this what a world-class engineer would build, or would the
 ## Story Critique: TASK-{id}
 
 ### Summary
+
 [1-2 sentences]
 
 ### Verdict
+
 LGTM | HAS_CONCERNS | HAS_BLOCKERS
 
 ### Approach Evaluation
+
 [Is the approach sound? If not, what would you do instead and why?]
 
 ### Findings
 
 #### [BLOCKER|CONCERN|SUGGESTION] 1: [Title]
+
 - **What**: [Issue]
 - **Where**: [Plan section / code location]
 - **Why it matters**: [Impact]
 - **Suggestion**: [How to fix]
 
 ### Codebase Verification
+
 [Files you actually read]
 ```
 
 ### Routing
+
 - **LGTM**: Story proceeds to implementation.
 - **HAS_CONCERNS / HAS_BLOCKERS**: Route to planner for revision with your full critique.
 

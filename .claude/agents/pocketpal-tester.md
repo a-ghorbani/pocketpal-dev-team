@@ -37,15 +37,16 @@ Read: ./context/patterns.md
 ## Key Testing Rules
 
 ### 1. DO NOT Mock Stores Inline
+
 ```typescript
 // WRONG - stores are globally mocked in jest/setup.ts
-jest.mock('../../store', () => ({
-  modelStore: { isLoading: false }
+jest.mock("../../store", () => ({
+  modelStore: { isLoading: false },
 }));
 
 // RIGHT - import and modify the existing mock
-import {modelStore} from '../../../store';
-import {runInAction} from 'mobx';
+import { modelStore } from "../../../store";
+import { runInAction } from "mobx";
 
 runInAction(() => {
   modelStore.isLoading = true;
@@ -53,15 +54,17 @@ runInAction(() => {
 ```
 
 ### 2. Use Custom Render from test-utils
+
 ```typescript
 // WRONG - missing providers
-import {render} from '@testing-library/react-native';
+import { render } from "@testing-library/react-native";
 
 // RIGHT - includes all necessary providers
-import {render, fireEvent, waitFor} from '../../../../jest/test-utils';
+import { render, fireEvent, waitFor } from "../../../../jest/test-utils";
 ```
 
 ### 3. Use Render Options for Providers
+
 ```typescript
 render(<MyComponent />, {
   withNavigation: true,        // NavigationContainer
@@ -71,19 +74,21 @@ render(<MyComponent />, {
 ```
 
 ### 4. Use runInAction for State Changes
+
 ```typescript
-import {runInAction} from 'mobx';
+import { runInAction } from "mobx";
 
 // Ensures MobX reactions fire properly
 runInAction(() => {
-  modelStore.activeModelId = 'test-id';
+  modelStore.activeModelId = "test-id";
 });
 ```
 
 ### 5. Use Fixtures from jest/fixtures
+
 ```typescript
-import {textMessage, imageMessage, user} from '../../../../jest/fixtures';
-import {modelsList} from '../../../../jest/fixtures/models';
+import { textMessage, imageMessage, user } from "../../../../jest/fixtures";
+import { modelsList } from "../../../../jest/fixtures/models";
 ```
 
 ## Test File Location
@@ -150,6 +155,7 @@ describe('MyComponent', () => {
 **ALL work happens in ${WORKTREE_PATH}:**
 
 ### Step 1: Study Testing Infrastructure
+
 ```bash
 cd "${WORKTREE_PATH}"
 
@@ -163,6 +169,7 @@ cat __mocks__/stores/modelStore.ts
 ```
 
 ### Step 2: Find Similar Tests
+
 ```bash
 cd "${WORKTREE_PATH}"
 
@@ -174,6 +181,7 @@ cat src/components/Similar/__tests__/Similar.test.tsx
 ```
 
 ### Step 3: Write Tests
+
 1. Create test file in `__tests__/` subfolder
 2. Import from `jest/test-utils` NOT `@testing-library/react-native`
 3. Import stores directly - they're already mocked
@@ -182,6 +190,7 @@ cat src/components/Similar/__tests__/Similar.test.tsx
 6. Follow existing test patterns EXACTLY
 
 ### Step 4: Run and Verify
+
 ```bash
 cd "${WORKTREE_PATH}"
 
@@ -198,6 +207,7 @@ yarn test
 ## Coverage Requirements
 
 PocketPal requires 60% minimum:
+
 - Statements: 60%
 - Branches: 60%
 - Functions: 60%
@@ -209,34 +219,40 @@ PocketPal requires 60% minimum:
 ## Test Report
 
 ### Environment
+
 - **Task ID**: TASK-{id}
 - **Worktree**: ./worktrees/TASK-{id}
 - **Branch**: feature/TASK-{id}
 
 ### Story
+
 TASK-{id}: [title]
 
 ### Tests Written
 
-| File | Tests | Coverage |
-|------|-------|----------|
-| `Foo.test.tsx` | 5 | 92% |
+| File           | Tests | Coverage |
+| -------------- | ----- | -------- |
+| `Foo.test.tsx` | 5     | 92%      |
 
 ### Test Results
+
 - Total: X tests
 - Passed: X
 - Failed: X
 
 ### Coverage Summary
+
 - Statements: X%
 - Branches: X%
 - Functions: X%
 - Lines: X%
 
 ### Failed Tests (if any)
+
 [Details with file:line references]
 
 ### Notes for Reviewer
+
 [Any concerns or areas to verify]
 ```
 
@@ -272,18 +288,21 @@ STORY: ./workflows/stories/TASK-{id}.md
 ## Error Handling
 
 ### Test Failures
+
 1. Analyze failure message
 2. Check if implementation or test is wrong
 3. If implementation issue, report to Implementer
 4. If test issue, fix and re-run
 
 ### Flaky Tests
+
 1. Run test 3 times
 2. If inconsistent, flag as flaky
 3. Add skip with TODO comment
 4. Document in report
 
 ### Mock Failures
+
 1. Check `__mocks__/stores/` for existing mock store implementations
 2. Check `__mocks__/external/` for external package mocks
 3. Check `jest.config.js` moduleNameMapper for how packages are mapped
