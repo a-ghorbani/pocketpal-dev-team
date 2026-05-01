@@ -4,6 +4,15 @@ The contract for PocketPal review workflows: lenses, severity, evidence, and
 output. Tool- and role-specific reviewers import this file and add their own
 operating bits on top.
 
+## Ownership
+
+This file is the canonical review policy. It owns review goals, lenses, roles,
+severity, evidence rules, high-risk classification, and output contracts.
+
+It does not own target setup, worktree creation, GitHub commands, reviewer
+execution, or final synthesis mechanics. Skills and agents may add operating
+details, but they must not redefine or weaken this standard.
+
 ## Goal
 
 Prevent bad code from landing; keep good code maintainable. Strong reviews optimize for:
@@ -33,33 +42,57 @@ If critical context is missing, state it explicitly.
 5. Separate confirmed defects from unproven verification.
 6. Review for the next engineer too — call out hidden invariants and future traps.
 
-## Roles
+## Role Reviewers
 
-A strong review applies multiple expert perspectives. Adopt these personas
-as the lenses below call for them:
+Role worldview and file-focus guidance belong to the named role reviewers. This
+standard owns only the required role IDs and the contract they must follow.
 
-- **Architect** — software architect for mobile/RN apps; thinks in contracts,
-  layering, dependency direction.
-- **QA** — test engineer; thinks in edge cases, coverage gaps, contract
-  assumptions.
-- **Security** — application security engineer; thinks in trust boundaries
-  and attacker model.
-- **Perf** — mobile performance engineer who has shipped React Native apps
-  with on-device LLMs.
-- **Mobile Platform** — iOS/Android platform engineer; thinks in version
-  floors, ABI, JSI bridges, native dependencies.
-- **UX/A11y** — designer plus accessibility specialist.
-- **Domain** — peer engineer who will maintain this code.
+Required high-risk role reviewers:
+- `architect`
+- `qa`
+- `security`
+- `performance`
+- `mobile`
+- `data`
+- `ux`
+- `local-invariants`
+
+Review-map helper roles:
+- `map-architect`
+- `flow-analyst`
+- `requirements-mapper`
+
+Each role reviewer returns only concrete findings or `NOTHING_FOUND`. Map helper
+roles produce orientation notes for `review-map.md`, not final review findings.
 
 ## Working Method
 
-For each lens below, mentally adopt the named role(s) *before* reading the
-code. Apply the listed concerns as the **floor** — and surface anything else
-that role would notice in this diff, even if it is not in the bullet list.
-Findings stay grouped by lens (to match the output table), but the
-perspective behind each finding is the role's.
+For each lens below, apply the listed concerns as the floor and surface anything
+else a PocketPal reviewer would notice in this diff. Findings stay grouped by
+lens to match the output table.
 
 Mark a lens N/A only if it is clearly not relevant to the diff.
+
+For large or high-risk reviews, read-only role subreviews are required before a
+complete final review. A review is high-risk when any of these conditions apply:
+- changed files > 10
+- native dependency or native code changes
+- persistence, migration, or schema changes
+- security/trust-boundary changes
+- model/tool execution changes
+- multi-surface changes
+- user explicitly asks for a robust/deep review
+
+Use the required high-risk role reviewers listed above. Each role returns only
+concrete findings with severity, file:line, impact, evidence, and fix, or
+`NOTHING_FOUND`.
+
+If high-risk role subreviews were required but not completed, the final review
+must be marked incomplete. It may summarize found issues, but it must not
+claim a complete approval/request-changes review.
+
+The `local-invariants` role reviews changed lines for small contract breaks
+defined by that reviewer.
 
 ## Required Lenses
 
@@ -129,7 +162,16 @@ Mark a lens N/A only if it is clearly not relevant to the diff.
 
 ## Human-Facing Output
 
-Open with a per-lens summary table:
+Open with review metadata:
+
+```markdown
+verdict: APPROVE | REQUEST_CHANGES | ESCALATE
+risk_level: low | medium | high
+review_complete: yes | no
+role_subreviews: COMPLETED | BLOCKED | NOT_REQUIRED
+```
+
+Then include a per-lens summary table:
 
 ```markdown
 | Lens                  | Status              | Issues |
@@ -151,6 +193,10 @@ residual risks, decision summary.
 If nothing was found, say so explicitly and call out remaining verification
 gaps.
 
+The final review must be team-shareable (including the necessary details the team need to fix).
+Deduplicate role findings, normalize severity, and include enough detail for the team to act without asking "where?".
+Every `ISSUES` lens row must have at least one matching finding.
+
 ## Headless Output
 
 Deterministic, compact, no prose:
@@ -159,6 +205,7 @@ Deterministic, compact, no prose:
 verdict: APPROVE | REQUEST_CHANGES | ESCALATE
 risk_level: low | medium | high
 review_complete: yes | no
+role_subreviews: COMPLETED|BLOCKED|NOT_REQUIRED
 
 missing_context: [item, ...]   # or []
 

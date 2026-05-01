@@ -1,14 +1,12 @@
 ---
 name: review-pr
-description: Review an external PR for PocketPal AI. Analyzes code quality, l10n, testing patterns, and architecture compliance.
+description: Review an external PocketPal PR or code change using the shared review standard.
 user-invocable: true
-argument-hint: "[pr-number]"
+argument-hint: "<PR number | branch ref | worktree path>"
 ---
 
 # Review PR Workflow
 
 @skills/review-pr/SKILL.md
 
-PR Number: $ARGUMENTS
-
-Use pocketpal-code-reviewer to review PR #$ARGUMENTS (target type: PR).
+Target: $ARGUMENTS
