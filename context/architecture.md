@@ -57,6 +57,8 @@ HFStore           - HuggingFace API, model downloads
 BenchmarkStore    - Performance benchmarking
 FeedbackStore     - User feedback collection
 DeepLinkStore     - Deep link handling
+ServerStore       - OpenAI-compatible remote servers
+TTSStore          - Text-to-speech engines and runtime
 ```
 
 ### Store Responsibilities
@@ -71,6 +73,8 @@ DeepLinkStore     - Deep link handling
 | `BenchmarkStore` | Performance benchmarking |
 | `FeedbackStore` | User feedback collection |
 | `DeepLinkStore` | Deep link handling |
+| `ServerStore` | Remote OpenAI-compatible servers, model selection, keychain-backed credentials |
+| `TTSStore` | TTS engines (Kitten/Kokoro/Supertonic), voices, streaming state |
 
 ### Store Rules
 
@@ -158,45 +162,67 @@ export const MyComponent: React.FC<Props> = observer(({prop1, prop2}) => {
 
 ### Structure
 
-```typescript
-// src/utils/l10n.ts
-export const l10n = {
-  en: {
-    common: { cancel: 'Cancel', ... },
-    settings: { ... },
-    chat: { ... },
-    models: { ... },
-  },
-  ja: { /* Japanese translations */ },
-  zh: { /* Chinese translations */ },
-};
+L10n lives in `src/locales/` as per-language JSON files plus a TypeScript loader.
+Translations for non-English languages are lazy-loaded on first access via getters
+(Metro bundles them at build time, but `require()` doesn't run until the property is read).
+
 ```
+src/locales/
+├── index.ts        # languageRegistry, lazy l10n object, t() helper, initLocale
+├── types.ts        # Translations type derived from `typeof enData`
+├── en.json         # Source of truth — only this file is hand-edited
+├── fa.json         # Other languages are managed by translators on Weblate
+├── he.json
+├── id.json
+├── ja.json
+├── ko.json
+├── ms.json
+├── ru.json
+├── uk.json
+├── zh.json
+└── zh_Hant.json
+```
+
+`languageRegistry` in `src/locales/index.ts` is the single source of truth for
+keys, display names, and the `supportedLanguages` array. Non-English files fall
+back to English via `_.merge({}, enData, langData)` (overlay semantics).
 
 ### Supported Languages
 
 | Code | Language | Status |
 |------|----------|--------|
-| `en` | English | Primary |
-| `ja` | Japanese | Supported |
-| `zh` | Chinese (Simplified) | Supported |
+| `en` | English | Primary (only file edited directly) |
+| `fa` | Persian (Farsi) | Weblate |
+| `he` | Hebrew | Weblate |
+| `id` | Indonesian | Weblate |
+| `ja` | Japanese | Weblate |
+| `ko` | Korean | Weblate |
+| `ms` | Malay | Weblate |
+| `ru` | Russian | Weblate |
+| `uk` | Ukrainian | Weblate |
+| `zh` | Chinese (Simplified) | Weblate |
+| `zh_Hant` | Chinese (Traditional) | Weblate |
 
 ### L10n Rules
 
-1. **No hardcoded strings**: All UI text in l10n.ts
-2. **All languages**: New strings in ALL 3 languages
+1. **No hardcoded strings**: all UI text lives in `src/locales/en.json`
+2. **Edit only `en.json`**: other languages are synced from Weblate, do not hand-edit
 3. **Semantic keys**: `section.descriptiveKey`
-4. **Placeholders**: Use `{{variable}}` syntax
+4. **Placeholders**: use `{{variable}}` syntax and the `t()` helper instead of manual `.replace()`
+5. **Adding a language**: update `languageRegistry`, `requireLanguageData()`, the getter on the `l10n` object, the `dayjs` locale require in `initLocale`, and the related test/E2E lists (see memory: l10n integration)
 
 ```typescript
 // Usage in component
-import {l10n} from '../utils';
-import {uiStore} from '../store';
+import {l10n, t} from '../../locales';
+import {uiStore} from '../../store';
 
-const text = l10n[uiStore.language].common.cancel;
+const cancel = l10n[uiStore.language].common.cancel;
 
 // With placeholder
-const text = l10n[uiStore.language].models.downloadProgress
-  .replace('{{progress}}', '45%');
+const progressText = t(
+  l10n[uiStore.language].models.downloadProgress,
+  {progress: '45%'},
+);
 ```
 
 ---

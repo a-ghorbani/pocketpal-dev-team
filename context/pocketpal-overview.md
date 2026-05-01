@@ -18,7 +18,7 @@ Location: `./repos/pocketpal-ai`
 | Navigation | React Navigation | 7.x |
 | Database | WatermelonDB | 0.28.0 |
 | UI Kit | React Native Paper | 5.14.5 |
-| LLM | llama.rn (llama.cpp) | 0.11.0-rc.3 |
+| LLM | llama.rn (llama.cpp) | 0.12.0-rc.9 |
 | Testing | Jest + Appium | 29.6.3 |
 
 ## Project Structure
@@ -26,23 +26,25 @@ Location: `./repos/pocketpal-ai`
 ```
 pocketpal-ai/
 ├── src/
-│   ├── api/           # External API integrations (HuggingFace, feedback)
+│   ├── api/           # External API integrations (HuggingFace, OpenAI-compatible, feedback)
+│   ├── assets/        # Static assets bundled with the app
 │   ├── components/    # UI components (~66 components)
 │   ├── config/        # App configuration
 │   ├── database/      # WatermelonDB schema and models
 │   ├── hooks/         # Custom React hooks (8 hooks)
+│   ├── locales/       # Per-language JSON + lazy loader (l10n)
 │   ├── repositories/  # Data access layer
 │   ├── screens/       # Navigation screens (7 screens)
-│   ├── services/      # Business logic services
-│   ├── store/         # MobX stores (8 stores)
+│   ├── services/      # Business logic services (downloads, palshub, tts)
+│   ├── specs/         # Codegen TurboModule/Component specs
+│   ├── store/         # MobX stores (10 stores)
 │   ├── types/         # TypeScript definitions
 │   └── utils/         # Utility functions
 ├── android/           # Android native code
 ├── ios/               # iOS native code
 ├── e2e/               # End-to-end tests (Appium)
 ├── __tests__/         # Root-level tests
-├── __mocks__/         # Jest mocks
-└── ai_docs/           # Implementation documentation
+└── __mocks__/         # Jest mocks
 ```
 
 ## Key Stores (MobX)
@@ -57,6 +59,8 @@ pocketpal-ai/
 | `BenchmarkStore` | Performance metrics |
 | `FeedbackStore` | User feedback collection |
 | `DeepLinkStore` | Deep link handling |
+| `ServerStore` | OpenAI-compatible remote servers, models, credentials |
+| `TTSStore` | Text-to-speech engines, voices, runtime state |
 
 ## Key Screens
 
@@ -120,20 +124,13 @@ import {Button, Card, Text} from 'react-native-paper';
 import BottomSheet from '@gorhom/bottom-sheet';
 ```
 
-## Current Priorities
-
-From CLAUDE.md:
-1. **P0**: Model loading stability
-2. **P1**: TTS feature
-3. Ecosystem integration (Palshub)
-
 ## Important Files
 
 | File | Purpose |
 |------|---------|
-| `CLAUDE.md` | AI agent guidance, current priorities |
 | `CONTRIBUTING.md` | Development workflow |
 | `package.json` | Dependencies, scripts |
 | `tsconfig.json` | TypeScript config |
 | `.eslintrc.js` | Linting rules |
 | `.prettierrc.js` | Formatting rules |
+| `commitlint.config.js` | Allowed commit types (`feat`/`fix`/`docs`/`chore`) |
