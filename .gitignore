@@ -2,6 +2,9 @@
 worktrees/*
 !worktrees/README.md
 
+workflows/reviews/*
+!workflows/reviews/README.md
+
 # Environment and local settings
 .env
 .claude/settings.local.json
