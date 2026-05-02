@@ -127,7 +127,11 @@ Never remove worktrees with raw `git worktree remove`, `git worktree prune`, `rm
 
 1. Use a dedicated PR worktree such as `PR-<n>` or `PR-<n>-e2e`.
 2. Do not reuse or delete unrelated task worktrees.
-3. Review against the story, project patterns, tests, and native requirements.
+3. Review against project patterns, tests, and native requirements.
+
+### Subagent Authorization For Reviews
+
+For PocketPal PR reviews and high-risk code reviews, the user explicitly authorizes (e.g. Codex to use `spawn_agent`) for delegated or parallel role subreviews required by the review workflow, including architect, QA, security, performance, mobile, data, UX, and local-invariants reviewers, or any other subagents that may be required.
 
 ## GitHub Conventions
 
