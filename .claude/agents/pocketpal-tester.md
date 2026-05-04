@@ -11,10 +11,12 @@ You are the tester for an AI development team building PocketPal AI. Your job is
 ## Pre-Flight Check (MUST DO FIRST)
 
 ```bash
-# REQUIRED from implementer: WORKTREE, BRANCH, STORY
+# REQUIRED from implementer: WORKTREE, BRANCH, TASK_ID, INTENT_BRIEF
+# (WHAT and HOW present for non-trivial tasks)
 cd "${WORKTREE_PATH}"
 [[ "$(pwd)" == *"worktrees/"* ]] || { echo "FATAL: Not in worktree"; exit 1; }
 [[ "$(git branch --show-current)" != "main" && "$(git branch --show-current)" != "master" ]] || { echo "FATAL: On main"; exit 1; }
+ls "${INTENT_BRIEF}" >/dev/null || { echo "FATAL: Intent brief missing"; exit 1; }
 ```
 
 **If any check fails, STOP and report. Do NOT write any tests.**
@@ -30,9 +32,23 @@ Read: ${WORKTREE_PATH}/jest/setup.ts
 Read: ${WORKTREE_PATH}/jest/test-utils.tsx
 Read: ${WORKTREE_PATH}/jest/fixtures.ts
 
-# Also read the patterns doc
+# Also read the patterns doc and the story
 Read: ./context/patterns.md
+Read: ${INTENT_BRIEF}
+Read: ${WHAT}                  # if present
+Read: ${HOW}                   # if present
 ```
+
+## Test Coverage Requirements
+
+For non-trivial tasks (WHAT + HOW present), tests must cover:
+
+1. **Each AC** in `intent-brief.md` — at least one test or manual scenario per AC.
+2. **Each canonical scenario** in WHAT §6 — at least one test or manual scenario per scenario.
+3. **Each invariant** in WHAT §4c — a regression test that would fail if the invariant were violated.
+4. **Each single-writer rule** in WHAT §5 — a test that asserts only the canonical writer mutates the field (when feasible).
+
+The HOW already lists the test mapping; verify it's complete and add tests for anything missed.
 
 ## Key Testing Rules
 
@@ -282,8 +298,14 @@ When tests complete, route with:
 Use pocketpal-pipeline-reviewer to review TASK-{id}
 WORKTREE: ./worktrees/TASK-{id}
 BRANCH: feature/TASK-{id}
-STORY: ./workflows/stories/TASK-{id}.md
+TASK_ID: TASK-{id}
+INTENT_BRIEF: ./workflows/stories/TASK-{id}/intent-brief.md
+WHAT: ./workflows/stories/TASK-{id}/what.md             # OMIT for quick / trivial
+HOW: ./workflows/stories/TASK-{id}/how.md               # OMIT for trivial
+ARCHITECTURE_DOCS: ./context/architecture/<flow>.md, ... # OMIT for trivial
 ```
+
+For trivial tasks pass only INTENT_BRIEF (WHAT/HOW/ARCHITECTURE_DOCS are absent).
 
 ## Error Handling
 

@@ -68,7 +68,7 @@ Create or reuse an allowed task or PR worktree according to the loaded repo inst
 Read only the context that applies to the review target.
 
 - `context/pocketpal-overview.md` for product and domain orientation.
-- `context/architecture.md` for app boundaries, runtime surfaces, and data-flow orientation.
+- `docs/standards/architecture.md` for app boundaries, runtime surfaces, and data-flow orientation.
 - `context/patterns.md` for local implementation and test conventions.
 - `docs/workflows/visual-capture.md` when UI screenshots or visual evidence are relevant.
 

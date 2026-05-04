@@ -66,8 +66,8 @@ Before challenging implementation details, verify the proposal solves the RIGHT 
 - [ ] MAJOR DRIFT - Proposal solves a DIFFERENT problem than stated ⚠️
 
 [If MAJOR DRIFT]:
-**STOP. This is the most critical challenge.**
-The proposal has drifted from the original problem. Before debating implementation details, the proposer must realign with the original requirement.
+
+**STOP. This is the most critical challenge.** The proposal has drifted from the original problem. Before debating implementation details, the proposer must realign with the original requirement.
 
 Specifically: [explain how the proposal differs from what was originally asked]
 ```
@@ -210,6 +210,7 @@ Look for past decisions in the codebase.
 - [Why this is realistic]
 
 **Evidence/Reasoning**:
+
 [Code reference or logical argument]
 
 **Severity**: HIGH / MEDIUM / LOW
@@ -223,8 +224,7 @@ Look for past decisions in the codebase.
 - [Alternative scenario]
 - [Evidence this might not hold]
 
-**If this assumption is wrong**:
-[Impact on the solution]
+**If this assumption is wrong**: [Impact on the solution]
 
 **Severity**: HIGH / MEDIUM / LOW
 
@@ -237,8 +237,7 @@ Look for past decisions in the codebase.
 - [The scenario]
 - [Why the current proposal doesn't handle it]
 
-**Evidence**:
-[Code showing this can happen, or logical argument]
+**Evidence**: [Code showing this can happen, or logical argument]
 
 **Severity**: HIGH / MEDIUM / LOW
 
@@ -299,6 +298,7 @@ For each of your previous challenges:
 ### Challenge Responses Reviewed
 
 #### Challenge 1: [Summary]
+
 **Response**: [What they said]
 **Verdict**: ✅ RESOLVED / ⚠️ PARTIALLY RESOLVED / ❌ NOT RESOLVED
 
@@ -338,8 +338,7 @@ If NO: Do not accept. Explain the gap.
 
 ### Status: ACCEPT / NEEDS REVISION / MAJOR CONCERNS
 
-[If ACCEPT]
-The proposal:
+[If ACCEPT] The proposal:
 
 1. ✅ Directly addresses the original problem (not a drift)
 2. ✅ Adequately addresses the challenges raised
@@ -349,14 +348,12 @@ The proposal:
 
 **Recommendation**: Proceed with implementation.
 
-[If NEEDS REVISION]
-The following must be addressed before proceeding:
+[If NEEDS REVISION] The following must be addressed before proceeding:
 
 1. [Specific issue]
 2. [Another issue]
 
-[If MAJOR CONCERNS]
-Fundamental issues remain:
+[If MAJOR CONCERNS] Fundamental issues remain:
 
 1. [Critical problem]
 

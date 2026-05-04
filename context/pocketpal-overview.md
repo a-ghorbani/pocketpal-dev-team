@@ -49,18 +49,18 @@ pocketpal-ai/
 
 ## Key Stores (MobX)
 
-| Store | Purpose |
-|-------|---------|
-| `ModelStore` | Model lifecycle, loading, offloading |
-| `ChatSessionStore` | Chat history, sessions, messages |
-| `PalStore` | AI personas management |
-| `HFStore` | HuggingFace integration, model downloads |
-| `UIStore` | UI state (theme, navigation) |
-| `BenchmarkStore` | Performance metrics |
-| `FeedbackStore` | User feedback collection |
-| `DeepLinkStore` | Deep link handling |
-| `ServerStore` | OpenAI-compatible remote servers, models, credentials |
-| `TTSStore` | Text-to-speech engines, voices, runtime state |
+| Store              | Purpose                                               |
+| ------------------ | ----------------------------------------------------- |
+| `ModelStore`       | Model lifecycle, loading, offloading                  |
+| `ChatSessionStore` | Chat history, sessions, messages                      |
+| `PalStore`         | AI personas management                                |
+| `HFStore`          | HuggingFace integration, model downloads              |
+| `UIStore`          | UI state (theme, navigation)                          |
+| `BenchmarkStore`   | Performance metrics                                   |
+| `FeedbackStore`    | User feedback collection                              |
+| `DeepLinkStore`    | Deep link handling                                    |
+| `ServerStore`      | OpenAI-compatible remote servers, models, credentials |
+| `TTSStore`         | Text-to-speech engines, voices, runtime state         |
 
 ## Key Screens
 
@@ -135,11 +135,11 @@ import BottomSheet from "@gorhom/bottom-sheet";
 
 ## Important Files
 
-| File | Purpose |
-|------|---------|
-| `CONTRIBUTING.md` | Development workflow |
-| `package.json` | Dependencies, scripts |
-| `tsconfig.json` | TypeScript config |
-| `.eslintrc.js` | Linting rules |
-| `.prettierrc.js` | Formatting rules |
+| File                   | Purpose                                            |
+| ---------------------- | -------------------------------------------------- |
+| `CONTRIBUTING.md`      | Development workflow                               |
+| `package.json`         | Dependencies, scripts                              |
+| `tsconfig.json`        | TypeScript config                                  |
+| `.eslintrc.js`         | Linting rules                                      |
+| `.prettierrc.js`       | Formatting rules                                   |
 | `commitlint.config.js` | Allowed commit types (`feat`/`fix`/`docs`/`chore`) |

@@ -42,11 +42,11 @@ Named `<device_id>-<model_id>.json`. (Sibling `e2e/baselines/benchmark/` holds t
 
 Different phones need different baseline models so the baseline is neither RAM-starved (Xiaomi with a 1.7B model OOMs) nor noise-floored (Pixel 9 with a 135M model is dominated by runtime jitter). Mapping:
 
-| Device ID | Platform | RAM tier | Model for baseline |
-|---|---|---|---|
-| `agh` (iPhone 13 Pro) | ios | 6 GB | `qwen3-1.7b` |
-| `pixel-9-real` | android | 16 GB | `qwen3-1.7b` |
-| `xiaomi-22126rn91y-real` | android | ~4 GB (low) | `qwen3-0.6b` |
+| Device ID                | Platform | RAM tier    | Model for baseline |
+| ------------------------ | -------- | ----------- | ------------------ |
+| `agh` (iPhone 13 Pro)    | ios      | 6 GB        | `qwen3-1.7b`       |
+| `pixel-9-real`           | android  | 16 GB       | `qwen3-1.7b`       |
+| `xiaomi-22126rn91y-real` | android  | ~4 GB (low) | `qwen3-0.6b`       |
 
 > **Do not change the existing iPhone/Pixel mappings** — they've been tracked against these models for a while; swapping models invalidates all historical baselines. Any new device gets its own row.
 
@@ -121,7 +121,7 @@ Do this on a device under its **normal load profile** (screen on, typical backgr
 Show a table with both platforms:
 
 | Checkpoint | iOS Baseline | iOS Current | iOS Delta | Android Baseline | Android Current | Android Delta |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 
 Include peak memory summary and PASS/FAIL status from the comparison script.
 

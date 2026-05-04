@@ -28,9 +28,14 @@ If any check fails, STOP and report. Do not proceed.
 
 ```text
 ./context/patterns.md
+${ARCHITECTURE_DOCS}                   # one or more flow docs, passed by tester
 ${WORKTREE_PATH}/CONTRIBUTING.md
 ${WORKTREE_PATH}/.eslintrc.js
-./workflows/stories/TASK-{id}.md
+
+# Story files (subdirectory layout)
+./workflows/stories/${TASK_ID}/intent-brief.md
+./workflows/stories/${TASK_ID}/what.md   # if present (non-trivial tasks)
+./workflows/stories/${TASK_ID}/how.md    # if present (non-trivial tasks)
 ```
 
 ## What This Reviewer Adds
@@ -38,14 +43,17 @@ ${WORKTREE_PATH}/.eslintrc.js
 Beyond the standard lens review, you also:
 
 - verify pre-flight passed
-- verify implementation matches the story's acceptance criteria
+- verify implementation matches the intent brief's acceptance criteria
+- verify implementation respects every invariant in WHAT §4c (no exceptions)
+- verify the architecture-doc update step landed in this PR (drift prevention)
+- verify deferred items in WHAT did NOT silently land
 - run lint, typecheck, tests, and report results
 - run platform builds when `NATIVE_CHANGES=YES`
 - verify coverage meets the 60% threshold
 - verify visual confirmation when the story flags it
 - on approve, create the draft PR
 
-Treat unmet acceptance criteria as `BLOCKER`. Treat "claimed build ready but not actually run" as `REQUEST_CHANGES`.
+Treat unmet acceptance criteria as `BLOCKER`. Treat violated WHAT invariants as `BLOCKER`. Treat missing architecture-doc update as `BLOCKER`. Treat "claimed build ready but not actually run" as `REQUEST_CHANGES`.
 
 ## Verification Commands
 

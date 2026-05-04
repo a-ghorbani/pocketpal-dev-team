@@ -120,7 +120,7 @@ export const exampleStore = new ExampleStore();
 ### Component Types
 
 | Type      | Location                 | Purpose                               |
-|------     |--------------------------|---------------------------------------|
+| --------- | ------------------------ | ------------------------------------- |
 | Screen    | `src/screens/`           | Full-screen views, navigation targets |
 | Component | `src/components/`        | Reusable UI building blocks           |
 | Sheet     | `src/components/*Sheet/` | Bottom sheet modals                   |
@@ -185,19 +185,19 @@ src/locales/
 
 ### Supported Languages
 
-| Code | Language | Status |
-|------|----------|--------|
-| `en` | English | Primary (only file edited directly) |
-| `fa` | Persian (Farsi) | Weblate |
-| `he` | Hebrew | Weblate |
-| `id` | Indonesian | Weblate |
-| `ja` | Japanese | Weblate |
-| `ko` | Korean | Weblate |
-| `ms` | Malay | Weblate |
-| `ru` | Russian | Weblate |
-| `uk` | Ukrainian | Weblate |
-| `zh` | Chinese (Simplified) | Weblate |
-| `zh_Hant` | Chinese (Traditional) | Weblate |
+| Code      | Language              | Status                              |
+| --------- | --------------------- | ----------------------------------- |
+| `en`      | English               | Primary (only file edited directly) |
+| `fa`      | Persian (Farsi)       | Weblate                             |
+| `he`      | Hebrew                | Weblate                             |
+| `id`      | Indonesian            | Weblate                             |
+| `ja`      | Japanese              | Weblate                             |
+| `ko`      | Korean                | Weblate                             |
+| `ms`      | Malay                 | Weblate                             |
+| `ru`      | Russian               | Weblate                             |
+| `uk`      | Ukrainian             | Weblate                             |
+| `zh`      | Chinese (Simplified)  | Weblate                             |
+| `zh_Hant` | Chinese (Traditional) | Weblate                             |
 
 ### L10n Rules
 
