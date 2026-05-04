@@ -193,6 +193,7 @@ Before completing the story:
 
 After drafting the plan, step back and review it against these general engineering principles:
 
+- **Architectural soundness**: Which boundary does the change cross, which contract does it modify, and does new code live in the right layer (store / repository / hook / component)? If you can't answer crisply, the plan isn't ready.
 - **Symmetry**: If parallel code paths share a type or interface, does the plan handle them consistently? If not, is the asymmetry explicitly justified?
 - **Completeness**: If the plan introduces new data or capabilities, are they used in every relevant code path? Unused data is a design smell.
 - **Least Surprise**: Would another developer reading the resulting code find the behavior unexpected or confusing?
