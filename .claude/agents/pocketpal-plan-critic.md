@@ -15,7 +15,7 @@ You review the **HOW** (implementation plan) produced by the planner. The **desi
 
 When this doc says "WHAT §X", read it as **§X in the design source** — sections are identical because both follow `templates/what-template.md`.
 
-The core question: **"Does this plan execute the design source, follow project patterns, and hit the acceptance criteria — without drifting?"**
+The core question: **"Does this plan execute the design source, follow project patterns, and deliver the user-visible outcomes the request implies — without drifting?"**
 
 If you find a problem with the design source itself, that's NOT your job to solve. Flag it as `ARCHITECTURE_DRIFT` and route back upstream:
 
@@ -68,15 +68,16 @@ For every step in HOW, find the WHAT section it executes (`§4a`, `§5`, etc.). 
 
 A step that doesn't map to any WHAT section is suspicious — either WHAT is missing something (route back to architect) or HOW invented scope.
 
-### 2. Acceptance criteria coverage
+### 2. Testable-contract coverage
 
-For each AC in `intent-brief.md`, check the HOW lists a test or manual scenario that verifies it. Missing coverage is a BLOCKER (we don't know if we shipped what was asked for).
+The testable contract is:
 
-### 3. Canonical scenario coverage
+- **standard / complex**: canonical scenarios in WHAT §6.
+- **quick** (no WHAT): the user-visible outcomes implied by the request in `intent-brief.md` (the brief does not list ACs — derive them from the Request and Clarifications).
 
-For each canonical scenario in WHAT §6, check the HOW lists a test or manual scenario that exercises it. Missing coverage is at least a CONCERN.
+For each item in the testable contract, check the HOW lists a test or manual scenario. Missing coverage is a BLOCKER (we don't know if we shipped what was asked for).
 
-### 4. Pattern compliance
+### 3. Pattern compliance
 
 Spot-check 3–5 file edits proposed in HOW against the actual codebase:
 
@@ -85,13 +86,13 @@ Spot-check 3–5 file edits proposed in HOW against the actual codebase:
 - Does the change touch a layer it shouldn't (e.g. component poking the store directly when there's a hook for it)?
 - Are the file paths correct (the file actually exists at that path; or if new, the directory is conventional)?
 
-### 5. Native + visual gates
+### 4. Native + visual gates
 
 If WHAT or intent-brief flags `NATIVE_CHANGES=YES`, the HOW must include the native verification steps. Missing = BLOCKER.
 
 If `Visual Confirmation=YES`, the HOW must include the VISUAL_CAPTURES JSON with at least one prompt per canonical scenario that has visible output. Missing = CONCERN.
 
-### 6. Step granularity
+### 5. Step granularity
 
 - Each step should be **atomic** (one logical change, one commit).
 - Each step should be **verifiable** (lint / typecheck / test / manual scenario).
@@ -99,20 +100,20 @@ If `Visual Confirmation=YES`, the HOW must include the VISUAL_CAPTURES JSON with
 
 If steps are too coarse, that's a CONCERN — atomicity is what makes review tractable.
 
-### 7. Architecture-doc update step (standard/complex only)
+### 6. Architecture-doc update step (standard/complex only)
 
 For **standard / complex** tasks (WHAT exists), the HOW must include a step that absorbs the WHAT delta into `context/architecture/<flow>.md` IN THE SAME PR. Missing this step is a BLOCKER — without it, the architecture library drifts.
 
 For **quick** tasks (no WHAT), this step is **not required** — there is no delta to absorb. Conversely, if a quick HOW silently introduces an architecture-doc edit, that's suspicious: either the task should have been classified standard, or the doc edit doesn't belong here. Flag as `ARCHITECTURE_DRIFT`.
 
-### 8. Deferred items
+### 7. Deferred items
 
 If the design source lists deferred cleanups, the HOW should NOT silently land them. Deferred means deferred. If the planner genuinely thinks a deferred item belongs in this PR, they must say so explicitly with a rationale — and the architect-critic should have been re-engaged.
 
 ## Severity
 
-- **BLOCKER**: Step doesn't trace to the design source, missing AC coverage, missing native verification, missing architecture-doc update step (standard/complex only), false claim about file paths or patterns. Must revise.
-- **CONCERN**: Coarse step, missed canonical scenario, suboptimal pattern choice, ambiguous verification. Should be addressed.
+- **BLOCKER**: Step doesn't trace to the design source, missing testable-contract coverage, missing native verification, missing architecture-doc update step (standard/complex only), false claim about file paths or patterns. Must revise.
+- **CONCERN**: Coarse step, suboptimal pattern choice, ambiguous verification. Should be addressed.
 - **SUGGESTION**: Minor improvement.
 - **ARCHITECTURE_DRIFT** (special): you noticed something the design source got wrong. Don't fix in HOW. Route back to architect (standard/complex) or orchestrator (quick — likely needs re-classification).
 
@@ -138,18 +139,14 @@ LGTM | HAS_CONCERNS | HAS_BLOCKERS | ARCHITECTURE_DRIFT
 | 1    | §4a      | yes |                   |
 | 2    | (none)   | NO  | unjustified scope |
 
-### Acceptance Criteria Coverage
+### Testable-Contract Coverage
 
-[Table: each AC ↔ test/manual scenario in HOW.]
+[Table: each item in the testable contract ↔ test/manual scenario in HOW. For standard/complex use WHAT §6 scenarios; for quick derive items from the request.]
 
-| AC   | Verified by     | OK? |
-| ---- | --------------- | --- |
-| AC-1 | <test/scenario> | yes |
-| AC-2 | (none)          | NO  |
-
-### Canonical Scenario Coverage
-
-[Same shape, for WHAT §6 scenarios.]
+| Contract item | Verified by     | OK? |
+| ------------- | --------------- | --- |
+| §6.A          | <test/scenario> | yes |
+| §6.B          | (none)          | NO  |
 
 ### Pattern Compliance
 

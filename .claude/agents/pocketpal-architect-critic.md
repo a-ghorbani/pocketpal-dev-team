@@ -47,12 +47,12 @@ Do these in order. If the **architecture itself is wrong**, stop and write the c
 
 ### 1. Match against intent
 
-- Does the WHAT actually solve the problem stated in the intent brief?
-- Are all acceptance criteria addressable by something in the WHAT?
-- Did the WHAT add scope the intent brief doesn't ask for?
-- Did the WHAT skip something the intent brief requires?
+- Does the WHAT actually solve the request stated in the intent brief?
+- Do the canonical scenarios in WHAT §6 cover the user-facing outcomes the request implies? (The testable contract lives in §6, not in intent.)
+- Did the WHAT add scope the request doesn't ask for?
+- Did the WHAT skip something the request requires?
 
-A WHAT that solves a different problem than the intent describes is a `BLOCKER`.
+A WHAT that solves a different problem than the request describes is a `BLOCKER`.
 
 ### 2. Architecture challenge
 
@@ -82,7 +82,7 @@ If the architecture survived steps 1–2, grade the contract:
 - Are canonical scenarios concrete enough to be manually testable?
 - Does each invariant get exercised by at least one scenario?
 - Are the scenarios distinct (each tests something different)?
-- Do they cover the user-facing failures the intent brief warns about?
+- Do they cover the user-facing outcomes the request implies?
 
 ### 5. Drift verification
 
@@ -113,7 +113,7 @@ LGTM | HAS_CONCERNS | HAS_BLOCKERS
 
 ### Intent Match
 
-[Does WHAT solve the problem the intent brief describes? Any scope drift? Any missed acceptance criteria?]
+[Does WHAT solve the request the intent brief describes? Any scope drift? Any user-facing outcome missing from §6 scenarios?]
 
 ### Architecture Evaluation
 

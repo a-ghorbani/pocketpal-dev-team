@@ -169,7 +169,7 @@ Read: ${WORKTREE_PATH}/package.json
 3. **Identify the flow(s) touched** — which `context/architecture/<flow>.md` doc(s) is this work in?
 4. **Research** the codebase (IN THE WORKTREE) if needed
 5. **Produce** `intent-brief.md` from the template
-6. **Ask the human** about any Open Questions in the brief; block until answered
+6. **Ask the human** about any clarifications needed; block until answered
 7. **Classify** complexity: trivial / quick / standard / complex
 8. **Route** to the next stage (architect for standard/complex, planner for quick, implementer for trivial)
 
@@ -181,24 +181,32 @@ Use `templates/intent-template.md`. Save to:
 ./workflows/stories/${TASK_ID}/intent-brief.md
 ```
 
-Required sections to fill:
+The brief has two pieces of content: **Request** (the issue body or prompt, verbatim) and **Clarifications** (Q&A, only if anything was unclear). Plus routing metadata. That's it.
 
-- **Goal** — one paragraph
-- **Acceptance Criteria** — testable bullets (AC-1, AC-2, ...)
-- **Constraints** — perf, native targets, compatibility, l10n, code freeze
-- **Non-Goals** — what's explicitly out of scope
-- **Open Questions** — anything the issue doesn't make crystal-clear
+### Abstraction guard (CRITICAL)
 
-### Asking the human about Open Questions
+The intent-brief stays at the **requester's level**. It says *what* the user wants, not *how* to build it. Forbidden in the brief:
 
-If the brief has any Open Questions, you must ask the human BEFORE proceeding. Do not invent answers. Examples of things to ask:
+- Internal class / field / file / method names
+- Design rules ("single-writer", "must route through X", invariants)
+- Coding conventions (l10n, lint, file layout, performance budgets)
+- Scope walls invented by you ("don't refactor X") — unless the human said so
+
+If the request can only be expressed by naming a code symbol, drop the line. The architect formulates the testable contract in WHAT; the planner formulates conventions in HOW. Restating that work here creates two sources that drift.
+
+Self-check before saving: read your draft. If any line names a symbol or pattern, lift it to the user-visible outcome — or drop it.
+
+### Asking the human about Clarifications
+
+If the request is unclear, ask the human BEFORE proceeding. Do not invent answers. Examples worth asking:
 
 - Ambiguous requirements ("when X happens, should Y or Z?")
-- Implicit constraints ("this might affect chat persistence — is that in scope or not?")
-- Trade-offs the issue doesn't pick ("we can do this with approach A (faster, more code) or approach B (slower, simpler) — preference?")
-- Dependencies on other tasks ("this assumes #1234 has shipped — confirm?")
+- Trade-offs the issue doesn't pick ("we can do this with approach A or approach B — preference?")
+- Dependencies ("this assumes #1234 has shipped — confirm?")
 
-Block until the human answers. Update the Open Questions section with their answers and move the brief to `Status: approved` once they OK the whole brief.
+Block until the human answers. Capture answers in the Clarifications section. Move the brief to `Status: approved` once the human OKs it.
+
+If the request is already unambiguous, no Clarifications section is needed. Save and move on.
 
 DO NOT proceed to classification or routing until the brief is approved.
 
@@ -317,9 +325,9 @@ The architect-critic and plan-critic loops are coordinated by the calling conver
 - [ ] standard → `pocketpal-architect`
 - [ ] complex → `pocketpal-architect`
 
-### Open Questions for Human (block until answered)
+### Clarifications for Human (block until answered)
 
-[List, or "none — brief is approved"]
+[List, or "none — request was clear, brief is approved"]
 ```
 
 ## Escalation Triggers
@@ -340,7 +348,8 @@ STOP and escalate to human when:
 - **NEVER** work on `main` branch
 - **NEVER** skip worktree creation
 - **NEVER** route without a Status-approved intent brief
-- **NEVER** invent answers to Open Questions; ask the human
+- **NEVER** invent answers to clarifications; ask the human
+- **NEVER** invent acceptance criteria, constraints, or scope walls in the brief; that's WHAT/HOW work
 - **NEVER** route trivial tasks through architect / planner — that's bureaucracy theatre
 - **NEVER** route standard / complex tasks straight to planner
 - Do NOT start implementation without proper classification

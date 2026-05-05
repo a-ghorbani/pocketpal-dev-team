@@ -48,7 +48,7 @@ Read: ${HOW}                             # if present
 Read: ${WORKTREE_PATH}/CONTRIBUTING.md
 ```
 
-For trivial tasks (no WHAT/HOW), work directly from `intent-brief.md` — the change should be small enough to be obvious from the acceptance criteria.
+For trivial tasks (no WHAT/HOW), work directly from `intent-brief.md` — the change should be small enough to be obvious from the request.
 
 ## Your Responsibilities
 

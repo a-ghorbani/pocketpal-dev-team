@@ -22,7 +22,7 @@ cd "${WORKTREE_PATH}"
 ls "${INTENT_BRIEF}" >/dev/null || { echo "FATAL: Intent brief missing"; exit 1; }
 ```
 
-The intent brief MUST be approved (`Status: approved`) before you start. If it has any unanswered Open Questions, STOP and report — the orchestrator should resolve them with the human first.
+The intent brief MUST be approved (`Status: approved`) before you start. If it still has unanswered clarifications, STOP and report — the orchestrator should resolve them with the human first.
 
 ## Context Loading (After Pre-Flight Passed)
 
@@ -64,7 +64,7 @@ Two outcomes:
 3. **Identify** which contracts the requested change affects (data model, state machine, single-writer rules, rendering, persistence, wire format)
 4. **Draft** `workflows/stories/<TASK-ID>/what.md` as a **delta** on top of the existing architecture file(s)
 5. **Use the conventions**: `(C)` for current behaviour you reference, `(P)` for what you're proposing, `(?)` for what you're not yet sure about
-6. **Resolve every (?)** before passing to the critic — open questions are blocked by definition. If you can't resolve one without human input, add it back to the intent brief's Open Questions and STOP.
+6. **Resolve every (?)** before passing to the critic — open questions are blocked by definition. If you can't resolve one without human input, add it back to the intent brief's Clarifications and STOP.
 7. **Route** to the architect-critic when complete
 
 ## Format
@@ -105,7 +105,7 @@ mkdir -p "./workflows/stories/${TASK_ID}"
 - [ ] Every **(D)** has a one-line rationale next to it
 - [ ] Hard invariants are listed and numbered (I1, I2, ...)
 - [ ] Single-writer table lists every mutable field the change touches
-- [ ] Canonical scenarios cover the failure modes the intent brief warns about
+- [ ] Canonical scenarios cover the user-facing outcomes the request describes (the testable contract lives here, not in intent)
 - [ ] Edge cases enumerated for cancel / empty / race / missing dependency
 - [ ] No implementation steps in this doc (that's the planner's job)
 - [ ] No file paths beyond what's needed to identify a contract location
@@ -134,7 +134,7 @@ For EACH finding:
 | --- | --- | --- |
 | **FIXED** | Finding is valid, you agree | Revise the WHAT to address it; show what changed in the Review History section |
 | **REJECTED** | Finding is wrong or based on misunderstanding | Explain WHY with evidence from the codebase; quote specific code; cite docs. Hand-waving is not enough. |
-| **DEFERRED** | Valid but explicitly out of scope per the intent brief | Justify why; check it doesn't violate constraints in the intent brief; note as a follow-up if appropriate |
+| **DEFERRED** | Valid but explicitly out of scope per the request | Justify why; check it doesn't contradict the request in the intent brief; note as a follow-up if appropriate |
 
 Rules:
 

@@ -60,7 +60,7 @@ Research informs the steps. **Design lives in the design source.** If research s
 
 ## What to produce
 
-Use `templates/how-template.md`. Each step has: one-line description, design-source reference (§4a, §5, ...), file paths, 3–5 line approach, and verification commands. Plus tables for AC coverage and canonical scenario coverage. See the template for the full shape — do not restate design content here, **reference it**.
+Use `templates/how-template.md`. Each step has: one-line description, design-source reference (§4a, §5, ...), file paths, 3–5 line approach, and verification commands. Plus a table mapping the testable contract (canonical scenarios in WHAT §6 for standard/complex; or the user-visible outcomes implied by the request, for quick) to tests. See the template for the full shape — do not restate design content here, **reference it**.
 
 ## Architecture-doc update step
 
@@ -74,8 +74,8 @@ For **quick** (no WHAT), this step is **not required** — there is no delta. If
 
 - [ ] Every step references a design-source section
 - [ ] Every step is atomic and individually verifiable
-- [ ] Every AC in `intent-brief.md` has a corresponding test/scenario
-- [ ] Every canonical scenario in design-source §6 has a corresponding test/scenario
+- [ ] Every canonical scenario in design-source §6 has a corresponding test/scenario (this is the testable contract; the intent-brief does not list ACs)
+- [ ] For quick tasks (no WHAT), the user-visible outcomes implied by the request are covered by tests/scenarios in HOW
 - [ ] All affected files exist (or, if new, are in conventional directories)
 - [ ] Native verification step included if `NATIVE_CHANGES=YES`
 - [ ] VISUAL_CAPTURES JSON included if `Visual Confirmation=YES`

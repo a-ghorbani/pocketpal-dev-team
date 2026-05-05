@@ -73,21 +73,19 @@ Each step:
 
 ---
 
-## Acceptance Tests
+## Testable-Contract Coverage
 
-For each Acceptance Criterion in `intent-brief.md`, name the test (or manual check) that verifies it.
+The testable contract — the list of items the implementation must deliver — comes from:
 
-| AC   | Verified by                                |
-| ---- | ------------------------------------------ |
-| AC-1 | `<test file or manual scenario reference>` |
-| AC-2 | `<test file or manual scenario reference>` |
+- **standard / complex**: canonical scenarios in WHAT §6.
+- **quick** (no WHAT): the user-visible outcomes implied by the request in `intent-brief.md`. Enumerate them here, briefly, before mapping to tests.
 
-For each canonical scenario in WHAT §6, name the test (or manual check) that verifies it.
+Map every contract item to a test (or manual scenario):
 
-| Scenario | Verified by                                |
-| -------- | ------------------------------------------ |
-| §6.A     | `<test file or manual scenario reference>` |
-| §6.B     | `<test file or manual scenario reference>` |
+| Contract item | Verified by                                |
+| ------------- | ------------------------------------------ |
+| §6.A          | `<test file or manual scenario reference>` |
+| §6.B          | `<test file or manual scenario reference>` |
 
 ---
 
@@ -131,5 +129,5 @@ Anything WHAT explicitly defers (cleanups #1, #2 in WHAT §5). These do NOT land
 ## What this plan is NOT
 
 - not a design doc — design lives in `what.md`
-- not a justification — `intent-brief.md` is where motivation lives
+- not a justification — `intent-brief.md` is where the request lives
 - not exhaustive — only steps the implementer needs; if a step would just be "obey WHAT §N", reference WHAT instead of restating

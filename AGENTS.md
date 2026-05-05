@@ -22,7 +22,7 @@ Pipeline (each arrow is "produces and hands off to"):
 Issue
   │
   ▼
-orchestrator ── intent-brief.md  (asks human about open questions; blocks until approved; classifies)
+orchestrator ── intent-brief.md  (asks human for clarifications if needed; blocks until approved; classifies)
   │
   ├── trivial ───────────────────────────────────────────────────────┐
   │                                                                  │

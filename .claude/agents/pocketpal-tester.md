@@ -41,14 +41,14 @@ Read: ${HOW}                   # if present
 
 ## Test Coverage Requirements
 
-For non-trivial tasks (WHAT + HOW present), tests must cover:
+For non-trivial tasks tests must cover the testable contract — find it in this order:
 
-1. **Each AC** in `intent-brief.md` — at least one test or manual scenario per AC.
-2. **Each canonical scenario** in WHAT §6 — at least one test or manual scenario per scenario.
-3. **Each invariant** in WHAT §4c — a regression test that would fail if the invariant were violated.
-4. **Each single-writer rule** in WHAT §5 — a test that asserts only the canonical writer mutates the field (when feasible).
+1. **Canonical scenarios** in WHAT §6 (standard/complex) — at least one test or manual scenario per scenario.
+2. **Invariants** in WHAT §4c (standard/complex) — a regression test that would fail if the invariant were violated.
+3. **Single-writer rules** in WHAT §5 (standard/complex) — a test that asserts only the canonical writer mutates the field (when feasible).
+4. **For quick tasks** (no WHAT) — the user-visible outcomes implied by the request in `intent-brief.md`, with HOW's mapping as the primary guide.
 
-The HOW already lists the test mapping; verify it's complete and add tests for anything missed.
+The HOW lists the test mapping; verify it's complete and add tests for anything missed. The intent-brief does not list ACs — don't look there for testable items.
 
 ## Key Testing Rules
 
