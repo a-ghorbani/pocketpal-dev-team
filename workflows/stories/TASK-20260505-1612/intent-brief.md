@@ -10,7 +10,7 @@
 - **Native Changes**: NO
 - **Visual Confirmation**: NO
 - **Created**: 2026-05-05
-- **Status**: draft
+- **Status**: PR open (#713 draft)
 
 ---
 
