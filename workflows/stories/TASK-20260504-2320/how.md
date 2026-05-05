@@ -25,21 +25,21 @@ This file lives at `workflows/stories/TASK-20260504-2320/how.md`.
 
 | Step | Status | Commit | Notes |
 | --- | --- | --- | --- |
-| Step 1 — Rename `preparing` → `prefill`, collapse `streaming_followup` | pending | - | WHAT §3, D5; reducer + types + tests |
-| Step 2 — Route follow-up through `prefill` | pending | - | WHAT §3 (P), Scenario I phase 7 |
-| Step 3 — Drop `partial.toolCalls` from streaming partial | pending | - | WHAT §5 cleanup #1 |
-| Step 4 — Add `appendToolCall` writer; runner attaches `toolCalls` to `step_finished` | pending | - | WHAT §5 cleanup #1, store + types + runner + hook |
-| Step 5 — Add `AssistantTurnFooter` component | pending | - | WHAT §4b, §4d, D9 |
-| Step 6 — Strip chrome from `Bubble` | pending | - | WHAT §4d, D9, I1 |
-| Step 7 — Hoist footer to `Message` (universal owner) | pending | - | WHAT §4b, §4d, D9, I1 |
-| Step 8 — Add `ToolUsedChip` + `ToolErrorBlock` (subtle blocks) | pending | - | WHAT §4a (I3), D2, D8 |
-| Step 9 — Rewire `TalentSurface` per-call dispatch + remove dead pending paths | pending | - | WHAT §4a (I2, I3), §4a (P) note |
-| Step 10 — Add `PendingIndicator` component | pending | - | WHAT §4d, D4, I4 |
-| Step 11 — Wire `PendingIndicator` from `ChatView`, retire `LoadingBubble` from chat | pending | - | WHAT §4d, I4 |
-| Step 12 — Split reasoning and content into separate per-step blocks | pending | - | WHAT §4a, D3 |
-| Step 13 — Update tests for new contract (reducer, Bubble, Message, TalentSurface, ChatView) | pending | - | WHAT §6 A–I |
-| Step 14 — Bootstrap `context/architecture/chat-flow.md` (dev-team repo) + reference SHA in code PR | pending | - | absorb WHAT delta; commit lands in dev-team repo, SHA referenced in pocketpal-ai PR |
-| Cleanup reminders applied | pending | - | DebugStatusBar absent in `f3b750e` (no-op); WHAT §10 reminder kept for follow-up if local WIP is cherry-picked later |
+| Step 1 — Rename `preparing` → `prefill`, collapse `streaming_followup` | DONE | bf0f6ed | WHAT §3, D5; reducer + types + tests |
+| Step 2 — Route follow-up through `prefill` | DONE | ea05a8a | WHAT §3 (P), Scenario I phase 7. Reducer extension flips prefill→streaming_text on first non-empty content/reasoning token (necessary for §6.I phase 8) |
+| Step 3 — Drop `partial.toolCalls` from streaming partial | DONE | 861ff52 | WHAT §5 cleanup #1 (first half) |
+| Step 4 — Add `appendToolCall` writer; runner attaches `toolCalls` to `step_finished` | DONE | 01c839a | WHAT §5 cleanup #1 (second half). Per round-2 SUGGESTION 1, hoisted finishedResult/rawToolCalls/calls block above step_finished yield |
+| Step 5 — Add `AssistantTurnFooter` component | DONE | 231d63f | WHAT §4b, §4d, D9. Sender-name handling stays in TextMessage (deviation from D9's literal "owns sender-name" claim — keeping today's UX of name-above-bubble; documented in component JSDoc) |
+| Step 6 — Strip chrome from `Bubble` | DONE | 325833c | WHAT §4d, D9, I1 |
+| Step 7 — Hoist footer to `Message` (universal owner) | DONE | da74bb7 | WHAT §4b, §4d, D9, I1. Footer attached in outer JSX adjacent to renderBubbleContainer (round-2 SUGGESTION 3), not inside renderMessage |
+| Step 8 — Add `ToolUsedChip` + `ToolErrorBlock` (subtle blocks) | DONE | 0fca05b | WHAT §4a (I3), D2, D8. en.json strings added; other languages fall back to en via existing l10n overlay |
+| Step 9 — Rewire `TalentSurface` per-call dispatch + remove dead pending paths | DONE | 03076b0 | WHAT §4a (I2, I3), §4a (P) note. Inline pending paths removed; TalentUI.renderPending kept on the interface but @deprecated |
+| Step 10 — Add `PendingIndicator` component | DONE | 0a86e55 | WHAT §4d, D4, I4 |
+| Step 11 — Wire `PendingIndicator` from `ChatView`, retire `LoadingBubble` from chat | DONE | d692163 | WHAT §4d, I4. ChatScreen + VideoPalScreen no longer pass isThinking; ChatView derives isPending locally from agentUiState.status |
+| Step 12 — Split reasoning and content into separate per-step blocks | DONE | 7dba22b | WHAT §4a, D3. ThinkingBubble PARTIAL default verified; MarkdownView reasoning-before-content order verified |
+| Step 13 — Update tests for new contract (reducer, Bubble, Message, TalentSurface, ChatView) | DONE | 5e41af8 | WHAT §6 A–I. All 162 test suites pass (2123 tests) |
+| Step 14 — Bootstrap `context/architecture/chat-flow.md` (dev-team repo) + reference SHA in code PR | DONE | dev-team@baeb825 | absorb WHAT delta; SHA referenced in code PR description |
+| Cleanup reminders applied | DONE | n/a | DebugStatusBar absent in `f3b750e` (verified); no-op for this PR. Architecture doc §10 records "no cleanup reminders outstanding" |
 
 ---
 
@@ -565,3 +565,55 @@ WHAT explicitly defers cleanup #2 (consolidate state signals — make `agentUiSt
 - [x] Plan length: ~580 lines, within budget for a complex story with 14 steps + coverage tables + visual JSON.
 
 **Verdict on advance**: HOW v2 routed back to plan-critic for round 2.
+
+---
+
+## Last Agent Handoff
+
+```yaml
+from_agent: implementer
+to_agent: tester
+timestamp: 2026-05-05
+status: "Implementation complete (Steps 1–14); ready for tests"
+completed:
+  - Step 1: Reducer rename preparing→prefill, drop streaming_followup (commit bf0f6ed)
+  - Step 2: Follow-up routes through prefill (commit ea05a8a)
+  - Step 3: Drop partial.toolCalls per-token write (commit 861ff52)
+  - Step 4: appendToolCall writer + runner step_finished payload (commit 01c839a)
+  - Step 5: AssistantTurnFooter component (commit 231d63f)
+  - Step 6: Bubble stripped of chrome (commit 325833c)
+  - Step 7: Footer hoisted to outer Message JSX (commit da74bb7)
+  - Step 8: ToolUsedChip + ToolErrorBlock + en.json strings (commit 0fca05b)
+  - Step 9: TalentSurface rewired (commit 03076b0)
+  - Step 10: PendingIndicator component (commit 0a86e55)
+  - Step 11: ChatView wires PendingIndicator; isThinking dropped from ChatView/Screen/VideoPalScreen (commit d692163)
+  - Step 12: reasoning/content split into separate per-step blocks (commit 7dba22b)
+  - Step 13: Canonical scenario tests A–I (commit 5e41af8)
+  - Step 14: chat-flow.md bootstrapped (dev-team@baeb825)
+verification:
+  - lint: pre-existing errors only (HtmlPreviewBubble, PalSheet) — not from this PR
+  - typecheck: PASS
+  - tests: 162 suites, 2123 passed, 2 skipped (full repo run)
+  - native verification: N/A (NATIVE_CHANGES=NO)
+notes:
+  - Reducer extension in Step 2: the existing case 'token' did NOT flip prefill→streaming_text on plain content, so I added a minimal extension to that branch. WHAT §3 explicitly states this transition; HOW underspecified the reducer change.
+  - Sender-name handling kept in TextMessage (above bubble) rather than moved into AssistantTurnFooter (below bubble). The literal D9 reading would move the name visually below the message — a UX regression. Documented in AssistantTurnFooter JSDoc and the bootstrapped chat-flow.md §4b.
+  - Existing `isFirstBlock` book-keeping retained for the showName gate inside renderAssistantTurn (HOW Step 7's "drop isFirstBlock" hint applied only to sender-name, but showName still has to be gated to the first text block of the turn so the name doesn't appear above every block).
+  - TalentUI.renderPending interface field marked @deprecated; kept for compat with RenderHtmlTalentUI which still defines it.
+  - Mock store updated for new status union and appendToolCall.
+next_steps:
+  - Run full E2E (visual capture for Scenarios A–I) before opening PR
+  - Add the dev-team@baeb825 line to the eventual PR description
+  - Pipeline-reviewer should verify the SHA link resolves and the doc matches the code
+blockers: []
+context_for_next_agent: |
+  All scenarios A–G are unit-tested at Message level; H and I are
+  unit-tested at ChatView level (phase walk via runInAction over
+  agentUiState.status). Tester should focus on:
+  - Visual confirmation captures per HOW's VISUAL_CAPTURES JSON.
+  - Per-frame id-match invariant (already covered by hookTest2 but
+    worth adding more scripted-event variations).
+  - Edge cases: persistence load with deleted talent (9c), abort
+    with no partial content (9a path B), multi-tool partial
+    completion (9e).
+```
