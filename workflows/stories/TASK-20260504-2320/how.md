@@ -39,6 +39,9 @@ This file lives at `workflows/stories/TASK-20260504-2320/how.md`.
 | Step 12 — Split reasoning and content into separate per-step blocks | DONE | 7dba22b | WHAT §4a, D3. ThinkingBubble PARTIAL default verified; MarkdownView reasoning-before-content order verified |
 | Step 13 — Update tests for new contract (reducer, Bubble, Message, TalentSurface, ChatView) | DONE | 5e41af8 | WHAT §6 A–I. All 162 test suites pass (2123 tests) |
 | Step 14 — Bootstrap `context/architecture/chat-flow.md` (dev-team repo) + reference SHA in code PR | DONE | dev-team@baeb825 | absorb WHAT delta; SHA referenced in code PR description |
+| Tester augmentation — multi-tool / abort / id-match invariant (hook) | DONE | ecdb7c2 | hookTest3-6: multi-tool turn, multi-step chain, abort during tool exec, abort with no partial content (Scenario H path B / WHAT §9a) |
+| Tester augmentation — persistence load + multi-tool partial completion (rendering) | DONE | edb1b2b | TalentSurface §9c (deleted talent → ToolUsedChip), §9e (talent + error block render together in array order) |
+| Tester augmentation — PendingIndicator no-flicker invariant | DONE | 382cb6a | reducer 50-token burst stays non-pending; ChatView wiring re-renders confirm indicator stays hidden across frames |
 | Cleanup reminders applied | DONE | n/a | DebugStatusBar absent in `f3b750e` (verified); no-op for this PR. Architecture doc §10 records "no cleanup reminders outstanding" |
 
 ---
