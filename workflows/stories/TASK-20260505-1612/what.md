@@ -445,6 +445,48 @@ iOS path doesn't populate `no_extra_bufts` (an Android-specific repacking knob).
 | S5: 4d rationale prose is muddled (initContext doesn't call setters) | SUGGESTION | **FIXED**: 4d intro rewritten — constraint logic lives in setters (`setCacheTypeK` ModelStore.ts:300-316, `setFlashAttnType` ModelStore.ts:2317-2331). `initContext` only reads via `getEffectiveContextInitParams` (ModelStore.ts:1559-1560). Mutations land at apply time, before `initContext` runs. |
 | S6: 9c missing-keys default unspecified | SUGGESTION | **FIXED**: 9c step 1 specifies the matrix-level pre-run snapshot (4c.1) as the source for un-overridden keys. Step 2 specifies object-spread overlay (no constraint replay). Step 3 reuses 4d canonical-form rules. Construction is reproducible from the report alone; iOS-missing keys (e.g. `no_extra_bufts`) stay `"-"` as in the success path. |
 
+### Round 3 — implementation discovery: lifecycle redesign (post-PR-feedback, post-empirical-debug)
+
+During real-device validation a third class of bug surfaced that the WHAT had not anticipated: **the cold-launch auto-load shadows the matrix's per-cell intent**. `ChatView`'s mount-time `useEffect` calls `modelStore.selectModel(palDefaultModel)` when an `activePal` is set and no model is active. On a fresh app launch via the deep link, this `selectModel` queues an `initLlama` with whatever `contextInitParams.devices` was persisted (often `undefined` → `getFilteredDefaultDevices()` → `GPUOpenCL`). The matrix runner's per-cell `setDevices(['CPU'])` + `initContext(model)` arrives on the same mutex; when its turn comes, `activeModelId === model.id && this.context` is true and `initContext` returns the auto-loaded context via the "already loaded → skip" path. The cell's bench then runs against the wrong-backend context. Empirically: requested `cpu`, `effective_backend: 'opencl'`, `weights_mib: { CPU: 167, OpenCL: 1002 }`, pp/tg matched OpenCL perf — the "Bug 2 fix" merged in b86e020 did not prevent this on the **first** cell of any matrix.
+
+Diagnosed via JS-side and JNI-side BENCH-DEBUG logs (since reverted) — the JNI received `devicesProvided: 0` even though the runner had called `setDevices(['CPU'])`, because the matrix's `initContext` was a no-op against the already-loaded context.
+
+The root cause is structural: the runner shares the same `ModelStore` state machine the rest of the app uses. Any code path that races the matrix into `initContext` defeats the per-cell pin.
+
+**Decision (D13)**: rather than patch the symptom (e.g. force-release before the matrix loads its first cell), redesign so the runner owns the native context lifecycle end-to-end and is fully isolated from `ModelStore`. Three invariants:
+
+1. **Runner owns its native lifecycle.** The runner calls `initLlama` directly, holds the returned `LlamaContext` in a local variable, runs `ctx.bench(...)`, then `ctx.release()`. It never touches `modelStore.context` / `modelStore.activeModelId` / `modelStore.initContext` / `modelStore.selectModel` / `modelStore.releaseContext`.
+2. **Runner never writes to persisted user settings.** Per-cell params are composed locally as a literal `ContextParams`: `{ ...benchBase, ...buildOverridesParams(overrides), model, devices, n_gpu_layers }`. `benchBase` is `DEFAULT_BENCH_BASE_PARAMS` overlaid with a once-per-matrix `getRecommendedThreadCount()` for `n_threads`. No `setDevices` / `setNGPULayers` / `setCacheTypeK` / `setUseMmap` / `setNThreads` calls. The runner's only side-effect on `ModelStore` is the benchmark-mode flag (D14).
+3. **While a matrix is running, the rest of the app cannot start a competing `initContext`.** A new `ModelStore.benchmarkActive` observable boolean gates `ChatView`'s auto-load `useEffect` and rejects any `modelStore.initContext` / `selectModel` call that arrives while the bench owns the lifecycle.
+
+**D14 — Benchmark-mode contract**: two new `ModelStore` methods — `enterBenchmarkMode()` and `exitBenchmarkMode()`. Enter (a) sets `benchmarkActive = true` synchronously so any new auto-load `useEffect` fires of the gate sees it, (b) drains the context-operation mutex (so any in-flight `initContext` finishes its release/load), (c) releases any context that was loaded with `clearActiveModel: true`. Exit clears the flag. The runner wraps the matrix in `enter` / `exit` (matrix-level finally guarantees `exit` runs on every path). `initContext` synchronously throws when `benchmarkActive` is true (defence-in-depth: a queued `initContext` from before the gate also short-circuits inside the mutex callback).
+
+**D15 — Backend-mismatch is a hard failure**, not a row-level annotation. Pre-redesign the runner recorded `status: 'ok'` with `effective_backend: 'opencl'` for `requested_backend: 'cpu'`. The redesign asserts via `requestSatisfiedBy(requested, actual)` (`logSignals.ts`): `cpu` is satisfied by `'cpu'`; `gpu` by `'opencl'` or `'cpu+opencl-partial'`; `hexagon` by `'hexagon'` or `'cpu+hexagon-partial'`. Anything else throws `backend-mismatch:<requested>:<actual>` and the cell records `status: 'failed'`. Wrong-backend rows can no longer silently land in baselines.
+
+**Consequences for the WHAT**:
+
+- §4c (Apply phase) — superseded. The runner does not "apply" overrides via store setters; it composes a local literal. `applySettingsOverrides` and `restoreSettingsSnapshot` are deleted. **§4h I4 ("apply order: flash_attn_type before cache_type_k")** is moot in the new design — cell params are a single object literal handed to `initLlama`; ordering is irrelevant.
+- §4c.3 / §4h I5 (Restore phase) — superseded. The runner mutates nothing persistent, so there is nothing to restore. The `RunnerStateSnapshot` / `snapshotRunnerState` / `restoreRunnerState` machinery from b86e020 is deleted.
+- §4c.1 (Pre-run snapshot) — kept but re-rooted. The fingerprint `pre-run snapshot` is now derived from the bench's own `BENCH_BASE_PARAMS` (with the resolved `n_threads`), NOT from `modelStore.contextInitParams`. This isolates the fingerprint from the user's persisted Settings.
+- §1b (BenchmarkRunRow.init_settings) — semantics unchanged but source is now the cell's composed `ContextParams` projected onto the six fingerprint knobs (no post-init store snapshot). Field shape and `settings_fingerprint` derivation are byte-identical.
+- §1b (BenchmarkRunRow.effective_init_params) — now literally the `ContextParams` handed to `initLlama` minus the `model` field. Replaces the prior post-resolution view from `getEffectiveContextInitParams`.
+- §9c / §9d (Failure-path fingerprint) — preserved. Pre-init failure (cell threw before `initLlama` succeeded) still produces a `req:`-prefixed fingerprint built from the bench-base snapshot + requested overrides. Post-init failure (cell threw after `initLlama` succeeded but before bench resolved) still produces a standard fingerprint from the cell's composed params.
+
+**Verified empirically on Myron (Snapdragon 8 Elite Gen 5) post-redesign:**
+
+| cell | requested_backend | effective_backend | weights_mib keys | pp_avg | tg_avg | status |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1/3 | cpu | cpu | CPU, CPU_REPACK | 218 | 35 | ok |
+| 2/3 | gpu | opencl | CPU, OpenCL | 641 | 21 | ok |
+| 3/3 | hexagon | hexagon | CPU, CPU_REPACK, HTP0..5 (+REPACK) | 267 | 22 | ok |
+
+And on Klee (MediaTek MT6899, no Hexagon):
+
+| cell | requested_backend | effective_backend | status | error |
+| --- | --- | --- | --- | --- |
+| 1/1 | cpu | cpu | ok | — |
+| 1/1 | hexagon | unknown | failed | "Hexagon device not available" |
+
 ### Round 2 — architect-critic (LGTM, polish pass)
 
 | Finding | Severity | Resolution |
