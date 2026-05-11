@@ -9,12 +9,12 @@
 - **Task ID**: TASK-20260505-1612
 - **Worktree**: `./worktrees/TASK-20260505-1612`
 - **Branch**: `feature/TASK-20260505-1612`
-- **Native Changes**: NO
+- **Native Changes**: YES (added during implementation — Android JNI shim for `mallopt(M_PURGE_ALL)` + iOS no-op for `purgeNativeAllocator`)
 - **Visual Confirmation**: NO
 - **Intent Brief**: `./workflows/stories/TASK-20260505-1612/intent-brief.md`
 - **WHAT**: `./workflows/stories/TASK-20260505-1612/what.md`
-- **Architecture doc(s) being updated**: `./context/architecture/benchmark-matrix.md` (NEW — this PR seeds the file from WHAT)
-- **Status**: draft
+- **Architecture doc(s) being updated**: `./context/architecture/benchmark-matrix.md` (seeded here; resynced to the isolated lifecycle + purge mechanism in dev-team commit c8bd7af)
+- **Status**: Merged in #713 (f34c6bf) on 2026-05-11
 
 ---
 

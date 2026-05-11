@@ -7,10 +7,10 @@
 - **Worktree**: `./worktrees/TASK-20260505-1612`
 - **Branch**: `feature/TASK-20260505-1612`
 - **Complexity**: standard
-- **Native Changes**: NO
+- **Native Changes**: YES (added during implementation — Android JNI shim for `mallopt(M_PURGE_ALL)` + iOS no-op for `purgeNativeAllocator`)
 - **Visual Confirmation**: NO
 - **Created**: 2026-05-05
-- **Status**: PR open (#713 draft)
+- **Status**: Merged in #713 (f34c6bf) on 2026-05-11
 
 ---
 
