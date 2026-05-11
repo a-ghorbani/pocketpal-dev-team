@@ -88,8 +88,8 @@ The gate is a single boolean, `ttsStore.isTTSAvailable`, that every TTS-aware su
 
 ### 4b. Settings toggle (UI contract)
 
-1. (C) Lives inside the `memorySettings` Card in `SettingsScreen.tsx` — the toggle is conceptually about a memory-driven default, the Card already uses the matching switch row pattern.
-2. (C) Renders a single `<Switch>` row using the existing `switchContainer`/`textContainer`/`Switch` pattern already used by `useMlock`, `useMmap`, and `weight-repacking` switches in the same file.
+1. (C) Lives inside the `appSettings` Card in `SettingsScreen.tsx`, next to Language and Dark Mode. Rationale: although the default is memory-driven, the feature itself is an app-level user preference — a user looking for "TTS settings" would not navigate to Memory Settings. The row uses the icon-prefixed `labelWithIconContainer` pattern (with `VolumeOnIcon`) to match its App Settings siblings.
+2. (C) Renders a single `<Switch>` row using the App Settings card's `switchContainer`/`labelWithIconContainer`/`textContainer`/`Switch` pattern. Icon: `VolumeOnIcon` (parity with `GlobeIcon`, `MoonIcon`, `CpuChipIcon` siblings).
 3. (C) Switch value is the **effective** override: `userTTSOverride ?? deviceMeetsMemory`. Toggling it calls a single store action that writes `userTTSOverride` (true or false, never null after the user has touched it).
 4. (C) Below-threshold devices (`!deviceMeetsMemory`) display a small helper line under the toggle warning that TTS may not work reliably. The helper line is hidden when `deviceMeetsMemory` is true (no need to caveat the safe path).
 5. (C) The toggle is always interactive — users on high-memory devices can turn TTS off too, and users on low-memory devices can opt in. No `disabled` state.
@@ -124,6 +124,7 @@ A low-memory user can flip `userTTSOverride = true` and `isTTSAvailable` becomes
 - Without the session reaction, switching chat sessions does not stop in-flight TTS.
 - Without `isInstalled()` checks, the per-engine download states stay at their initial `not_installed` defaults; the user attempting to play would be unable to use an engine that is, in fact, already downloaded.
 - Without `currentVoice` reconciliation, a persisted voice whose model files were deleted would crash on first play.
+- The reconciliation **stashes the cleared voice id** in `pendingVoiceRestore[engineId]` (a non-persisted private map) before nulling `currentVoice`, so a forced engine re-download (e.g. Kokoro FP16 → FP32 model layout migration) restores the user's previously chosen voice on completion instead of falling back to `voices[0]`. Cleared after restore.
 
 Verified safety of running these on a low-memory device:
 
@@ -283,7 +284,7 @@ Overlap check: `isTTSAvailable` is fully derived from the other two — no redun
 - **D2**: `userTTSOverride === false` forces the gate closed, even on high-memory devices. Rationale: opting out must actually disable TTS. Captured in the §4a.1 formula. The toggle is bidirectional once exposed.
 - **D3**: No auto-revert if TTS crashes on a low-memory device. Rationale: crash attribution is ambiguous (TTS vs. competing LLM model); silently flipping the user's choice would be worse than honouring it.
 - **D4**: Toggle the override, do not clear it back to null. Rationale: simpler mental model (on/off), simpler persisted shape (boolean once written), and — per §6.E — the gate is invariant to "null vs override-equals-default" so there's no behavioural reason to ever write null after first user action.
-- **D5**: Place the toggle inside `memorySettings` Card. Rationale: the toggle is conceptually about a memory-driven default, the Card already uses the matching switch row pattern.
+- **D5**: Place the toggle inside the `appSettings` Card (next to Language and Dark Mode), not the `memorySettings` Card. Rationale: although the default is memory-driven, the feature itself is an app-level user preference — a user reasoning "I need TTS" does not navigate to Memory Settings. The earlier `memorySettings` placement was revised before merge.
 - **D6**: `setUserTTSOverride(false)` triggers the same stop-and-release path as `setAutoSpeak(false)` (§4a.5 / I6). Rationale: opting out should free engine RAM immediately for the same reasons disabling auto-speak does.
 - **D7**: Use `mobx-persist-store` (the existing mechanism) rather than introducing a new store / new storage layer. Rationale: `autoSpeakEnabled` is already persisted the same way. Adding `userTTSOverride` to the `properties` array is the smallest possible change.
 - **D8**: `init()` runs its full lifecycle work unconditionally; gating moves entirely to call-site guards. Rationale: low-memory users who opt in mid-session need the AppState listener and session reaction in place before they ever touch the toggle. Skipping them at `init()` and trying to register them lazily on first opt-in would require either a reaction watching `userTTSOverride` (more state) or coupling the toggle action to lifecycle setup (more code paths). Running them unconditionally is cheap (the listener is dormant until `play()` actually runs an engine) and removes a class of latent bugs. See §4e and I8.
@@ -315,6 +316,13 @@ Users who installed before this change have no `userTTSOverride` in AsyncStorage
 ### 9f. The toggle on a low-memory device that is already opted in
 
 User is on a < 4 GiB device, `userTTSOverride = true`. They visit Settings. The toggle shows ON. The helper line still shows. This is intentional: the user has opted in, but the warning should remain visible so they remember why their device might misbehave. (Helper-line visibility tracks `deviceMeetsMemory`, not the override.)
+
+### 9g. Engine model-layout migration (Kokoro FP16 → FP32 example)
+
+When an engine changes its on-disk file layout (e.g. Kokoro renamed its weight file `model.onnx` → `model_fp32.onnx`), legacy installs report `isInstalled() === false` on next boot, which forces a fresh download. Two safeguards apply:
+
+1. **Voice restore** — `init()` stashes the cleared `currentVoice.id` in `pendingVoiceRestore[engineId]` before nulling it; the next successful download restores that voice when still present in the new voice list, else falls back to `voices[0]`. Persisted selection survives the forced re-download.
+2. **Legacy disk reclaim before the gate** — engines that implement the optional `reclaimLegacySpace()` hook have it invoked by `downloadNeuralEngine()` **before** the disk-space preflight, so any space the migration is about to free counts toward the buffered threshold. Borderline devices upgrading from a smaller legacy footprint to a larger new one are not wrongly blocked. The reclaim is idempotent and safe when there is nothing to free.
 
 ---
 
