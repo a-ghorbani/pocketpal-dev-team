@@ -13,8 +13,26 @@
 - **Visual Confirmation**: YES
 - **Intent Brief**: `./workflows/stories/TASK-20260506-1518/intent-brief.md`
 - **WHAT**: `./workflows/stories/TASK-20260506-1518/what.md`
-- **Architecture doc(s) being updated**: `./context/architecture/tts.md` (NEW — this PR seeds the file from WHAT §1–§9)
-- **Status**: draft
+- **Architecture doc(s) being updated**: `./context/architecture/tts.md` (seeded here; resynced post-review in dev-team commit `b7289fa` to reflect the App Settings card move + voice-restore + reclaim-ordering contracts added in PR review)
+- **Status**: Merged in #717 (3584c96) on 2026-05-12
+
+---
+
+## Post-merge notes
+
+Round-1 review on PR #717 surfaced three concerns that were fixed before merge:
+
+1. **CONCERN 2** — `KokoroEngine.reclaimLegacySpace()` extracted from `downloadModel()` and invoked by `TTSStore.downloadNeuralEngine()` BEFORE the disk-space preflight, so the legacy ~163 MB `model.onnx` reclaim counts toward the buffered FP32 threshold. Idempotent; kept defensively inside `downloadModel()`.
+2. **CONCERN 3** — `init()` now stashes the cleared `currentVoice.id` in a private `pendingVoiceRestore[engineId]` map before nulling the voice; `downloadNeuralEngine()` completion restores the stashed id when still in the engine's voice list, else falls back to `voices[0]`. FP16 → FP32 users keep their selection.
+3. **SUGGESTION 5** — `context/architecture/tts.md` updated (commit `b7289fa`): §4b.1, §4b.2, D5 reflect the App Settings card move; §4e covers voice-restore; new §9g documents the engine model-layout migration contract (voice restore + reclaim ordering).
+
+**Deferred** (not in PR #717): CONCERN 1 (engine-specific Kokoro FP32 RAM gate) — out of scope per the brief's no-auto-revert direction. CONCERN 4 (real-hydration integration test for persisted override) — low-value (the existing test asserts the persistence config; adding real hydration mostly exercises `mobx-persist-store`).
+
+Post-merge cleanup in the same branch:
+
+- TTS toggle relocated from the Memory Settings card to the App Settings card (next to Language and Dark Mode) with `VolumeOnIcon` for parity with siblings — the original Memory Settings placement was unintuitive (users don't reason "I need TTS, let me check memory settings").
+- `package.json`: `yarn android` and `yarn build:android` pinned to `--mode=prodDebug` / `assembleProdDebug` to disambiguate after PR #573 introduced the `e2e` product flavor.
+- `ENGINE_META.kokoro` UI metadata bumped from FP16 (170 MB / 510 MB RAM) to FP32 (330 MB / 1000 MB RAM) so the install CTA and spec strip match the actual download size.
 
 ---
 
