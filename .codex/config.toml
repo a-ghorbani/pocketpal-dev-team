@@ -7,4 +7,4 @@ exclude_slash_tmp = false
 exclude_tmpdir_env_var = false
 
 [features]
-codex_hooks = true
+hooks = true
