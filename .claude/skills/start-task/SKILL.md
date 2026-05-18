@@ -28,14 +28,17 @@ First, fetch the issue details:
 gh issue view [number] --repo pocketpal-ai/pocketpal-ai --json title,body,labels,assignees
 ```
 
-Then use the `pocketpal-orchestrator` agent with the issue context:
+Then use the `pocketpal-orchestrator` agent with a self-contained brief built from the issue context:
 
 ```
-Use pocketpal-orchestrator to analyze GitHub issue #[number]
+Use pocketpal-orchestrator: [title from gh]
 
-Issue Title: [title from gh]
-Issue Body: [body from gh]
-Labels: [labels from gh]
+Request:
+[paste the issue body verbatim so the brief stands alone]
+
+Metadata:
+- GitHub issue: #[number]
+- Labels: [labels from gh]
 
 Repository: ./repos/pocketpal-ai
 ```
@@ -58,10 +61,11 @@ The orchestrator will:
 2. Create a worktree at `worktrees/TASK-xxx` using the repo helper scripts
 3. Create a feature branch
 4. Sync the allowlisted gitignored config/env files into the worktree
-5. Classify complexity (standard/complex)
-6. Route to planner with worktree context
+5. Stop with `NEEDS_INPUT` if required information is missing
+6. Classify complexity
+7. Route with worktree context when the brief is approved
 
-After the planner creates a story file, the story critic reviews it automatically. Implementation proceeds if the critic approves (LGTM). Human is only involved if blockers persist after revision.
+After the planner creates a story file, the story critic reviews it automatically. Implementation proceeds if the critic approves (LGTM). Human is involved when blockers persist after revision or when the orchestrator returns `NEEDS_INPUT`.
 
 ## Workflow
 

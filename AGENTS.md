@@ -22,7 +22,7 @@ Pipeline (each arrow is "produces and hands off to"):
 Issue
   │
   ▼
-orchestrator ── intent-brief.md  (asks human for clarifications if needed; blocks until approved; classifies)
+orchestrator ── intent-brief.md  (builds a self-contained brief; emits `NEEDS_INPUT` and stops if required answers are missing; classifies)
   │
   ├── trivial ───────────────────────────────────────────────────────┐
   │                                                                  │
@@ -62,14 +62,19 @@ orchestrator ── intent-brief.md  (asks human for clarifications if needed; b
 
 | Stage | Agent | Output |
 | --- | --- | --- |
-| Intent | `pocketpal-orchestrator` | `workflows/stories/<TASK-ID>/intent-brief.md` |
+| Intent | `pocketpal-orchestrator` | `workflows/stories/<TASK-ID>/intent-brief.md` or a `NEEDS_INPUT` stop with explicit unanswered questions |
 | WHAT | `pocketpal-architect` | `workflows/stories/<TASK-ID>/what.md` (delta on `context/architecture/<flow>.md`) |
 | WHAT review | `pocketpal-architect-critic` | LGTM / HAS_CONCERNS / HAS_BLOCKERS |
 | HOW | `pocketpal-planner` | `workflows/stories/<TASK-ID>/how.md` |
 | HOW review | `pocketpal-plan-critic` | LGTM / HAS_CONCERNS / HAS_BLOCKERS / ARCHITECTURE_DRIFT |
 | Implementation | `pocketpal-implementer` | code + commits + architecture-doc update |
-| Test | `pocketpal-tester` | tests + coverage |
-| Final review | `pocketpal-pipeline-reviewer` | draft PR or REQUEST_CHANGES |
+| Test | `pocketpal-tester` | tests + coverage + durable command/results notes |
+| Final review | `pocketpal-pipeline-reviewer` | draft PR or REQUEST_CHANGES, with artifact-backed verification evidence |
+
+### Headless invocation contract
+
+- Every orchestrator invocation must be a self-contained brief. Include the full request text, acceptance criteria, constraints, and any known baseline/version context in the prompt itself.
+- If information is missing, the orchestrator must stop with `NEEDS_INPUT:` and list the exact unanswered questions. It must not guess, classify, or route downstream until a new invocation supplies those answers.
 
 ### Complexity matrix
 

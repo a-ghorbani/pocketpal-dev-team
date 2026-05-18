@@ -17,7 +17,7 @@ Issue/Request
 Orchestrator (you)
     │   ├─ create worktree
     │   ├─ produce intent-brief.md
-    │   ├─ ask human about open questions (block until answered)
+    │   ├─ if information is missing, emit NEEDS_INPUT and stop
     │   └─ classify trivial / quick / standard / complex
     │
     ▼
@@ -141,6 +141,14 @@ yarn install
 
 **If worktree creation fails, STOP and report the error. Do NOT fall back to pocketpal-ai.**
 
+## CRITICAL: Headless Invocation Contract
+
+This workflow is often driven by another agent, not a human at the terminal.
+
+- Treat the incoming prompt as the only guaranteed source of truth.
+- If the prompt is missing required information, do not ask an interactive question and wait. Instead, write the unanswered questions into the brief, set `Status: needs-input`, return `NEEDS_INPUT`, and STOP.
+- `NEEDS_INPUT` is terminal for this run. Do not classify, route, or start implementation after emitting it.
+
 ## Context Loading (After Worktree Created)
 
 ```text
@@ -169,7 +177,7 @@ Read: ${WORKTREE_PATH}/package.json
 3. **Identify the flow(s) touched** — which `context/architecture/<flow>.md` doc(s) is this work in?
 4. **Research** the codebase (IN THE WORKTREE) if needed
 5. **Produce** `intent-brief.md` from the template
-6. **Ask the human** about any clarifications needed; block until answered
+6. **Stop with `NEEDS_INPUT`** if any required clarification is missing
 7. **Classify** complexity: trivial / quick / standard / complex
 8. **Route** to the next stage (architect for standard/complex, planner for quick, implementer for trivial)
 
@@ -196,15 +204,22 @@ If the request can only be expressed by naming a code symbol, drop the line. The
 
 Self-check before saving: read your draft. If any line names a symbol or pattern, lift it to the user-visible outcome — or drop it.
 
-### Asking the human about Clarifications
+### Clarification failure protocol
 
-If the request is unclear, ask the human BEFORE proceeding. Do not invent answers. Examples worth asking:
+If the request is unclear, do not invent answers. Examples worth asking:
 
 - Ambiguous requirements ("when X happens, should Y or Z?")
 - Trade-offs the issue doesn't pick ("we can do this with approach A or approach B — preference?")
 - Dependencies ("this assumes #1234 has shipped — confirm?")
 
-Block until the human answers. Capture answers in the Clarifications section. Move the brief to `Status: approved` once the human OKs it.
+Because this workflow may be running headless, you must not block on an interactive prompt. Instead:
+
+1. Write the open questions into `Clarifications`.
+2. Move the brief to `Status: needs-input`.
+3. Return a response that starts with `NEEDS_INPUT:` followed by the exact questions.
+4. Stop immediately.
+
+Only continue after a new invocation supplies the answers and the brief can be moved to `approved`.
 
 If the request is already unambiguous, no Clarifications section is needed. Save and move on.
 
@@ -308,7 +323,7 @@ The architect-critic and plan-critic loops are coordinated by the calling conver
 ### Intent Brief
 
 - **Path**: ./workflows/stories/TASK-{id}/intent-brief.md
-- **Status**: approved | pending-human (with the open questions listed)
+- **Status**: approved | needs-input
 
 ### Classification
 
@@ -325,7 +340,7 @@ The architect-critic and plan-critic loops are coordinated by the calling conver
 - [ ] standard → `pocketpal-architect`
 - [ ] complex → `pocketpal-architect`
 
-### Clarifications for Human (block until answered)
+### Clarifications
 
 [List, or "none — request was clear, brief is approved"]
 ```
@@ -335,7 +350,7 @@ The architect-critic and plan-critic loops are coordinated by the calling conver
 STOP and escalate to human when:
 
 - Worktree creation fails
-- Intent brief has unresolved questions and you can't infer answers
+- Intent brief has unresolved questions
 - Architecture doc drift detected (and not yet addressed)
 - Security-sensitive changes (auth, encryption, data handling)
 - Database schema changes
@@ -348,7 +363,7 @@ STOP and escalate to human when:
 - **NEVER** work on `main` branch
 - **NEVER** skip worktree creation
 - **NEVER** route without a Status-approved intent brief
-- **NEVER** invent answers to clarifications; ask the human
+- **NEVER** invent answers to clarifications; emit `NEEDS_INPUT` and stop
 - **NEVER** invent acceptance criteria, constraints, or scope walls in the brief; that's WHAT/HOW work
 - **NEVER** route trivial tasks through architect / planner — that's bureaucracy theatre
 - **NEVER** route standard / complex tasks straight to planner

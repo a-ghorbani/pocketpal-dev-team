@@ -1,8 +1,10 @@
 # Intent: <one-line summary>
 
-**Purpose**: confirm with the human **what** they want built, before any design or implementation begins.
+**Purpose**: confirm **what** the requester wants built, before any design or implementation begins.
 
-The brief is two things: the **request** (verbatim, not paraphrased) and any **clarifications** captured by asking the human. Nothing else. No invented acceptance criteria, no design rules, no coding conventions, no scope walls — those belong in WHAT and HOW, or already live in `context/patterns.md`.
+The brief is two things: the **request** (verbatim, not paraphrased) and any **clarifications**. Nothing else. No invented acceptance criteria, no design rules, no coding conventions, no scope walls — those belong in WHAT and HOW, or already live in `context/patterns.md`.
+
+This file must stand on its own. Downstream agents may not have access to the source tracker or any surrounding control-plane context.
 
 If the request is already unambiguous, save the brief with no Clarifications and move on.
 
@@ -18,7 +20,7 @@ If the request is already unambiguous, save the brief with no Clarifications and
 - **Native Changes**: YES | NO
 - **Visual Confirmation**: YES | NO
 - **Created**: YYYY-MM-DD
-- **Status**: draft | answered | approved
+- **Status**: draft | needs-input | answered | approved
 
 ---
 
@@ -32,14 +34,14 @@ If the request is a one-line prompt ("fix the typo in the welcome modal"), one l
 
 ## Clarifications
 
-Only if the request was unclear. Capture the question you asked the human and their answer. Each Q must block the pipeline until answered.
+Only if the request was unclear. Capture the unresolved question and the supplied answer when available. Each Q blocks the pipeline until answered.
 
 If the request was already clear, omit this section or write "none".
 
 - **Q1**: <question>?
-  - **A1**: <human's answer, or "PENDING">
+  - **A1**: <answer, or "NEEDS_INPUT">
 
-When all questions are answered, move `Status` to `answered`. When the human OKs the brief as a whole, move to `approved` and the next stage runs.
+If answers are missing in a headless run, move `Status` to `needs-input`, return `NEEDS_INPUT`, and stop. When all questions are answered, move `Status` to `answered`. When the brief is confirmed as complete, move to `approved` and the next stage runs.
 
 ---
 
