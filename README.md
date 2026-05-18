@@ -15,6 +15,7 @@ Starter Claude Code setup for [PocketPal AI](https://github.com/a-ghorbani/pocke
 - All work happens in **isolated git worktrees** — never touches main branch directly
 - **AI review loop** catches design flaws before coding; human only needed when AI can't converge
 - **Human checkpoint**: PR review before merge
+- **Headless-safe invocation**: agent-driven orchestrator calls must be self-contained; missing information returns `NEEDS_INPUT`
 - Each agent **verifies its environment** before starting work
 - Supports **light and dark mode** automatically
 
@@ -71,6 +72,8 @@ These files are gitignored by pocketpal-ai, so they won't be committed.
 claude "Use pocketpal-orchestrator: <your task description>"
 ```
 
+When another agent or control plane drives this workflow, pass a self-contained brief in the prompt. Do not pass internal tracker IDs and expect the dev team to look them up. If required information is missing, the orchestrator stops with `NEEDS_INPUT:` instead of guessing.
+
 ## Safety Guarantees
 
 The dev team has **built-in safeguards** to prevent common mistakes:
@@ -117,8 +120,8 @@ claude "Use pocketpal-orchestrator: Fix crash when loading large models on low-m
 # Dependency upgrade (native - will run pod install + builds)
 claude "Use pocketpal-orchestrator: Upgrade llama.rn to latest version"
 
-# From GitHub issue
-claude "Use pocketpal-orchestrator: Implement GitHub issue #123"
+# Self-contained brief from another agent/control plane
+claude "Use pocketpal-orchestrator: Upgrade llama.rn from 0.12.0 to 0.12.1 to pick up the upstream structured-output fix. Keep the change limited to the dependency bump and required lockfile/native refresh. Verify with typecheck, the structured-output regression path, pod install, and iOS/Android native builds."
 ```
 
 ## Agents
