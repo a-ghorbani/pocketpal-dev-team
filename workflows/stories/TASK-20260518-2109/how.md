@@ -16,7 +16,7 @@ This file lives at `workflows/stories/TASK-20260518-2109/how.md`.
 - **Intent Brief**: `./workflows/stories/TASK-20260518-2109/intent-brief.md`
 - **WHAT**: none (quick task)
 - **Architecture doc(s) being updated**: none — no `context/architecture/*.md` doc covers GitHub Actions CI; the library covers app-runtime flows only. No architecture-doc update step required for this quick task.
-- **Status**: draft
+- **Status**: Merged in #729 (`65100d0`, squash) on 2026-05-19. Follow-up ref-input removal merged in #731 (`d1f492a`) on 2026-05-19.
 
 ---
 
@@ -186,3 +186,13 @@ Explicitly out of scope per intent §Out of scope — these do NOT land in this 
 - not a design doc — the design/decisions live in `intent-brief.md` (all settled by the requester)
 - not a justification — `intent-brief.md` is where the request lives
 - not exhaustive — only the steps the implementer needs to restructure one CI file safely
+
+---
+
+## Post-merge notes
+
+Landed across two pocketpal-ai PRs plus dev-team consumer wiring:
+
+1. **PR #729 (`65100d0`, squash) — the planned rework.** Shipped Steps 1–4 as designed. Two non-blocking Copilot review items were adopted before merge in a follow-up commit on the PR branch: workflow-level `permissions: contents: read` (matches `ci.yml` precedent) and `fetch-depth: 0` on checkout.
+2. **PR #731 (`d1f492a`) — follow-up: drop the redundant `workflow_dispatch` `ref` input.** Post-merge it was found the custom `ref` input duplicated GitHub's built-in "Use workflow from" selector for the normal flow and was inconsistent with the consumer (which matches dispatch runs by `head_branch`, the dispatched ref; `workflow_dispatch` input values are not exposed by the GitHub API). The input + `ref:` checkout line were removed; checkout now defaults to the dispatched ref. Bare-SHA targeting dropped; branch/tag selection still covers the merge-ready-PR and release-tag cases. (PR #730 was an earlier attempt at this same change, accidentally built on an orphaned base because #729 was squash-merged; closed and replaced by the clean #731.)
+3. **Deferred item now done (dev-team repo, not pocketpal-ai).** The "wire `fetch-pr-apk.sh` / `run-pr-e2e`" follow-up listed under §Deferred Items was implemented as an opt-in `--e2e` mode: `tools/fetch-pr-apk.sh` (dev-team `c5765cc`), `tools/run-pr-e2e.sh` + `skills/run-pr-e2e/SKILL.md` passthrough (`bbab652`), stale-comment fix (`5296e92`). Prod `ci.yml` path remains the default; `--e2e` resolves the PR head branch and pulls the bridge-enabled `e2e-android-apk` from the newest `e2e-tests.yml` dispatch run for that branch. The `e2e-tests.yml` workflow must be manually dispatched for the PR branch first (it is `workflow_dispatch`-only).
