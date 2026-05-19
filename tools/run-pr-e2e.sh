@@ -10,10 +10,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [[ "${1:-}" == "" || "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   cat <<EOF
-Usage: $0 <pr_number> [--no-fetch] [--specs spec1,spec2,...] [-- <run-e2e.ts args>]
+Usage: $0 <pr_number> [--e2e] [--no-fetch] [--specs spec1,spec2,...] [-- <run-e2e.ts args>]
 
 Fetches the CI APK for a PR and runs E2E tests via run-e2e.ts --skip-build.
 
+  --e2e             Fetch the bridge-ENABLED E2E APK (com.pocketpalai.e2e)
+                    from the newest e2e-tests.yml workflow_dispatch run for
+                    the PR's head branch, instead of the default prod APK
+                    from ci.yml. Required for specs that drive the automation
+                    bridge. The e2e-tests.yml workflow must have been
+                    dispatched with the PR branch first.
   --no-fetch        Skip APK download (reuse an already-installed APK)
   --specs <list>    Comma-separated specs to run in sequence (one invocation
                     each). If omitted, a single default run is performed and
@@ -22,6 +28,7 @@ Fetches the CI APK for a PR and runs E2E tests via run-e2e.ts --skip-build.
 
 Examples:
   $0 688 -- --devices connected
+  $0 688 --e2e --specs quick-smoke -- --devices connected
   $0 688 --specs quick-smoke,load-stress,language -- --devices virtual-only
   $0 688 --no-fetch -- --spec load-stress --devices connected
 
@@ -37,11 +44,16 @@ PR_NUMBER="$1"
 shift
 
 NO_FETCH="false"
+E2E_MODE="false"
 SPECS=""
 E2E_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --e2e)
+      E2E_MODE="true"
+      shift
+      ;;
     --no-fetch)
       NO_FETCH="true"
       shift
@@ -89,7 +101,11 @@ if [[ "$NO_FETCH" == "false" ]]; then
     echo "Error: GITHUB_TOKEN is required (or use --no-fetch)." >&2
     exit 1
   fi
-  POCKETPAL_REPO="$REPO_ROOT" "$SCRIPT_DIR/fetch-pr-apk.sh" "$PR_NUMBER"
+  if [[ "$E2E_MODE" == "true" ]]; then
+    POCKETPAL_REPO="$REPO_ROOT" "$SCRIPT_DIR/fetch-pr-apk.sh" --e2e "$PR_NUMBER"
+  else
+    POCKETPAL_REPO="$REPO_ROOT" "$SCRIPT_DIR/fetch-pr-apk.sh" "$PR_NUMBER"
+  fi
 else
   echo "Skipping APK fetch (--no-fetch)"
 fi

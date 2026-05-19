@@ -29,7 +29,8 @@ From the user's request extract:
    - User can override with an explicit list (e.g. "just quick-smoke") or add excluded specs back explicitly (e.g. "include memory-profile").
 3. **Devices** (optional): `connected` (default), `virtual-only`, `real-only`, `all`, or comma-separated IDs from `devices.json`.
 4. **Skip fetch** (optional): `--no-fetch` if user wants to reuse an already-installed APK.
-5. **MIUI watcher** (optional): if a connected Xiaomi device is detected AND will be used, offer to run `tools/miui-install-watcher.sh` in background.
+5. **E2E APK** (optional): `--e2e` to fetch the bridge-**enabled** E2E build (`com.pocketpalai.e2e`) from the manual `e2e-tests.yml` workflow instead of the default bridge-**stripped** prod APK from `ci.yml`. Use this when the requested specs drive the automation bridge (memory-snapshot / bench-runner / `AUTOMATION_BRIDGE`). Prerequisite: someone must have already dispatched `e2e-tests.yml` with the PR's head branch — it is a manual workflow, not auto-built per PR.
+6. **MIUI watcher** (optional): if a connected Xiaomi device is detected AND will be used, offer to run `tools/miui-install-watcher.sh` in background.
 
 ## Step 1 — Pre-flight
 
@@ -173,11 +174,22 @@ POCKETPAL_REPO="$(realpath "$WORKTREE")" \
   --devices connected
 ```
 
+If the user requested `--e2e`, add it before `--specs`:
+
+```bash
+POCKETPAL_REPO="$(realpath "$WORKTREE")" \
+  bash ./tools/run-pr-e2e.sh "$PR" \
+  --e2e \
+  --specs "$SPECS" \
+  -- \
+  --devices connected
+```
+
 If the user passed an explicit spec list or override, use that instead of the enumerated default.
 
 What the script does:
 
-1. `fetch-pr-apk.sh` — locates the newest completed `ci.yml` run for the PR, downloads `android-release-apk`, drops it at `$WORKTREE/android/app/build/outputs/apk/release/app-release.apk`.
+1. `fetch-pr-apk.sh` — **default (prod)**: locates the newest completed `ci.yml` pull_request run for the PR, downloads `android-release-apk`, drops it at `$WORKTREE/android/app/build/outputs/apk/release/app-release.apk` (bridge-stripped). **`--e2e`**: resolves the PR's head branch, locates the newest completed `e2e-tests.yml` `workflow_dispatch` run for that branch, downloads `e2e-android-apk`, drops it at `$WORKTREE/android/app/build/outputs/apk/e2e/releaseE2e/app-e2e-releaseE2e.apk` (bridge-enabled, `com.pocketpalai.e2e`).
 2. For each spec in `--specs`, runs `yarn e2e:android --skip-build --spec <name> <pass-through>`.
 3. Continues through spec failures so you get full coverage; exits non-zero if any spec failed.
 
@@ -206,6 +218,8 @@ Leave the worktree in place after the run so the user can inspect reports, scree
 | --- | --- |
 | "no completed CI runs found for PR #N" | PR's CI still running/failed. `gh run watch` or pick another run. |
 | "artifact 'android-release-apk' not found" | Android build job failed in that run. `gh run view <id>`. |
+| (`--e2e`) "no completed e2e-tests.yml workflow_dispatch run found for branch" | `e2e-tests.yml` was never dispatched for this PR's branch (it is manual). Dispatch it with the PR branch selected as the workflow ref, wait for completion, then rerun. |
+| (`--e2e`) "artifact 'e2e-android-apk' not found" | The E2E build job failed in that dispatch run. `gh run view <id>`. |
 | `devices.json` not copied | Run `./tools/sync-worktree-config.sh "$WORKTREE"` and re-check. |
 | Connected device isn't in `devices.json` | User updates `repos/pocketpal-ai/e2e/devices.json` themselves, then rerun `./tools/sync-worktree-config.sh "$WORKTREE"` or recreate the worktree. |
 | MIUI device refuses install | Start `miui-install-watcher.sh` for that serial. |
@@ -245,4 +259,5 @@ POCKETPAL_REPO="$(realpath "$WORKTREE")" \
 - `visual-capture` is screenshot generation driven by the story file — not a regression test. See `docs/workflows/visual-capture.md`.
 - `diagnostic` is for device-state inspection, not regressions.
 - `memory-profile` has its own pipeline (`/memory-profile`).
+- `--e2e` fetches a **different app** (`com.pocketpalai.e2e`, bridge-enabled) from the manual `e2e-tests.yml` workflow — the prod `ci.yml` APK has the automation bridge DCE-stripped, so bridge-driven specs only work with `--e2e`. Because `e2e-tests.yml` is `workflow_dispatch`-only and matched by head branch, dispatch it for the PR branch *before* running this skill with `--e2e`.
 - `devices.json` is machine-specific and gitignored inside pocketpal-ai. It lives in `repos/pocketpal-ai/e2e/devices.json` on this machine as the source of truth, and the post-worktree hook copies it into every new worktree.
