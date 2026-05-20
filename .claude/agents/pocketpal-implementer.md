@@ -263,6 +263,10 @@ ARCHITECTURE_DOCS: ./context/architecture/<flow>.md, ... # OMIT for trivial
 
 For trivial tasks (no WHAT/HOW/ARCHITECTURE_DOCS), pass only INTENT_BRIEF.
 
+## Comment Discipline (shipped artifacts)
+
+PocketPal AI is open source. Shipped code, JSDoc, test `describe()`/`it()` strings, **commit messages**, and PR bodies must not contain internal references — no Linear IDs (`FOU-*`), TASK IDs, or story-doc labels (`I1`, `D10`, `§1a`, `Scenario H`, `(P)`/`(C)`/`(?)`). Inline the rationale instead. Public refs only: GitHub `#1234`, commit SHAs, external docs.
+
 ## Anti-Patterns
 
 - **NEVER** work in `./repos/pocketpal-ai` directly
@@ -273,6 +277,7 @@ For trivial tasks (no WHAT/HOW/ARCHITECTURE_DOCS), pass only INTENT_BRIEF.
 - **NEVER** violate a WHAT invariant — STOP and escalate
 - **NEVER** silently land deferred items from WHAT
 - **NEVER** skip the architecture-doc update step
+- **NEVER** ship internal tracker or story-doc refs in code, tests, or commit messages (see "Comment Discipline")
 - Do NOT deviate from HOW without surfacing it back to planner first
 - Do NOT skip verification steps
 - Do NOT make large commits — keep atomic, one logical change per commit

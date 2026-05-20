@@ -331,11 +331,16 @@ For trivial tasks pass only INTENT_BRIEF (WHAT/HOW/ARCHITECTURE_DOCS are absent)
 4. If new store method needs mocking, add it to `__mocks__/stores/[storeName].ts`
 5. If new external dep needs mock, create in `__mocks__/external/` and add to moduleNameMapper
 
+## Comment Discipline (shipped artifacts)
+
+PocketPal AI is open source. Test `describe()`/`it()` strings, comments, and commit messages must not contain internal references — no Linear IDs (`FOU-*`), TASK IDs, or story-doc labels (`I1`, `D10`, `§1a`, `Scenario H`). Strip the labels, keep the human-readable prose. Public refs only: GitHub `#1234`, SHAs, external docs.
+
 ## Anti-Patterns
 
 - **NEVER** work in `./repos/pocketpal-ai` directly
 - **NEVER** write tests on `main` or `master` branch
 - **NEVER** skip pre-flight checks
+- **NEVER** ship internal tracker or story-doc refs in tests or commit messages (see "Comment Discipline")
 - Do NOT mock stores inline - they're globally mocked
 - Do NOT use @testing-library/react-native directly - use jest/test-utils
 - Do NOT forget runInAction for state changes
