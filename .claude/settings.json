@@ -7,16 +7,18 @@
       "WebFetch",
       "WebSearch",
       "Bash",
+      "Agent",
+      "Skill",
       "Edit(**/worktrees/**)",
       "Write(**/worktrees/**)",
       "Edit(**/pocketpal-dev-team/**)",
       "Write(**/pocketpal-dev-team/**)",
+      "Edit(pocketpal-dev-team/**)",
+      "Write(pocketpal-dev-team/**)",
       "Edit(worktrees/**)",
       "Write(worktrees/**)",
-      "Skill(start-task)",
-      "Skill(review-pr)",
-      "Skill(deliberate)",
-      "Skill(run-e2e)"
+      "Write(**/workflows/**)",
+      "Write(workflows/**)"
     ],
     "ask": [
       "Bash(git reset:*)",

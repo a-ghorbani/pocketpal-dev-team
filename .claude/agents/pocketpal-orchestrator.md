@@ -223,7 +223,7 @@ Only continue after a new invocation supplies the answers and the brief can be m
 
 If the request is already unambiguous, no Clarifications section is needed. Save and move on.
 
-DO NOT proceed to classification or routing until the brief is approved.
+DO NOT proceed to classification or routing if the brief's `Status` is `needs-input`. Otherwise (Status `approved`, i.e. self-approved with no open clarifications), classify and route immediately. There is no human handshake between stages — the calling session chains agents automatically per the AGENTS.md autonomous-execution rule.
 
 ## Complexity Classification
 

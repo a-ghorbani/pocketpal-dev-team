@@ -13,6 +13,9 @@ This repo is the workflow control plane for PocketPal AI. The target app code is
 - Keep the four-stage pipeline intact: **Intent → WHAT → HOW → Implementation**.
 - `NATIVE_CHANGES=YES` requires `pod install` + iOS build + Android build before the work can be called ready.
 - Every PR that changes behaviour described in `context/architecture/*.md` must update the relevant doc **in the same PR**. Drift is forbidden.
+- **Run the pipeline autonomously.** After each stage returns, the calling session immediately invokes the next agent in the chain. Do NOT use `AskUserQuestion` or any other interactive prompt between stages. There is no human approval gate between stages. Stop ONLY for:
+  - `NEEDS_INPUT` from the orchestrator (unanswered clarifications in the brief)
+  - `HAS_BLOCKERS` persisting after round 2 of either critic loop
 
 ## Workflow
 
@@ -85,7 +88,7 @@ orchestrator ── intent-brief.md  (builds a self-contained brief; emits `NEED
 | **standard** | Touches a contract (data model, single-writer, rendering, persistence, wire format). Multi-file. Existing flow doc may need a delta. | Full pipeline. |
 | **complex** | Cross-flow, new flow, architecture-changing. Likely creates a new flow doc. | Full pipeline; expect both critic loops to use the full 2-round budget. |
 
-The orchestrator picks the level after the intent brief is approved by the human. When in doubt, classify up.
+The orchestrator picks the level once the brief is written. If `Status: approved` (no clarifications needed) it classifies and routes immediately; if `Status: needs-input` it emits `NEEDS_INPUT` and stops. When in doubt, classify up.
 
 ### Critic loop semantics
 
