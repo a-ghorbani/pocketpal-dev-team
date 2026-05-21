@@ -76,7 +76,7 @@ Tokens
     uiM, uiS                           // Inter Medium
     titleL, titleM, titleS             // Inter Medium
     captionM, captionS                 // Inter
-    headlineH1                         // Fraunces — Latin/Cyrillic only
+    headlineH1                         // Fraunces (Latin-only subset); Cyrillic + non-Latin → Inter
     styledXs                           // Fraunces-Italic
     codeM, codeS                       // JetBrains Mono
 
@@ -155,8 +155,7 @@ The two surfaces **do not cross-feed**. New tokens do not derive from legacy MD3
 - **Theme** — the runtime object consumed via `useTheme()`. A superset of resolved tokens plus MD3/Paper-compat aliases. Built per-render by `buildTheme({mode, language})`.
 - **Mode** — `'light' | 'dark'`. Sourced from `uiStore.colorScheme`. (x1 is gone.)
 - **MD3-compat alias** — a key on `Theme` whose name matches an MD3 / current-code identifier and whose value is preserved verbatim (color) or pinned to today's value (typography). Migration layer, not a permanent API.
-- **Latin script-set** — `latin extended + cyrillic`. The serif accent (Fraunces) is restricted to this set; non-Latin/CJK falls back to Inter (and Inter falls back to system).
-- **Non-Latin locale** — any language whose primary script falls outside the Latin script-set. For PocketPal's supported languages (`en/fa/he/id/ja/ko/ms/ru/uk/zh/zh_Hant`), the non-Latin set is `{fa, he, ja, ko, zh, zh_Hant}`.
+- **Fraunces-fallback set** — locales whose primary script is not covered by the **bundled Fraunces subset**, which is Latin-only (Fontsource's Latin cut — no Cyrillic codepoints). For these, Fraunces tokens fall back to Inter (which ships Latin + Cyrillic; for scripts Inter doesn't cover, the platform falls back to system fonts). For PocketPal's supported languages (`en/fa/he/id/ja/ko/ms/ru/uk/zh/zh_Hant`) the set is `{fa, he, ja, ko, ru, uk, zh, zh_Hant}` — note `ru`/`uk` are included **because the bundled Fraunces has no Cyrillic glyphs**, not because Cyrillic is non-Latin in principle. The code constant is `NON_LATIN_LOCALES` (kept for name stability; the comment there explains the Cyrillic inclusion).
 - **RTL locale** — `{he, fa}`. RTL mirroring is handled by RN's `I18nManager`; tokens are RTL-safe (no directional values baked in).
 
 ---
@@ -235,7 +234,7 @@ No `'x1'` state — x1Theme was removed in FOU-114. UIStore's `colorScheme` type
 2. The non-Latin fallback is a **per-style selection function**:
    - If the style is Fraunces-family AND the active locale is in the non-Latin set → swap the family for the Inter equivalent at the same weight (e.g. `Fraunces-Regular` → `Inter-Regular`).
    - If the style is Fraunces-Italic AND active locale is non-Latin → swap to `Inter-Medium` with `fontStyle: 'italic'` (D5).
-   - If the style is Inter or JetBrains Mono → no swap (Inter covers Latin + Cyrillic; JetBrains Mono is for code blocks regardless of locale).
+   - If the style is Inter or JetBrains Mono → no swap. Inter ships Latin + Cyrillic so it renders `ru`/`uk` directly; for scripts Inter doesn't cover the platform falls back to system fonts. JetBrains Mono is for code blocks regardless of locale.
 3. The selection function is invoked **inside the theme builder**, not at component-call sites. Components remain locale-agnostic.
 4. RTL mirroring (`I18nManager.isRTL`, `writingDirection: 'rtl'`) is **not** encoded in tokens. Tokens contain no directional values. Components handle direction with RN's built-in `start`/`end` semantics in later slices.
 5. The active locale is read from `uiStore.language`. The theme builder subscribes to both signals.
@@ -306,11 +305,11 @@ App renders against dark tokens; pixel-identical to pre-FOU-114 baseline. No lig
 
 ### C. Headline rendered in Fraunces for a Latin locale
 
-`uiStore.language ∈ {en, id, ru, ms, uk}` → `theme.typography.headlineH1.fontFamily === 'Fraunces-Regular'`, 36 / 50 / 400. Verified by `src/theme/tokens/__tests__/typography.test.ts`.
+`uiStore.language ∈ {en, id, ms}` → `theme.typography.headlineH1.fontFamily === 'Fraunces-Regular'`, 36 / 50 / 400. Verified by `src/theme/tokens/__tests__/typography.test.ts`.
 
-### D. Headline falls back to Inter for a non-Latin locale
+### D. Headline falls back to Inter (Fraunces-fallback set)
 
-`uiStore.language ∈ {fa, he, ja, ko, zh, zh_Hant}` → `theme.typography.headlineH1.fontFamily === 'Inter-Regular'`, same metrics. Same test file.
+`uiStore.language ∈ {fa, he, ja, ko, ru, uk, zh, zh_Hant}` → `theme.typography.headlineH1.fontFamily === 'Inter-Regular'`, same metrics. `ru`/`uk` are in this set because the bundled Fraunces subset is Latin-only. Same test file.
 
 ### E. Mode swap is reactive
 
@@ -335,7 +334,7 @@ Prior session: `uiStore.setLanguage('ja')` was called and persisted. App restart
 | Signal | Set by | Read by | True when |
 | --- | --- | --- | --- |
 | `uiStore.colorScheme === 'dark'` | `uiStore.setColorScheme('dark')` | Theme builder; any direct consumer | User opted into dark mode (or system default was dark at first launch). |
-| `uiStore.language` ∈ non-Latin set | `uiStore.setLanguage(lang)` | Theme builder (typography fallback selector, §4d) | User's selected language is in `{fa, he, ja, ko, zh, zh_Hant}`. |
+| `uiStore.language` ∈ Fraunces-fallback set | `uiStore.setLanguage(lang)` | Theme builder (typography fallback selector, §4d) | User's selected language is in `{fa, he, ja, ko, ru, uk, zh, zh_Hant}` (`ru`/`uk` included — bundled Fraunces is Latin-only). |
 | `I18nManager.isRTL` | RN platform / locale change at app launch | Components (later slices) | App is in RTL layout direction. |
 | `isHydrated(uiStore)` (from `mobx-persist-store`) | `makePersistable` lifecycle | `AppWithMigrationWrapper` (gates `<PaperProvider>` mount) | UIStore has finished loading from AsyncStorage. |
 
