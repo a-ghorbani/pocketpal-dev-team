@@ -17,8 +17,8 @@
 - **Visual Confirmation**: YES (proves I1)
 - **Intent Brief**: `./workflows/stories/TASK-20260519-2110/intent-brief.md`
 - **WHAT**: `./workflows/stories/TASK-20260519-2110/what.md`
-- **Architecture doc being created in this PR**: `./context/architecture/theming.md` (in the dev-team control-plane repo, NOT the worktree — per D7)
-- **Status**: draft (revised — round 1 critic)
+- **Architecture doc being created/updated in this PR**: `./context/architecture/theming.md` (dev-team control-plane repo, NOT the worktree — per D7; Round 2 tightens §4c.4 / I10 / §9k, adds §9l, records D12 — Step R3)
+- **Status**: in-review (Round 2 hydration/splash rework R1–R3 implemented 2026-05-21 — Part A only; ready for tester. R4 is a parent-session action.)
 
 ---
 
@@ -42,6 +42,10 @@
 | 13 Lint / typecheck / full Jest / E2E quick-smoke | DONE | (verification commands) | typecheck 0 errors; lint 0 errors (4 pre-existing warnings); 2293/2293 Jest tests pass; iOS quick-smoke PASS in 74.7s |
 | 14 Manual visual diff vs `origin/main` reference build (cold-start chat + settings, light + dark, iOS sim + Android emu) | PARTIAL | (screenshots in story dir) | Feature-branch screenshots captured (`screenshots/`). Reference-build comparison deferred to reviewer per `visual-diff-procedure.md` (disk space ran out trying to host both builds concurrently) |
 | 15 Promote WHAT to `context/architecture/theming.md` (dev-team repo) in the same PR cycle | DONE | (dev-team repo) | Promoted to `context/architecture/theming.md` in the control-plane repo — all (P) → (C), zero (?) markers remain |
+| R1 Replace branded splash with neutral background-only hold (`App.tsx`) | DONE | 82630c6 | Removed `HydrationSplash`/`HydrationSplashContent`/`splashStyles` + `Text`/`useSafeAreaInsets`/`initialWindowMetrics` imports; inline neutral `HydrationHold` View; gate + `SafeAreaProvider` in `App` untouched |
+| R2 Drop tagline-position test; add neutral-contract assertion (`__tests__/App.test.tsx`) | DONE | 2932050 | Dropped tagline test + `useSafeAreaInsets`/`StyleSheet`/`zeroInsets`/inset-reset plumbing; added `LLM Ventures`+`PocketPal` null assertions; 3 gate tests kept; full suite 2367 pass |
+| R3 Tighten `theming.md` (§4c.4/I10/§9k explicit; add §9l; record D12) — dev-team repo | DONE | edc4dc3 (dev-team) | §2/§4c.4/I10/§4f/§9e/§9k tightened; §9l added; D12 recorded + referenced from D11. `(?)` proposal markers: 0 (line 19 is the marker-legend prose, not a token) |
+| R4 (follow-up flag) File D12 as separate Linear ticket | n/a (parent session) | - | NATIVE_CHANGES=YES; NOT in PR #732 |
 
 ---
 
@@ -62,10 +66,10 @@
 | `src/utils/theme.ts` | edit (becomes `Theme` builder; legacy surface verbatim) | §4b / D10 |
 | `src/utils/types.ts` | edit (extend `Theme` with `typography`, `radius`, `stroke`; `ThemeSpacing` gains token keys, keeps `default`) | §1b |
 | `src/hooks/useTheme.ts` | edit | §4b / D2 |
-| `App.tsx` (`AppWithMigrationWrapper`) | edit (hydration gate) | §4c.4 / I10 |
+| `App.tsx` (`AppWithMigrationWrapper`) | edit (hydration gate; **Round 2 R1**: branded splash → neutral hold, drop `Text`/`useSafeAreaInsets`/`initialWindowMetrics`) | §4c.4 / I10 (revised) |
 | `__mocks__/external/mobx-persist-store.js` | edit (add `isHydrated` mock) | §6.H |
-| `__tests__/App.test.tsx` | edit (gate behaviour test) | §6.H |
-| `context/architecture/theming.md` (dev-team repo, NOT worktree) | add | D7 |
+| `__tests__/App.test.tsx` | edit (gate behaviour test; **Round 2 R2**: drop tagline test + dead plumbing, add neutral-contract assertion) | §6.H / Scenario H |
+| `context/architecture/theming.md` (dev-team repo, NOT worktree) | add (Step 15) + edit (**Round 2 R3**: tighten §4c.4/I10/§9k, add §9l, record D12) | D7 / revised I10, D11, D12, §9l |
 
 ---
 
@@ -460,6 +464,86 @@ yarn android:build:e2e                   # same e2e Release path for Android
 - `grep -c '(P)' context/architecture/theming.md` → 0.
 - Sections 0–9 from the WHAT are all present.
 
+
+---
+
+## Hydration / splash REWORK (Round 2, 2026-05-21) — Part A only
+
+**Context.** Steps 10–11 above shipped a *branded* hydration splash (`HydrationSplashContent` rendering `PocketPal` / `LLM Ventures` `Text`, wrapped in its own `SafeAreaProvider` with `initialWindowMetrics`, tagline positioned via `useSafeAreaInsets`) that impersonated the iOS launch storyboard. After four PR-732 review rounds, WHAT was revised: replace the impersonating splash with a **neutral background-only hold**. This rework supersedes Steps 10–11's *splash contract* (the gate placement and `isHydrated` mechanism are unchanged). The steps below are revisions to already-merged-to-branch code in in-review PR #732, not greenfield.
+
+**Design source for every step here**: WHAT "Hydration / splash rework" section + revised **I10 / D11 / §4c.4 / §9e / §9k / Scenario H**, new **§9l**, and deferred **D12**.
+
+**Scope guard**: Part A (neutral JS hold) ONLY. **Part B / D12 (`react-native-bootsplash` native-launch hold) is explicitly NOT planned here** — it is `NATIVE_CHANGES=YES`, scope-expanding, and a separate future task (see Step R4).
+
+`NATIVE_CHANGES=NO` for this rework: it edits a JS `View` and a Jest test only. No fonts, no `react-native.config.js`, no `pod install`, no native build. (The parent FOU-114 slice is still `NATIVE_CHANGES=YES` for the font work in Steps 1–2/12 — that is unaffected and already verified.)
+
+### Step R1: Replace the branded splash with a neutral background-only hold (`App.tsx`)
+
+**Implements**: WHAT §4c.4 (revised), I10 (revised), Scenario H mechanism block, §9k (revised). Supersedes Step 10's splash contract.
+
+**Files**: `App.tsx`.
+
+**Approach**:
+
+1. Delete `HydrationSplash`, `HydrationSplashContent`, and the `splashStyles` `StyleSheet` block (`App.tsx:217–276`), including the branded comment block describing the storyboard impersonation.
+2. In `AppWithMigrationWrapper` (currently `App.tsx:286–295`), replace `<HydrationSplash />` with an inline neutral hold: a single `<View>` with `testID="hydration-splash"`, `flex: 1`, and `backgroundColor` resolved from `Appearance.getColorScheme()` (`'#000000'` for `'dark'`, `'#ffffff'` for `'light'` — matching the common-case `tokens.colors.background`, consistent with the prior splash's color logic). No `Text`, no `SafeAreaProvider`, no `useSafeAreaInsets`, no `initialWindowMetrics`, no spinner (§9k forbids them). Define its style via `StyleSheet.create` (`StyleSheet` is already imported and used by `createStyles`) or inline — implementer's call, but keep it dependency-free.
+3. Remove the now-unused imports from `App.tsx:2,10–14`: `Text` (verified sole use was the splash — `grep -n "Text" App.tsx` shows only the deleted `<Text>` nodes), `useSafeAreaInsets`, and `initialWindowMetrics`. **Keep** `SafeAreaProvider` (still used inside `App` at `App.tsx:85`) and **keep** `StyleSheet`, `Appearance`, `View` (all still used).
+4. Leave the gate condition (`if (!isHydrated(uiStore)) { ... }`) and the `AppWithMigration` fall-through path unchanged (Step 10's mechanism is preserved).
+
+**Verification**:
+
+- `yarn typecheck` passes (no unused-import / missing-symbol errors).
+- `yarn lint` passes (no unused `Text` / `useSafeAreaInsets` / `initialWindowMetrics`).
+- Code-read: `grep -n "PocketPal\|LLM Ventures\|useSafeAreaInsets\|initialWindowMetrics" App.tsx` → 0 hits in the hold path; `grep -n 'SafeAreaProvider' App.tsx` → still present (the `App` usage at :85).
+
+### Step R2: Drop the obsolete tagline-position test; lock the neutral contract (`__tests__/App.test.tsx`)
+
+**Implements**: WHAT Scenario H "automated (preferred)". Supersedes Step 11's test plumbing for the branded splash.
+
+**Files**: `__tests__/App.test.tsx`.
+
+**Approach**:
+
+1. Delete the `'positions the splash tagline at safe-area bottom + 20'` test (`__tests__/App.test.tsx:69–83`) — it asserts on `LLM Ventures` `Text` and `insets.bottom + 20`, both removed in R1.
+2. Remove the now-dead plumbing it was the sole consumer of: the `useSafeAreaInsets` import (line 8), the `StyleSheet` import (line 6), the `zeroInsets` const (line 22), and the `useSafeAreaInsets` mock reset inside `afterEach` (lines 26–27). Keep `afterEach(() => { __setHydrated(true); })` — the other tests still rely on the hydration reset.
+3. **Keep** the three remaining tests as-is: `'renders correctly'` (splash null when hydrated), `'renders hydration splash while UIStore is not hydrated'` (splash present, `Models`/`Settings` absent), and `'mounts the app once UIStore hydration completes'` (splash unmounts + drawer titles appear after `__setHydrated(true)`).
+4. To lock the neutral contract, add one assertion to the `'renders hydration splash while UIStore is not hydrated'` test: `expect(result.queryByText('LLM Ventures')).toBeNull()` (and optionally `queryByText('PocketPal')`), proving the hold carries no branding text. This makes the neutral constraint regression-proof.
+
+**Verification**:
+
+- `yarn test __tests__/App.test.tsx` — all 3 remaining tests green; the new `queryByText('LLM Ventures')` null assertion passes.
+- Re-adding any `<Text>` to the R1 hold would fail the new null assertion (contract is enforced).
+- `yarn test` whole suite green — in particular the `useTheme` suite (unchanged by this rework; axis-separation note in WHAT confirms Scenarios E/F are unaffected).
+
+### Step R3: Tighten `context/architecture/theming.md` (dev-team repo, SAME PR)
+
+**Implements**: WHAT §10 cleanup-reminder-1 (revised), §4c.4 / I10 / §9k explicit neutral constraints, new §9l, recorded D12. This is a *positive tightening* of an already-neutral doc — there is **nothing branded to strip** (the branding only ever lived in `App.tsx` code).
+
+**Files**: `context/architecture/theming.md` in the **dev-team control-plane repo** (`/Users/aghorbani/codes/pocketpal-dev-team/context/architecture/theming.md`), NOT the worktree.
+
+**Approach** (this doc was already promoted via Step 15 / D7; this step edits it in place):
+
+1. **§4c.4 #4** (line ~229) and the **§4f `App.tsx` row** (line ~263) and the **§3 narrative** (line ~33, ~179): state the neutral constraints **explicitly** — the hold is a single full-screen `View`, `backgroundColor` from `Appearance.getColorScheme()`, and MUST contain **no branding (`PocketPal` / `LLM Ventures` labels), no `Text`, no `SafeAreaProvider`, no `useSafeAreaInsets`, no `initialWindowMetrics`**, and does not impersonate any native launch screen. Mirror the WHAT §4c.4 wording.
+2. **I10** (line ~253): append the neutral-hold clause — "the hold rendered while unhydrated is a neutral background-only `View` (no branding/`Text`/safe-area/insets/`initialWindowMetrics`); it does not impersonate any native launch screen."
+3. **§9k** (line ~401, retitle to "Hydration hold visible for too long"): state that the hold is a flat colored `View` matching the system color scheme — no spinner, no branding, no `Text` permitted — and reads as plain "app launching" flat color on both platforms.
+4. **§9e** (line ~377): align with the revised mechanism (neutral hold), referencing §9l.
+5. **Add §9l** ("Android has no native launch screen") after §9k: iOS has a branded storyboard (`UILaunchStoryboardName = LaunchScreen`); Android has none (`styles.xml` `AppTheme` only, no `windowBackground`/Android-12 splash, no splash dep in `package.json`). The neutral hold continues the OS flat launch color on both, matching neither's content because it has none. Closing the Android gap with a real native splash is D12 (deferred).
+6. **Add D12** to §6 Decisions (after D11): native launch-screen hold via `react-native-bootsplash` / RN core splash-hide API; `NATIVE_CHANGES=YES`; adds a new branded launch surface to Android; deferred, human decision; NOT a FOU-114 deliverable.
+7. **D11** (line ~355): append "renders a neutral background-only hold (NOT a branded native-launch impersonation) while unhydrated" and reference D12 as the deferred native-launch alternative.
+
+**Verification**:
+
+- `grep -c '(?)' context/architecture/theming.md` → 0.
+- `grep -n 'no branding\|no `Text`\|initialWindowMetrics\|9l\|D12' context/architecture/theming.md` → the new explicit constraints, §9l, and D12 are present.
+- Lands on the same dev-team branch covering this story (same PR cycle as the code), per D7.
+
+### Step R4 (follow-up action, NOT implementer work): file D12 as a separate Linear ticket
+
+**Implements**: WHAT D12, "Hydration / splash rework" Part B, §10 cleanup-reminder.
+
+This is a **flag for the parent session**, not a code step — the planner and implementer do not create tickets. **Action required of the orchestrator/human**: file a separate Linear ticket for **D12 — hold the native launch screen until hydration via `react-native-bootsplash` (or RN core splash-hide API)**. It is `NATIVE_CHANGES=YES` (new dependency + iOS `pod install` + Android native splash theme/drawable + `react-native.config.js` / native linking), adds a *new* native branded launch surface on Android (which has none today — §9l), and requires its own visual sign-off. It is the architecturally-correct end state but explicitly **out of FOU-114 scope**. Do NOT fold it into PR #732.
+
+
 ---
 
 ## Testable-Contract Coverage
@@ -475,7 +559,7 @@ Every canonical scenario in WHAT §6 has a verification path.
 | §6.E — Mode swap is reactive | Add `src/hooks/__tests__/useTheme.test.ts` (or extend `__tests__/App.test.tsx`): render a tiny consumer, `runInAction(() => uiStore.setColorScheme('dark'))`, assert re-render with dark `theme.colors.background` |
 | §6.F — Language swap is reactive | Same test file: `runInAction(() => uiStore.setLanguage('fa'))`, assert `theme.typography.headlineH1.fontFamily === 'Inter-Regular'` |
 | §6.G — JetBrains Mono for code (locale-agnostic) | Token unit: `typographyForLocale('codeM', 'ja')` → `'JetBrainsMono-Regular'` (no swap). No rendered-pixel check — no consumer is updated in this slice (§9j) |
-| §6.H — Cold start with persisted non-Latin language — no Fraunces flash | Step 11 Jest test on `__tests__/App.test.tsx` (both Test 1 positive-case `hydration-splash` null assertion AND Test 2 splash-rendered-while-not-hydrated assertion) |
+| §6.H — Cold start with persisted non-Latin language — no Fraunces flash | **REWORKED — Step R2** Jest tests on `__tests__/App.test.tsx`: `'renders correctly'` (splash null when hydrated), `'renders hydration splash while UIStore is not hydrated'` (splash present + `Models`/`Settings`/`LLM Ventures` text all null — neutral contract), `'mounts the app once UIStore hydration completes'` (splash unmounts after `__setHydrated(true)`). Supersedes Step 11's branded-splash tests. |
 
 ---
 
