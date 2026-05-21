@@ -6,6 +6,122 @@ Convention: **(C)** = current behaviour from code, **(D)** = decision.
 
 ---
 
+## 0. Trigger & routing
+
+How the matrix run is *reached* and *started*. The runner screen is an E2E-only
+deep-link target; everything in this section is gated by `__E2E__` or lives in
+`src/__automation__/` (reachable only behind `__E2E__`), and Hermes DCE-strips
+it from prod.
+
+### 0a. The start path, end to end (C)
+
+```
+adb am start -a VIEW -d "pocketpal://e2e/benchmark[?autostart=1]"   (e2e flavor)
+   │
+   ▼  delivered two __E2E__-gated ways:
+   •  cold launch: Linking.getInitialURL()   in useDeepLinking.ts effect
+   •  warm launch: Linking 'url' addEventListener in the same effect
+   •  (iOS/DeepLinkService origin: dispatchAutomationDeepLink in
+   •   src/__automation__/deepLink.ts — same routing contract)
+   │
+   ▼  isBenchmarkRunnerUrl(url)  (startsWith 'pocketpal://e2e/benchmark')
+   ▼  parseBenchmarkAutostart(url)  → autostart: boolean
+   │
+   ▼  navigate(ROUTES.BENCHMARK_RUNNER, { autostart })
+   │
+   ▼  BenchmarkRunnerScreen mounts; reads route.params.autostart
+   │
+   ├─ autostart falsey → idle; render bench-run-button; wait for tap
+   │
+   └─ autostart truthy → fire onRun() ONCE after mount (same callback the
+   │                     button's onPress uses)
+   ▼
+   onRun(): single-flight gate (runningRef + status guard)
+            → loadConfig()  (reads pushed bench-config.json)
+            → runMatrix(cfg, setStatus, setLastCell)
+```
+
+- **(C)** The `pocketpal://` scheme is registered ONLY in
+  `android/app/src/e2e/AndroidManifest.xml` (e2e flavor). Prod has no
+  intent-filter for it.
+- **(C)** `isBenchmarkRunnerUrl` uses `startsWith(BENCHMARK_RUNNER_URL_PREFIX)`,
+  so a query string (`?autostart=1`) already routes correctly — it stays the
+  sole routing gate.
+- **(C)** Two independent delivery sites navigate to `BENCHMARK_RUNNER`: the
+  `useDeepLinking` cold/warm Linking effect (Android origin, raw URL) and
+  `dispatchAutomationDeepLink` (iOS/DeepLinkService origin). Both now pass
+  `{ autostart }`.
+
+### 0b. External shape (wire format) (C)
+
+```
+pocketpal://e2e/benchmark             → route only; screen stays idle, waits for tap
+pocketpal://e2e/benchmark?autostart=1 → route AND auto-invoke onRun once after mount
+```
+
+- **Autostart** — a one-shot signal carried on the deep-link URL as
+  `?autostart=1`, instructing the runner screen to invoke its existing start
+  path automatically once after mount, with no touch. Transient navigation
+  param only; never persisted, never echoed into a report.
+- **(D-AS1)** `autostart` is true iff the query value is exactly `"1"` or
+  `"true"` (case-insensitive); any other value, or absence, is false. A narrow
+  allowlist avoids an "autostart=0 still starts" foot-gun and keeps the
+  contract trivially scriptable.
+
+### 0c. Components (C)
+
+| Component | Produces / does | Does NOT do |
+| --- | --- | --- |
+| `parseBenchmarkAutostart` (`navigationConstants.ts`) | pure boolean from a raw URL per D-AS1 | navigate, mutate store, throw, log |
+| `useDeepLinking` Linking effect | navigate to BENCHMARK_RUNNER **with** `{autostart}` | parse beyond the helper; run anything |
+| `dispatchAutomationDeepLink` | navigate to BENCHMARK_RUNNER **with** `{autostart}` from the raw URL | a new start path; read `params.queryParams` for truthiness |
+| `BenchmarkRunnerScreen` | read `route.params.autostart`; call existing `onRun` once if true | a second config-load / runMatrix call |
+| `onRun` (unchanged) | single-flight start: loadConfig → runMatrix | anything new |
+
+### 0d. Hard invariants
+
+- **I-AS1**: Autostart invokes the **same** `onRun` the button uses — exactly
+  one start path into `runMatrix` from the screen. No alternate path loads
+  config or calls `runMatrix` directly.
+- **I-AS2**: Autostart changes nothing the runner measures — `BenchConfig`,
+  cell expansion, per-cell params, fingerprints, and report/row shapes are
+  byte-for-byte what a tap-initiated run produces from the same
+  `bench-config.json`. (Preserves §4h I1–I8.)
+- **I-AS3**: The single-flight gate (`runningRef` + status guard) remains
+  authoritative. Autostart + a concurrent/subsequent tap cannot start two
+  overlapping runs.
+- **I-AS4**: Autostart fires at most once per screen mount; a re-render (the
+  screen is a MobX `observer`) does not re-trigger it.
+- **I-AS5**: All autostart code is E2E-gated. The prod bundle's
+  automation-marker set (CI "DCE sanity check") is unchanged — no new
+  automation marker leaks into prod. `parseBenchmarkAutostart` ships in
+  prod-reachable `navigationConstants.ts` but is pure, side-effect-free, and
+  introduces no marker string.
+- **I-AS6**: A bare `pocketpal://e2e/benchmark` (no query) behaves exactly as
+  before: route, stay idle, wait for tap. Autostart is strictly opt-in.
+
+### 0e. Decisions
+
+| # | Decision | Reasoning (short) |
+| --- | --- | --- |
+| D-AS1 | `autostart` truthy iff query value is `"1"`/`"true"` (case-insensitive) | Narrow allowlist; scriptable; no "autostart=0 still runs" foot-gun. |
+| D-AS2 | `isBenchmarkRunnerUrl` unchanged; only query parsing added at the nav sites | The `startsWith` prefix already tolerates query strings. |
+| D-AS3 | Autostart calls the existing `onRun`; no parallel start path | Same start handler / code path / config as the button; single-flight stays authoritative. |
+| D-AS4 | Reuse the existing trigger path; introduce no new automation marker | Prod DCE-absent marker set is unchanged; no `ci.yml` edit needed. |
+| D-AS5 | Both delivery sites resolve `autostart` from the **raw URL** via one shared pure helper | iOS (DeepLinkService) and Android (Linking) cannot diverge in truthiness. |
+| D-AS6 | Deep-link approach over broadcast-intent / KEYCODE_ENTER | The `pocketpal://` scheme + intent-filter already exist in the e2e manifest, so no `android/` change. |
+
+### 0f. WDIO trigger (C)
+
+The spec (`e2e/specs/benchmark-matrix.spec.ts`) deep-links with
+`?autostart=1` (via `e2e/helpers/bench-runner.ts:deepLinkLaunch`) and polls
+`bench-runner-screen-status` for `complete | error:*`. It no longer taps
+`bench-run-button`; the injected tap was the step HyperOS / MediaTek dropped.
+Live confirmation on a real HyperOS / MediaTek device is the gating evidence
+for the motivating bug and is performed outside this pipeline.
+
+---
+
 ## 1. Data model
 
 ### 1a. `BenchConfig` (on-device JSON; read by the screen, produced by the CLI / spec)
