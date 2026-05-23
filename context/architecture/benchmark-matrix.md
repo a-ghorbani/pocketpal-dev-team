@@ -72,7 +72,7 @@ pocketpal://e2e/benchmark?autostart=1 → route AND auto-invoke onRun once after
 
 | Component | Produces / does | Does NOT do |
 | --- | --- | --- |
-| `parseBenchmarkAutostart` (`navigationConstants.ts`) | pure boolean from a raw URL per D-AS1 | navigate, mutate store, throw, log |
+| `parseBenchmarkAutostart` (`src/__automation__/benchmarkRoute.ts`) | pure boolean from a raw URL per D-AS1 | navigate, mutate store, throw, log |
 | `useDeepLinking` Linking effect | navigate to BENCHMARK_RUNNER **with** `{autostart}` | parse beyond the helper; run anything |
 | `dispatchAutomationDeepLink` | navigate to BENCHMARK_RUNNER **with** `{autostart}` from the raw URL | a new start path; read `params.queryParams` for truthiness |
 | `BenchmarkRunnerScreen` | read `route.params.autostart`; call existing `onRun` once if true | a second config-load / runMatrix call |
@@ -94,9 +94,12 @@ pocketpal://e2e/benchmark?autostart=1 → route AND auto-invoke onRun once after
   screen is a MobX `observer`) does not re-trigger it.
 - **I-AS5**: All autostart code is E2E-gated. The prod bundle's
   automation-marker set (CI "DCE sanity check") is unchanged — no new
-  automation marker leaks into prod. `parseBenchmarkAutostart` ships in
-  prod-reachable `navigationConstants.ts` but is pure, side-effect-free, and
-  introduces no marker string.
+  automation marker leaks into prod. The deep-link protocol surface
+  (`BENCHMARK_RUNNER_URL_PREFIX`, `isBenchmarkRunnerUrl`,
+  `parseBenchmarkAutostart`) lives in `src/__automation__/benchmarkRoute.ts`;
+  the two prod-reachable mount points that import it (`App.tsx` and
+  `src/hooks/useDeepLinking.ts`) are explicitly allow-listed by the
+  `.eslintrc` `no-restricted-imports` rule.
 - **I-AS6**: A bare `pocketpal://e2e/benchmark` (no query) behaves exactly as
   before: route, stay idle, wait for tap. Autostart is strictly opt-in.
 
