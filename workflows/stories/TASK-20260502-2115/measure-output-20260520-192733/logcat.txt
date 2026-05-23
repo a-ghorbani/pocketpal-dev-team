@@ -1,0 +1,76 @@
+--------- beginning of perf
+--------- beginning of main
+--------- beginning of system
+05-20 19:27:53.855 I/ReactNativeJS(10184): '[stream-debug] PendingIndicatorView effect', { isStopping: false, ts: 5532396038 }
+05-20 19:27:53.935 I/RNLlama (10184): loadPrompt:110 
+05-20 19:27:53.935 I/RNLlama (10184): loadPrompt: prompt_tokens = 1 4093 198 19161 253 1035 986 5861 1977 563 7164 3132 2039 7621 690 260 1867 827 3822 929 28 351 12999 3870 28 2701 840 20626 28 284 5890 282 11367 5410 30 7285 469 655 284 1453 800 18092 30 2 198 1 520 9531 198 
+05-20 19:27:53.935 I/RNLlama (10184): loadPrompt:215 [DEBUG] Input processed: n_past=0, embd.size=49, num_prompt_tokens=49, has_media=0
+05-20 19:28:04.994 W/ReactNativeJS(10184): [🍉] The writer you're trying to run (unnamed) can't be performed yet, because there are 3 other readers/writers in the queue.
+05-20 19:28:04.994 W/ReactNativeJS(10184): 
+05-20 19:28:04.994 W/ReactNativeJS(10184): Current writer: unnamed.
+05-20 19:28:04.994 W/ReactNativeJS(10184): 
+05-20 19:28:04.994 W/ReactNativeJS(10184): If everything is working fine, you can safely ignore this message (queueing is working as expected). But if your readers/writers are not running, it's because the current writer is stuck.
+05-20 19:28:04.994 W/ReactNativeJS(10184): Remember that if you're calling a reader/writer from another reader/writer, you must use callReader()/callWriter(). See docs for more details.
+05-20 19:28:04.995 I/ReactNativeJS(10184): '[🍉] Enqueued writer:', [Function]
+05-20 19:28:04.995 I/ReactNativeJS(10184): '[🍉] Running writer:', [Function]
+05-20 19:28:10.656 I/ReactNativeJS(10184): '[stream-debug] stop-pressed', { totalMs: 17526,
+05-20 19:28:10.656 I/ReactNativeJS(10184):   consumer: 
+05-20 19:28:10.656 I/ReactNativeJS(10184):    { events: 204,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      tokens: 202,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      toolCallTokens: 0,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      avgEventMs: 77.07,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      maxEventMs: 172.98 },
+05-20 19:28:10.656 I/ReactNativeJS(10184):   queue: { shifts: 0, waiters: 203, maxDepth: 0, bufferedPct: 0 },
+05-20 19:28:10.656 I/ReactNativeJS(10184):   toolCallDelta: { count: 0, totalMs: 0, avgMs: 0, maxArgsLen: 0 },
+05-20 19:28:10.656 I/ReactNativeJS(10184):   chunkCallback: { count: 202 },
+05-20 19:28:10.656 I/ReactNativeJS(10184):   stop: 
+05-20 19:28:10.656 I/ReactNativeJS(10184):    { tapToHandlerMs: 0,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      nativeTapToHandlerMs: 692,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      writeToCommitMs: null,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      abortToFirstChunkMs: null,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      abortToStopResolveMs: null,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      tapToLastChunkMs: 62,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      chunksAfterAbort: 0 },
+05-20 19:28:10.656 I/ReactNativeJS(10184):   onprogressAfterAbort: { count: 0, totalMs: 0 },
+05-20 19:28:10.656 I/ReactNativeJS(10184):   heartbeat: 
+05-20 19:28:10.656 I/ReactNativeJS(10184):    { count: 34,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      maxGapMs: 8000.4,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      over100ms: 8,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      over250ms: 4,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      over500ms: 3,
+05-20 19:28:10.656 I/ReactNativeJS(10184):      stopTapGapMs: 5532 } }
+05-20 19:28:10.737 I/ReactNativeJS(10184): '[stream-debug] PendingIndicatorView effect', { isStopping: true, ts: 5532412921 }
+05-20 19:28:10.883 W/ReactNativeJS(10184): [🍉] The writer you're trying to run (unnamed) can't be performed yet, because there are 3 other readers/writers in the queue.
+05-20 19:28:10.883 W/ReactNativeJS(10184): 
+05-20 19:28:10.883 W/ReactNativeJS(10184): Current writer: unnamed.
+05-20 19:28:10.883 W/ReactNativeJS(10184): 
+05-20 19:28:10.883 W/ReactNativeJS(10184): If everything is working fine, you can safely ignore this message (queueing is working as expected). But if your readers/writers are not running, it's because the current writer is stuck.
+05-20 19:28:10.883 W/ReactNativeJS(10184): Remember that if you're calling a reader/writer from another reader/writer, you must use callReader()/callWriter(). See docs for more details.
+05-20 19:28:10.884 I/ReactNativeJS(10184): '[🍉] Enqueued writer:', [Function]
+05-20 19:28:10.884 I/ReactNativeJS(10184): '[🍉] Running writer:', [Function]
+05-20 19:28:11.190 I/ReactNativeJS(10184): '[stream-debug] run-finished', { totalMs: 18060,
+05-20 19:28:11.190 I/ReactNativeJS(10184):   consumer: 
+05-20 19:28:11.190 I/ReactNativeJS(10184):    { events: 206,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      tokens: 202,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      toolCallTokens: 0,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      avgEventMs: 77.79,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      maxEventMs: 172.98 },
+05-20 19:28:11.190 I/ReactNativeJS(10184):   queue: { shifts: 0, waiters: 203, maxDepth: 0, bufferedPct: 0 },
+05-20 19:28:11.190 I/ReactNativeJS(10184):   toolCallDelta: { count: 0, totalMs: 0, avgMs: 0, maxArgsLen: 0 },
+05-20 19:28:11.190 I/ReactNativeJS(10184):   chunkCallback: { count: 389 },
+05-20 19:28:11.190 I/ReactNativeJS(10184):   stop: 
+05-20 19:28:11.190 I/ReactNativeJS(10184):    { tapToHandlerMs: 0,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      nativeTapToHandlerMs: 692,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      writeToCommitMs: 84,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      abortToFirstChunkMs: 87,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      abortToStopResolveMs: 86,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      tapToLastChunkMs: -233,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      chunksAfterAbort: 187 },
+05-20 19:28:11.190 I/ReactNativeJS(10184):   onprogressAfterAbort: { count: 0, totalMs: 0 },
+05-20 19:28:11.190 I/ReactNativeJS(10184):   heartbeat: 
+05-20 19:28:11.190 I/ReactNativeJS(10184):    { count: 40,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      maxGapMs: 8000.4,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      over100ms: 9,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      over250ms: 5,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      over500ms: 4,
+05-20 19:28:11.190 I/ReactNativeJS(10184):      stopTapGapMs: 5532 } }

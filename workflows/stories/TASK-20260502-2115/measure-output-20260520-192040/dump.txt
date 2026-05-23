@@ -1,0 +1,4 @@
+05-20 19:21:07.158 I/ReactNativeJS(10184): '[stream-debug] PendingIndicatorView effect', { isStopping: false, ts: 5531989341 }
+05-20 19:21:34.623 I/ReactNativeJS(10184): '[stream-debug] stop-pressed', { totalMs: 28019,
+05-20 19:21:34.705 I/ReactNativeJS(10184): '[stream-debug] PendingIndicatorView effect', { isStopping: true, ts: 5532016889 }
+05-20 19:21:35.367 I/ReactNativeJS(10184): '[stream-debug] run-finished', { totalMs: 28764,
