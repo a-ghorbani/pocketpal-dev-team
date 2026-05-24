@@ -81,14 +81,24 @@ Tokens
     codeM, codeS                       // JetBrains Mono
 
   spacing: TokenSpacing
-    none: 0, xxs: 2, xs: 4, s: 8, sm: 12, m: 16, ml: 20, l: 24
+    none: 0, xxs: 2, xs: 4, s: 8, sm: 12, m: 16, ml: 20, l: 24, xl: 32   // NEW: xl
 
   radius: TokenRadius
-    none: 0, xxs: 2, xs: 4, s: 8, sm: 12, m: 16, ml: 20, l: 32, xl: 40
+    none: 0, xxs: 2, xs: 4, s: 8, m: 12, ml: 16, l: 20, xl: 32, xxl: 40
+    //  ↑ no `sm` step (Figma jumps S(8)→M(12));
+    //    `m` is 12 (was 16), `ml` is 16 (was 20), `l` is 20 (was 32),
+    //    `xl` is 32 (was 40), `xxl` is 40 (new).
+    //    Mirrors canonical Figma Radius/None|XXS|XS|S|M|ML|L|XL|XXL.
 
   stroke: TokenStroke
-    hairline: 0.5, s: 1, m: 1.5, l: 3
+    xs: 0.5, sm: 1, md: 1.5, lg: 3
+    // Renamed from {hairline, s, m, l} to mirror canonical Figma Stroke/*.
 ```
+
+Two key correctness facts that motivate the rename:
+
+- **Single source of truth = Figma name.** A Phase 3 designer spec saying "Radius/L" maps directly to `theme.radius.l = 20`. Before the rename, that spec would have read `theme.radius.l = 32`, which is the Figma value for `Radius/XL`. The rename closes a silent visual-regression vector.
+- **No `radius.sm` exists** — Figma's `Radius/*` collection has no SM step (it jumps S(8) → M(12)). Code that previously typed `theme.radius.sm` had no canonical meaning; the rename surfaces that as a compile error.
 
 Stored on disk: nothing. Tokens are pure code. Mode selection is read from `uiStore.colorScheme` (C — persisted by `mobx-persist-store` with **AsyncStorage** backend, `src/store/UIStore.ts:5,73-84`). Locale selection is read from `uiStore.language` (same store, same backend).
 
