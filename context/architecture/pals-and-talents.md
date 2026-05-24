@@ -88,12 +88,9 @@ local_pals (WatermelonDB)                         // (C) src/database/schema.ts
 (`src/database/migrations.ts:133-145`). Existing pals get `NULL` and behave as
 "no talents, no greeting". `LocalPal.toPal()` parses both columns defensively.
 
-(?) `LocalPal.greetingObject` (`src/database/models/LocalPal.ts:128-134`)
-under-types the parsed payload as `{text: string} | undefined`, even though the
-on-disk JSON and the `Pal` type (`src/types/pal.ts:128-136`) both include
-`suggestedPrompts?: string[]`. The runtime field survives the round-trip
-because `JSON.parse` returns `any` and consumers read it through `Pal`, not
-`LocalPal`. Tighten the model getter in a follow-up.
+(C) `LocalPal.greetingObject` (`src/database/models/LocalPal.ts:128-134`)
+returns `Pal['greeting']` directly via `JSON.parse`; defensive against
+malformed JSON (returns `undefined` on parse failure).
 
 ### 1d. Two terms used throughout
 
