@@ -1,238 +1,115 @@
 ---
 name: run-e2e
-description: Run E2E tests for a PR, branch, or main across multiple devices on the test laptop.
+description: Build PocketPal AI from source in a worktree and run E2E specs against the local build. For testing the CI-built APK of a PR instead, use /run-pr-e2e.
 user-invocable: true
-argument-hint: "[PR #number | branch-name | main] [options]"
+argument-hint: "[branch-name | main] [options]"
 ---
 
-# Run E2E Tests
+# Run E2E Tests (local build)
 
-You are running E2E tests for PocketPal AI on the local test machine.
+You are building PocketPal AI from source in a worktree and running E2E specs against the local build. If the user wants to verify a PR matches the bit-identical artifact CI produced — without a local build — use `/run-pr-e2e` instead; that skill covers the CI-artifact path and defers to this one for everything generic.
 
-## Input
+## Project facts (not exposed by `--help`)
 
-Request: $ARGUMENTS
+1. **No CI gate on E2E.** `.github/workflows/e2e-tests.yml` is a manual `workflow_dispatch` that only uploads the Android APK as an artifact; no specs are executed. Treat "E2E green" claims outside this skill as unverified until reproduced locally.
+2. **Android uses a separate `e2e` flavor**, package `com.pocketpalai.e2e`, output at `android/app/build/outputs/apk/e2e/releaseE2e/app-e2e-releaseE2e.apk`. The prod APK (`outputs/apk/release/app-release.apk`) is non-debuggable and has the `src/__automation__/` bridge DCE-stripped — specs against it silently no-op. Always build via `yarn android:build:e2e`, never `assembleRelease`.
+3. **iOS has no separate flavor.** Same bundleId as prod (`ai.pocketpal`), differentiated only by the `__E2E__` define from `babel.config.js: transform-define` driven by `E2E_BUILD=true`. `yarn ios:build:e2e` is the only correct build command for sim tests; `yarn ios:build:ipa` for iOS devices.
+4. **Reset behaviour differs across platforms.** iOS uses `noReset:false, fullReset:false` — install state (including downloaded models) is preserved across runs. Android uses `fullReset:true` — the app is reinstalled every run and any downloaded model is lost. Plan timing accordingly.
+5. **`e2e/devices.json` is gitignored and per-worktree.** Verify the Android `appPath` matches the e2e-flavor output (`../android/app/build/outputs/apk/e2e/releaseE2e/app-e2e-releaseE2e.apk`). A wrong path surfaces as `WebDriverError: The application at '...' does not exist`, even when the build itself succeeded.
+6. **`TIMEOUTS.appReady = 60s`** in `e2e/fixtures/models.ts`. Most specs block on the `chat-input` testID for 60s before doing anything else. A broken first-paint manifests as `no such element 'chat-input'` after roughly the appReady timeout.
 
-## Parse Input
+## Available specs
 
-Extract the following from the user's request:
+Pick the smallest spec that exercises what changed. Defaults to `quick-smoke`.
 
-1. **Source** (required): What code to test
-   - `PR #567` or `#567` or `567` → PR number
-   - `feature/xyz` or any branch name → branch
-   - `main` → main branch (default if not specified)
+### Core (`e2e/specs/*.spec.ts`)
 
-2. **Platform** (optional): `ios`, `android`, or `both` (default: `ios`)
+| Spec | Tests | Use when |
+|---|---|---|
+| `quick-smoke` | Full user journey on the smallest model (SmolLM2-135M): drawer → Models → HF search → download → load → chat → assert tokens/sec timing. | Default sanity gate. First thing to run before anything more targeted. |
+| `load-stress` | Multiple load/unload cycles with inference between each. Per-model via `TEST_MODELS`. | Reproducing or guarding against crashes on model reload. |
+| `benchmark-matrix` | Drives the in-app `BenchmarkRunnerScreen` across `{models} × {quants} × {backends}`; writes canonical JSON via the automation bridge. Android-only, requires the `e2e` flavor APK. | Perf regression sweeps; producing a report for `scripts/benchmark-compare.ts`. |
+| `memory-profile` | Captures memory at 7 lifecycle checkpoints (app_launch → models_screen → chat_screen → model_loaded → chat_active → post_chat_idle → model_unloaded); writes canonical JSON for the `/memory-profile` pipeline. | Memory regression sweeps; producing a report for `scripts/memory-compare.ts`. |
+| `visual-capture` | Parametrised screenshot generator driven by the `VISUAL_CAPTURES` env var. Skips silently if the var is unset — it is not a regression test. | Producing PR screenshots from a story file (`docs/workflows/visual-capture.md`). |
+| `diagnostic` | Dumps Appium page-source XML to `e2e/debug-output/` at each navigation step. Not a regression test. | Debugging "no such element" failures by inspecting what Appium actually sees. |
 
-3. **Devices** (optional): `all`, `virtual-only`, `real-only`, `connected`, or comma-separated device IDs (default: `virtual-only`)
+### Feature (`e2e/specs/features/*.spec.ts`)
 
-4. **Spec** (optional): `quick-smoke`, `load-stress`, `diagnostic`, `language`, or `all` (default: `quick-smoke`)
+| Spec | Tests | Use when |
+|---|---|---|
+| `quick-smoke` already covers the core chat path. Run a feature spec instead when the change is localised to that feature. ||
+| `thinking` | Loads qwen3-0.6b, toggles thinking, asserts the "Reasoning" bubble appears and disappears. | Touching the thinking toggle, reasoning bubble, or thinking-capable inference path. |
+| `language` | Cycles every supported language, asserts the UI updates. No model load required. | l10n changes, language switcher, `src/locales/` work. |
+| `draft-autosave` | Asserts unsent input text persists across session switches and clears on send. | Changes to chat input draft persistence or session-switch behaviour. |
+| `remote-server` | Adds a remote OpenAI-compatible model from the Models FAB, chats with it, deletes the server. Requires a reachable OpenAI-compatible server. | Remote-model / remote-server changes. |
+| `talent-tool-use` | Creates a Pal with `render_html` enabled, sends a prompt, asserts the HTML preview bubble appears. Uses Qwen3-1.7B with temperature=0/seed=1 for determinism. | Talent registry, tool-use plumbing, HTML preview surface. |
 
-5. **Skip build** (optional): If user says "skip build" or "no build" → `--skip-build`
+`benchmark-matrix`, `memory-profile`, and `visual-capture` are deliberately excluded from the `/run-pr-e2e` default-spec list because they are measurement infrastructure, not regression gates.
 
-6. **Other flags** (optional): Parse any additional flags the user mentions:
-   - "each model" or "per model" → `--each-model`
-   - "each device" or "per device" → `--each-device`
-   - "all models" → `--all-models`
-   - "dry run" → `--dry-run`
-   - specific models → `--models model1,model2`
+## Parse input
 
-## Step 1: Kill Stale Appium Processes
+Extract from `$ARGUMENTS`:
 
-Appium processes from previous runs can hold port 4723. Always clean up first:
+- **Worktree** (optional): if a branch name is given, check it out in a dedicated `./worktrees/E2E-<safe-name>` via `./tools/create-worktree.sh ... --detach --ref origin/<branch>`. If `main`, use `./worktrees/E2E-main`. If omitted, use the current task worktree if there is one; otherwise stop and ask the user which worktree. (For the PR-CI-artifact path, redirect to `/run-pr-e2e`.)
+- **Platform**: `ios`, `android`, `both` (default: `both`).
+- **Devices**: `all` / `virtual-only` / `real-only` / `connected` / comma-separated IDs (runner default: `all`).
+- **Spec**: any basename from the catalogs above (the runner resolves both `specs/` and `specs/features/`); default `quick-smoke`.
+- **Flags**: pass through `--each-model`, `--each-device`, `--all-models`, `--skip-build`, `--dry-run`, `--models a,b`. Anything else: consult `npx ts-node scripts/run-e2e.ts --help`.
 
-```bash
-lsof -ti:4723 | xargs kill -9 2>/dev/null || true
-```
+## Step 1 — Pre-flight
 
-## Step 2: Determine the Test Directory
+Verify before starting a run:
 
-The E2E tests can run from two locations depending on context:
+- **Worktree**: reuse an existing one for the branch when present; otherwise create with `./tools/create-worktree.sh` (`--detach --ref origin/<branch>`, or `--ref origin/main` for main). Never test inside `repos/pocketpal-ai/` — it's a read-only submodule.
+- **Local branch is in sync with origin**. Stale checkouts produce results that don't reflect the code being shipped.
+- **iOS simulator is booted** (the runner does not boot it).
+- **Android emulator or device is attached and showing as `device`** in `adb devices`.
+- **Appium ports 4723 and 4724 are free** — the WDIO config spawns Appium on these (see `wdio.{ios,android}.local.conf.ts`); a leftover daemon from a previous run causes session creation to hang.
 
-### Option A: Active Worktree (preferred when working on a task)
+## Step 2 — One-time worktree setup
 
-If there is an active worktree for the current task (e.g., `worktrees/TASK-xxx`), AND the requested source matches the worktree's branch, run tests directly from the worktree. This avoids touching the shared `repos/pocketpal-ai` submodule.
+Each fresh worktree needs three project-specific things beyond root `yarn install`:
 
-**How to detect**: Check if a worktree exists for the current task:
+- **`e2e/` has its own `package.json`** (WDIO + Appium client deps). Run `yarn install` separately in that subdirectory.
+- **`ios/` has a `Gemfile`** that pins `xcpretty` and the cocoapods version. Install via Bundler before `pod install`, otherwise `yarn ios:build:e2e` fails opaquely — xcpretty swallows the real xcodebuild error.
+- **`pod install`** after any `Podfile.lock` change (llama.rn upgrades, new native deps).
 
-```bash
-# Look for active worktrees
-ls ./worktrees/TASK-*/package.json 2>/dev/null
-```
+Then verify `e2e/devices.json` (gitignored, per-worktree, copied from `devices.template.json` on creation). The Android `appPath` must be `../android/app/build/outputs/apk/e2e/releaseE2e/app-e2e-releaseE2e.apk`. Anything else — most often the prod-release path — fails Android session creation with `APK does not exist`.
 
-**When to use the worktree**:
+## Step 3 — Run the pipeline
 
-- The user invokes `/run-e2e` without specifying a source (implicit: test current work)
-- The user specifies a branch that matches the worktree's branch (e.g., `feature/TASK-xxx`)
-- The user is in the middle of a task workflow (orchestrator → planner → implementer → **E2E**)
+Entry point: `npx ts-node scripts/run-e2e.ts` from inside `e2e/`. Required flags: `--platform <ios|android|both>` and `--spec <name>`. Everything else is documented in `--help`.
 
-If using the worktree:
+Non-obvious flag semantics:
 
-```bash
-TEST_DIR=./worktrees/TASK-xxx
-cd "${TEST_DIR}"
-git log --oneline -1
-git branch --show-current
-```
+- **`--dry-run`** first whenever changing platform/devices/spec — it prints the matched targets and per-device WDIO invocations without spending the build budget.
+- **`--each-device` is required** to iterate over more than one device from `devices.json`. Passing `--devices a,b` alone does *not* imply `--each-device`; without it the runner picks the default device only.
+- **Builds are sequential** (iOS first, then Android). Cold builds typically run ~10-15 min iOS + ~3-5 min Android per worktree.
 
-Skip to Step 3 (no checkout needed — the code is already there).
+## Step 4 — Report
 
-### Option B: Dedicated E2E Worktree (for independent/standalone runs)
+Reports land in `e2e/reports/<timestamp>/`:
 
-Create a dedicated E2E worktree when testing code that is not already in an active task worktree:
+- `summary.json` — overall pass/fail + per-device breakdown.
+- `junit-results.xml` — merged JUnit across devices.
+- `<device-id>/[<model-id>/]` subdirectories — per-run JUnit + `screenshots/failure-*.png`.
 
-- `main` branch
-- A PR number
-- A branch with no corresponding worktree
+For each failure, open the per-device subdirectory and look at the failure screenshot and the per-device JUnit before drilling into the spec.
 
-Never checkout, build, or test directly inside `repos/pocketpal-ai/`.
+## Failure-mode lookup
 
-**For a PR:**
-
-```bash
-PR=[number]
-cd ./repos/pocketpal-ai
-PR_BRANCH=$(gh pr view "$PR" --json headRefName --jq '.headRefName')
-git fetch origin "$PR_BRANCH"
-cd - >/dev/null
-./tools/create-worktree.sh "PR-${PR}-e2e" --detach --ref "origin/$PR_BRANCH"
-TEST_DIR="./worktrees/PR-${PR}-e2e"
-```
-
-**For a branch:**
-
-```bash
-BRANCH=[branch-name]
-SAFE_NAME=$(printf '%s' "$BRANCH" | tr '/ ' '--')
-cd ./repos/pocketpal-ai
-git fetch origin "$BRANCH"
-cd - >/dev/null
-./tools/create-worktree.sh "E2E-${SAFE_NAME}" --detach --ref "origin/$BRANCH"
-TEST_DIR="./worktrees/E2E-${SAFE_NAME}"
-```
-
-If a matching worktree already exists, reuse it:
-
-```bash
-WORKTREE=$(git -C ./repos/pocketpal-ai worktree list | grep "[branch-name]" | awk '{print $1}')
-TEST_DIR="${WORKTREE}"
-cd "${TEST_DIR}"
-```
-
-**For main:**
-
-```bash
-./tools/create-worktree.sh E2E-main --detach --ref origin/main
-TEST_DIR="./worktrees/E2E-main"
-```
-
-After creating or selecting the worktree, sync allowlisted config and confirm:
-
-```bash
-./tools/sync-worktree-config.sh "${TEST_DIR}"
-cd "${TEST_DIR}"
-git log --oneline -1
-git branch --show-current || echo "(detached HEAD)"
-```
-
-## Step 3: Install Dependencies
-
-```bash
-cd "${TEST_DIR}"
-yarn install
-cd e2e && yarn install
-```
-
-## Step 4: Run the E2E Test Runner
-
-From the `e2e/` directory, run with the parsed flags:
-
-```bash
-cd "${TEST_DIR}/e2e"
-npx ts-node scripts/run-e2e.ts \
-  --platform [ios|android|both] \
-  --spec [quick-smoke|load-stress|diagnostic|language|all] \
-  [--devices all|virtual-only|real-only|connected|device-ids] \
-  [--each-device] \
-  [--each-model] \
-  [--models model1,model2] \
-  [--all-models] \
-  [--skip-build] \
-  [--dry-run]
-```
-
-### Available Flags
-
-| Flag | Values | Default | Description |
-| --- | --- | --- | --- |
-| `--platform` | `ios`, `android`, `both` | _(required)_ | Which platform(s) to test |
-| `--spec` | `quick-smoke`, `load-stress`, `diagnostic`, `language`, `all` | `quick-smoke` | Which test spec to run |
-| `--models` | comma-separated model IDs | _(all)_ | Specific model(s) to test |
-| `--each-model` | _(flag)_ | off | Iterate spec once per model (isolated process) |
-| `--all-models` | _(flag)_ | off | Include crash-repro models in the pool |
-| `--devices` | `all`, `virtual-only`, `real-only`, `connected`, or IDs | `all` | Device filter (implies `--each-device`) |
-| `--each-device` | _(flag)_ | off | Iterate across devices from `devices.json` |
-| `--mode` | `local`, `device-farm` | `local` | Execution mode |
-| `--skip-build` | _(flag)_ | builds by default | Skip app builds, reuse existing |
-| `--dry-run` | _(flag)_ | off | Print what would run without executing |
-| `--report-dir` | path | auto-timestamped | Override report output directory |
-| `--list-models` | _(flag)_ | off | List all available models and exit |
-
-**IMPORTANT**: The runner will:
-
-- Build the app (unless `--skip-build`)
-- Run tests on each matched device/model combination
-- Generate reports in a timestamped directory under `e2e/reports/`
-
-This can take a long time (10-30+ minutes depending on builds and device count).
-
-## Step 5: Report Results
-
-After the runner completes, read the summary:
-
-```bash
-# Find the latest report directory
-ls -td "${TEST_DIR}/e2e/reports"/*/ | head -1
-```
-
-Read the `summary.json` from that directory and present:
-
-- Overall pass/fail status
-- Per-device/model results (device name, platform, pass/fail, duration)
-- Total duration
-- If any failures: read the JUnit XML or screenshots for details
-
-## Examples
-
-```
-/run-e2e                              # test current worktree, smoke, virtual-only
-/run-e2e language                     # test current worktree, language spec
-/run-e2e PR #567
-/run-e2e #567 ios
-/run-e2e main android virtual-only
-/run-e2e feature/my-branch skip build
-/run-e2e 567 language
-/run-e2e main ios each model
-/run-e2e main ios each device virtual-only
-/run-e2e main dry run
-```
-
-## Error Handling
-
-- **Stale Appium on port 4723**: Kill it before running (Step 1 handles this)
-- **Branch in worktree**: Use the worktree directly instead of detached HEAD in the submodule (Step 2 handles this)
-- **`devices.json` missing**: Tell user to `cp devices.template.json devices.json` and configure it
-- **App binary not found**: Need to build first — remove `--skip-build` or run `yarn ios:build:e2e` / `yarn android:build:e2e` manually
-- **Build fails**: Report the build error and suggest `--skip-build` if a previous build exists
-- **Device test fails**: Runner continues to next device, report all results at the end
-- **Checkout fails**: Report the error (PR not found, branch doesn't exist, etc.)
+| Symptom | Likely cause |
+|---|---|
+| `WebDriverError: The application at '...app-release.apk' does not exist` | `e2e/devices.json` Android `appPath` points at the prod build instead of the e2e flavor. Fix the path; the build itself is fine. |
+| iOS red box `No script URL provided. unsanitizedScriptURLString = (null)` | The installed app on the sim is a Debug build expecting Metro, not the Release `.app` from the build. Uninstall and reinstall from the new `.app`. |
+| `no such element 'chat-input'` ~appReady seconds after session start (iOS) | First-paint is broken, or the install on the sim is from a different build than the `.app` on disk. Confirm install matches build before deeper investigation. |
+| iOS `BUILD FAILED` with no error text above it | Bundler gems (specifically `xcpretty`) are missing in `ios/`. Install Bundler gems, then retry. |
+| iOS build succeeds but the `.app` won't launch after a `Podfile.lock` change | Pods are stale. Re-run `pod install`. |
+| Android Appium connects but session creation hangs >60s | A stale Appium daemon is holding port 4723/4724. Free the ports and retry. |
+| Run times shorter than the spec's workload would imply | iOS preserves install state, so a previously downloaded model short-circuits the download step. Compare timings only with a clean install. |
 
 ## Notes
 
-- **Prefer worktrees** when testing task branches — avoids touching the shared submodule
-- The runner script is `scripts/run-e2e.ts` (NOT `run-e2e-pipeline.ts`)
-- `devices.json` is machine-specific and gitignored — each test laptop has its own
-- Use `--dry-run` to preview what would run without actually executing
-- iOS simulator builds: `yarn ios:build:e2e` (outputs to `ios/build/Build/Products/Release-iphonesimulator/`)
-- iOS real device builds: `yarn ios:build:ipa`
-- Android builds: `cd android && ./gradlew assembleRelease`
+- `devices.json` is per-worktree and gitignored — every fresh worktree starts from `devices.template.json`; re-verify the Android `appPath` after copying.
+- The runner script is `scripts/run-e2e.ts`. There is no `run-e2e-pipeline.ts`.
+- For real iOS devices use `yarn ios:build:ipa`, not `:e2e`.
