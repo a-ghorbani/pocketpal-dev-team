@@ -19,6 +19,74 @@ This doc defines the contract the new design-token layer must obey. It is the co
   - **S1 (ADOPTED)** — D6 amended with disagreement-resolution rule (current dark Theme value wins on I1 conflict; disagreement logged as designer ask on FOU-112).
   - **S2 (ADOPTED)** — Scenario E softened to "PaperProvider re-renders with a new `theme` prop (no remount, same instance)".
 
+- **Round 2 revisions (2026-05-21, hydration/splash rework after four PR-732 review rounds):**
+  - **REWORK** — Added the "Hydration / splash rework" section (lead recommendation + rationale). Root cause: the Round-1 branded JS splash *impersonates* the iOS native launch screen and diverges from native per-platform (iOS has a branded storyboard; Android has NO native launch screen at all — verified in `android/.../styles.xml` + `package.json`). Four review rounds (R2 branding, R3 safe-area, R4 `initialMetrics`) each fixed a native-matching axis the prior round exposed.
+  - **REVISED I10 / D11 / §4c.4 / §9e / §9k / Scenario H / §2 / §4f / §7** — splash hold is now **neutral background-only** (flat colored `View`, no branding, no `Text`, no `SafeAreaProvider`/insets/`initialWindowMetrics`). Gate semantics (defer `<PaperProvider>` on `isHydrated(uiStore)`) unchanged. Recommendation: Part A (neutral hold) lands in FOU-114; no new dependency, no scope change.
+  - **ADDED D12 (deferred, HUMAN DECISION)** — the architecturally-correct end state is holding the *native* launch screen until hydration (`react-native-bootsplash`/RN core API). NATIVE_CHANGES=YES, adds a native Android splash that never existed; recorded as a separate task, NOT a FOU-114 deliverable.
+  - **ADDED §9l** — documents the per-platform launch-screen divergence (iOS branded storyboard vs Android none) that the rework addresses.
+  - **NOTE for orchestrator/human:** scope/dependency decision required only if Part B (D12) is chosen. Part A keeps FOU-114 scope and dependency surface unchanged.
+
+- **Round 2 critic fold-in (2026-05-21, LGTM + 1 CONCERN, no re-round):** Reworded §10 cleanup-reminder-1 and §11 to separate the two artifacts — App.tsx *code* (branded `Text`/`SafeAreaProvider`/insets/`initialWindowMetrics` to strip) vs theming.md *doc* (already neutral; change is *positive* tightening — state no-branding/no-`Text`/no-`SafeArea`/no-insets/no-`initialWindowMetrics` explicitly + add §9l + record D12, not a strip). Added an axis-separation note to the net-effect summary (neutral hold is independent of the Round-3 `useTheme` subscription path; Scenarios E/F unaffected).
+
+---
+
+## Hydration / splash rework (Round 2 revision, 2026-05-21)
+
+**Status of this section:** This supersedes the hydration-gate design as originally written in **I10 / D11 / Scenario H / §4c.4** (Round 1). The clauses below are revised in place; this section is the lead summary and rationale. Where this section and a Round-1 clause disagree, **this section wins**.
+
+### Why the rework
+
+The hydration gate was added in Round 1 to prevent a cold-start FOUC: a user with a persisted non-Latin `language` (e.g. `ja`) could see a headline render in Fraunces for one frame before `mobx-persist-store` hydrates `uiStore` from AsyncStorage and the §4d typography fallback swaps the family to Inter. The mechanism chosen — a **JS-rendered splash that impersonates the iOS native launch screen** — has now churned across four PR review rounds, each round fixing a native-matching axis the previous round exposed:
+
+- R2 (CONCERN): blank `View` → reviewers asked for the branded `PocketPal` / `LLM Ventures` labels to match the iOS storyboard.
+- R3 (CONCERN): static `bottom: 24` → safe-area-aware tagline (`insets.bottom + 20`) to match the storyboard constraint.
+- R4 (CONCERN, still open): the dedicated `<SafeAreaProvider>` had no `initialMetrics`, so the first frame could render blank until the native inset event arrived → seed `initialWindowMetrics`.
+
+**Root cause (C, verified this round):** a JS splash that *impersonates* a native launch screen will always diverge from native on some axis, and the divergence is **per-platform**:
+
+- **iOS (C):** has a branded native launch screen. `ios/PocketPal/Info.plist` sets `UILaunchStoryboardName = LaunchScreen`; `ios/PocketPal/LaunchScreen.storyboard` renders `PocketPal` (bold system 36pt) + `LLM Ventures` (system 17pt) on `systemBackgroundColor`, tagline pinned to safe-area-bottom + 20pt. The JS splash was hand-matched to *this*.
+- **Android (C):** has **no** native launch screen at all. `android/app/src/main/res/values/styles.xml` defines only `AppTheme` (`parent="Theme.AppCompat.DayNight.NoActionBar"`) with no `windowBackground` drawable; there is no launch/splash theme, no launch drawable, and no splash dependency in `package.json` (`grep -i splash package.json` → none). Pre-FOU-114 Android had **no startup splash whatsoever**.
+
+So on Android the Round-1 JS splash is a **novel, unmatched branded screen** that did not exist before this slice — and `initialWindowMetrics` can be `null` on Android, re-exposing the R4 blank-frame risk. Hand-matching a JS splash to native on both platforms indefinitely is a losing game: every future native-launch tweak (storyboard label, Android-12 splash API, dark-mode background) re-opens the same review thread.
+
+### Recommendation (lead)
+
+**Two-part decision. Part A is a no-native-dependency change I recommend landing in FOU-114 now. Part B is a native-dependency follow-up I recommend the human schedule as its own task, NOT in FOU-114.**
+
+**Part A — keep the hydration gate, but replace the impersonating branded splash with a NEUTRAL background-only hold. (P, recommended, no new dependency, no scope change.)**
+
+Keep I10 (gate `<PaperProvider>` mount on `mobx-persist-store` hydration of `UIStore`) — it is the minimum that guarantees Scenario H and it is cheap. **But stop impersonating the native launch screen.** The gate renders a full-screen `View` whose only property is `backgroundColor` resolved from `Appearance.getColorScheme()` (system light/dark). **No `PocketPal` / `LLM Ventures` labels, no `Text`, no `SafeAreaProvider`, no `useSafeAreaInsets`, no `initialWindowMetrics`.** Rationale:
+
+- A background-only `View` has **nothing to match** against either native launch screen — no labels to position, no tagline, no safe-area constraint. The entire R2/R3/R4 churn axis disappears by construction.
+- On **iOS**, the native storyboard paints first (its background is `systemBackgroundColor`); the JS background-only `View` continues that same flat background, so the native→JS handoff is a same-color continuation rather than a label cross-fade that can jump. The branded labels stay where they belong — on the native launch screen, painted by the OS before JS starts.
+- On **Android**, there is no native launch screen, so a flat colored hold is exactly what the OS already shows between process start and first frame; the JS background-only hold extends that flat color. It does **not** introduce a novel branded screen (the Round-1 regression).
+- The gate is sub-frame in the common case (one AsyncStorage key read); the neutral hold is only ever visible as "app launching" flat color, which is acceptable on both platforms (see revised §9k).
+
+**Part A satisfies the FOU-114 acceptance criterion (no Fraunces flash, Scenario H) with zero new dependency and zero added per-platform native config, and removes all four rounds' worth of native-matching obligations.**
+
+**Part B — for true native-launch continuity, hold the NATIVE launch screen until hydration via `react-native-bootsplash` (or RN core splash API). (P, recommended as a SEPARATE task; NATIVE_CHANGES=YES; scope-expanding; HUMAN DECISION REQUIRED.)**
+
+The architecturally-correct end state is: the **real native launch screen IS the splash on both platforms**, held programmatically until JS has hydrated, with nothing for JS to impersonate. `react-native-bootsplash` (or React Native's built-in splash-hide API) gives `BootSplash.hide()` / `hideAsync()` that JS calls *after* the hydration gate resolves. This means:
+
+- iOS keeps its storyboard; Android gains a real native splash theme (Android-12 `windowSplashScreen*` API or a `windowBackground` launch theme) — the gap that makes Android the odd platform out today is closed natively, where it belongs.
+- JS renders **no splash at all**; it just calls `hide()` once `isHydrated(uiStore)` is true and the first themed frame is ready.
+- The branding lives once, in native config, designed correctly per platform by the platform's own splash mechanism — not re-implemented in JS and re-reviewed every round.
+
+**Why Part B is NOT in FOU-114:** It is a native-dependency addition (`react-native-bootsplash` + iOS `pod install` + Android theme/drawable config + `react-native.config.js` / native linking) and it adds a new branded-screen surface on Android (a *native* one this time). That is a deliberate product/design decision (Android now gets a launch splash it never had) and a native-build-surface expansion — both of which the human should confirm and which deserve their own task with its own visual sign-off, not a rider on an "invisible token foundation" slice. **Flagging explicitly: adopting Part B in this PR would change FOU-114's scope and native-dependency surface.**
+
+### Considered and rejected for FOU-114
+
+- **Keep the branded JS splash but design it correctly for BOTH iOS and Android.** Rejected: this is the status quo that produced four review rounds. It permanently couples a JS component to two diverging native launch surfaces; every native-launch change re-opens it. It also forces a *new* branded screen onto Android, which is a product decision masquerading as a foundation-slice implementation detail.
+- **Drop the hydration gate from FOU-114 entirely; ship pure token foundation and address the font-flash separately (Option: "extract the gate to its own task").** Rejected as the *default*, accepted as a *fallback* (see Decision D11 revised). The Fraunces flash is a **new** regression that FOU-114 itself introduces (today's app uses Inter unconditionally for headlines, so there is no race to lose; the §4d fallback rule creates the race). Shipping the font dimension without the gate would land a known new FOUC and rely on a follow-up task to fix a regression this slice caused — undesirable. The colorScheme-flash class is genuinely pre-existing (C, `App.tsx` renders `<PaperProvider>` immediately today) and is **not** FOU-114's to fix; it is fixed only incidentally by the gate. If the human prefers to keep FOU-114 strictly invisible-and-no-gate, the clean split is: FOU-114 ships tokens+fonts+decoupling, and a *fast follow* task ships the gate (Part A) before any later slice actually renders a Fraunces headline. This is acceptable only because no in-scope screen in FOU-114 renders a headline token yet (§9j-style reasoning: the token exists but no current consumer uses it). **Recommendation remains: keep Part A in FOU-114**, because the gate is small, dependency-free, and closes the regression in the same PR that opens it.
+- **Pre-resolve persisted `language` synchronously before MobX hydrates** (read AsyncStorage manually / switch `colorScheme`+`language` to a synchronous store like MMKV). Rejected: duplicates the persistence layer (manual AsyncStorage read) or changes the persistence backend (MMKV migration) — both far larger blast radius than a background-only gate, and a backend swap is its own task with its own data-migration review.
+- **Gate only first-frame headline rendering** (let the app mount, but suppress headline `Text` until hydrated). Rejected: spreads the gate across every headline consumer (a cross-cutting per-component concern), re-introduces the colorScheme flash for everything that is not a headline, and is more fragile than one gate at the root.
+
+### Net effect on the contract
+
+Part A is adopted into the clauses below. I10 keeps its meaning (gate exists) but its splash contract is rewritten to "neutral background-only, no native impersonation". D11 gains the rejected-alternatives and the extract-to-own-task fallback. Scenario H's mechanism block is rewritten. §4c.4, §9e, §9k are rewritten. A new §9l covers the Android no-native-launch case explicitly. Part B is recorded as **D12 (deferred, human decision)** and as a forward cleanup reminder; it is **not** a FOU-114 deliverable. **Note (axis separation):** this neutral-hold rework is independent of the Round-3 `useTheme` subscription path — the reactive mode/language swap behaviour (Scenarios E/F) is unaffected by it. Reviewers should not conflate the two open axes (splash-hold neutrality vs. reactive theme subscription).
+
+
+
 ---
 
 ## Conventions
@@ -41,7 +109,7 @@ In scope (FOU-114 / this WHAT):
 - Theme refactor: decouple the consumed shape from MD3 internals while keeping `PaperProvider` / `Portal` and `useTheme()` working.
 - RTL + non-Latin/CJK fallback rules at the token layer (no per-component handling in this slice).
 - Mapping of current component visuals onto the new tokens so the build is **visually unchanged**.
-- Hydration gate at `<PaperProvider>` to guarantee no FOUC for persisted `language` (cold start, non-Latin locales).
+- Hydration gate at `<PaperProvider>` to guarantee no FOUC for persisted `language` (cold start, non-Latin locales). The hold rendered while unhydrated is a **neutral background-only `View`** — NOT a branded native-launch impersonation (REVISED Round 2; see "Hydration / splash rework"). Holding the *native* launch screen (D12) is explicitly out of scope (NATIVE_CHANGES, separate task).
 
 Explicitly NOT in scope:
 
@@ -224,7 +292,7 @@ The font family **name** as referenced in code (e.g. `'Fraunces-Regular'`) must 
 
 No event flow changes. The theme layer is stateless apart from `uiStore.colorScheme` and `uiStore.language` (both already in (C)) and is read synchronously via `useTheme()`.
 
-The one new addition is the **hydration gate** at `App.tsx` (§4c.4): before the first render of `<PaperProvider>`, the app awaits `mobx-persist-store`'s `isHydrated('UIStore')` so the persisted `language` / `colorScheme` values are observed by the theme builder on first frame. This is a one-time gate at app startup, not a runtime event.
+The one new addition is the **hydration gate** at `App.tsx` (§4c.4, REVISED Round 2): before the first render of `<PaperProvider>`, the app awaits `mobx-persist-store`'s `isHydrated(uiStore)` so the persisted `language` / `colorScheme` values are observed by the theme builder on first frame. While unhydrated it renders a **neutral background-only hold** (no branding, no native-launch impersonation — see "Hydration / splash rework"). This is a one-time gate at app startup, not a runtime event.
 
 ---
 
@@ -274,7 +342,7 @@ No `'x1'` state — x1Theme is removed in this slice (D4). UIStore's `colorSchem
 1. `PaperProvider theme={theme}` continues to wrap the app. `theme` is whatever `useTheme()` returns.
 2. The Paper-compat alias surface is shaped so every Paper component currently in use continues to render identically to today (I1).
 3. **No new `react-native-paper` import is added in this slice**, and no existing import is removed. The current Paper import surface (verified by `grep -rh "from 'react-native-paper'" src/`) is: `ActivityIndicator, Button, Card, Checkbox, Chip, Dialog, Divider, DividerProps, Drawer, FAB, Icon, IconButton, List, MD3Theme, Menu, Paragraph, Portal, ProgressBar, SegmentedButtons, Snackbar, Surface, Switch, Text, TextInput, Tooltip, useTheme` (~23 distinct components + types). Reducing to the locked thin set (`Text/Button/IconButton/Portal/Provider`) is FOU-115/123 work.
-4. **(P, new) Hydration gate:** the app must observe persisted `uiStore.language` and `uiStore.colorScheme` on first render. Implementation contract: `App` defers rendering `<PaperProvider>` (or anything that consumes `useTheme()`) until `mobx-persist-store`'s hydration of `UIStore` completes. While hydrating, render a minimal splash (no theme-dependent content). Acceptable splash: a plain `View` with `backgroundColor: theme.colors.background` resolved from the **system color scheme** (`Appearance.getColorScheme()`) so the splash matches the eventual mode for the common case, and an `ActivityIndicator` is optional. Rationale: I1 + no-flash for persisted non-Latin language (see §9e, Scenario H). Without this gate, the first paint uses the in-memory defaults (`colorScheme = system`, `language = 'en'`) and a persisted `language = 'ja'` user sees Fraunces for one frame before the AsyncStorage promise resolves.
+4. **(P, REVISED Round 2 — see "Hydration / splash rework") Hydration gate, neutral background-only splash:** the app must observe persisted `uiStore.language` and `uiStore.colorScheme` on first render. Implementation contract: `App` defers rendering `<PaperProvider>` (or anything that consumes `useTheme()`) until `mobx-persist-store`'s hydration of `UIStore` completes (`isHydrated(uiStore)`). While hydrating, render a **neutral background-only hold**: a single full-screen `View` whose only meaningful style is `backgroundColor` resolved from `Appearance.getColorScheme()` (system light/dark). **The splash MUST NOT contain any branding (`PocketPal` / `LLM Ventures` labels), any `Text`, any `SafeAreaProvider`, any `useSafeAreaInsets`, or any `initialWindowMetrics` dependency.** It does NOT impersonate the iOS launch storyboard and it does NOT introduce a branded screen on Android (which has no native launch screen — see §9l). Rationale: I1 + no-flash for persisted non-Latin language (see §9e, Scenario H); a background-only `View` has nothing to match against either native launch surface, so it cannot diverge from native on any axis (this is the design that ends the four-round native-matching churn). Without the gate, the first paint uses the in-memory defaults (`colorScheme = system`, `language = 'en'`) and a persisted `language = 'ja'` user sees Fraunces for one frame before the AsyncStorage promise resolves.
 
 ### 4d. RTL & non-Latin fallback at the typography layer
 
@@ -298,7 +366,7 @@ No `'x1'` state — x1Theme is removed in this slice (D4). UIStore's `colorSchem
 - **I7 (Paper surface is preserved, not reduced)**: This slice does NOT add any new `react-native-paper` component import in any file, and does NOT remove any existing one. The current Paper import surface (~23 components + types: `ActivityIndicator, Button, Card, Checkbox, Chip, Dialog, Divider, DividerProps, Drawer, FAB, Icon, IconButton, List, MD3Theme, Menu, Paragraph, Portal, ProgressBar, SegmentedButtons, Snackbar, Surface, Switch, Text, TextInput, Tooltip, useTheme`) is preserved as-is. Reducing the surface to the locked thin set (`Text/Button/IconButton/Portal/Provider`) is FOU-115/123 work, not this slice.
 - **I8 (font family names match registered names)**: For every `fontFamily` string in `Tokens.typography.*`, a matching font asset is bundled and registered: iOS `UIAppFonts` (PostScript name) and Android `assets/fonts/{Name}.ttf`. CI / a script verifies this at build time (planner's call where this lives).
 - **I9 (x1 is gone)**: No code path in `src/` references `x1Theme`, `AppTheme.X1`, or `'x1'` as a `colorScheme` value. (D4.)
-- **I10 (hydration gate on first render)**: `<PaperProvider>` and any subtree that reads `useTheme()` are not mounted until `mobx-persist-store` has hydrated `UIStore`. Persisted `language` and `colorScheme` are observed on first frame. (P, see §4c.4 / Scenario H.)
+- **I10 (hydration gate on first render, neutral splash)**: `<PaperProvider>` and any subtree that reads `useTheme()` are not mounted until `mobx-persist-store` has hydrated `UIStore`. Persisted `language` and `colorScheme` are observed on first frame. The hold rendered while unhydrated is a **neutral background-only `View`** (no branding, no `Text`, no safe-area provider/inset/`initialWindowMetrics`); it does not impersonate any native launch screen. (P, REVISED Round 2 — see "Hydration / splash rework", §4c.4, Scenario H.)
 
 (Previous I9 — "no MD3 import in components" — has been deferred to §5 cleanup #5. It is not a slice deliverable.)
 
@@ -310,7 +378,7 @@ No `'x1'` state — x1Theme is removed in this slice (D4). UIStore's `colorSchem
 | `src/theme/builder` (P) — or whatever path the planner picks | The `Theme` superset for a given (mode, locale). MD3-compat aliases + pinned legacy `theme.fonts.*`. | Token data (sourced from the tokens module). Components do not call this directly. |
 | `useTheme()` (refactored from `src/hooks/useTheme.ts`) | The reactive `Theme` for the current (`colorScheme`, `language`) pair. | No state of its own. Pure reader. |
 | `lightTheme`, `darkTheme` exports | Pre-built `Theme` snapshots for the default locale (`en`). Used by jest fixtures and non-React code. | No locale-aware swaps — these are the en-locale snapshots. Locale-swapped values are only available via the hook. |
-| `App.tsx` | (a) Hydration gate (I10): renders splash while `mobx-persist-store` hydrates `UIStore`. (b) `<PaperProvider theme={theme}>` — wraps app with `useTheme()` output once hydrated. | No theme construction logic. |
+| `App.tsx` | (a) Hydration gate (I10): renders a **neutral background-only hold** (flat colored `View`, no branding/`Text`/safe-area) while `mobx-persist-store` hydrates `UIStore`. (b) `<PaperProvider theme={theme}>` — wraps app with `useTheme()` output once hydrated. | No theme construction logic. **No branded splash, no native-launch impersonation, no `SafeAreaProvider`/`initialWindowMetrics` in the hold.** |
 | Existing component `styles.ts` files | Continue to read `theme.colors.*`, `theme.fonts.*` (MD3 typescale + custom), `theme.spacing.default`, `theme.borders.*`, `theme.insets.*`. (C — preserved by the unchanged legacy surface.) | Direct font-file imports, raw hex values, or MD3 internals. |
 | `src/utils/types.ts`, `src/utils/index.ts`, `src/components/SidebarContent/styles.ts`, `src/components/RenameModal/styles.ts` | Continue to import `MD3Theme` / `MD3Colors` / `MD3Typescale` (C, unchanged). | Migration to a Paper-free type is deferred — see §5 #5. |
 
@@ -450,16 +518,25 @@ On the very first painted frame that contains a headline (e.g. an onboarding hea
 - The text is rendered in Inter-Regular, NOT Fraunces.
 - No flash of Fraunces (the family-mismatch glyph silhouette) is observable.
 
-Mechanism (per §4c.4 / I10):
+Mechanism (per §4c.4 / I10, REVISED Round 2):
 - App.tsx defers <PaperProvider> mount until mobx-persist-store has hydrated UIStore.
-- During hydration, a minimal splash View renders (backgroundColor from Appearance.getColorScheme()).
+- During hydration, a NEUTRAL background-only splash View renders (backgroundColor from
+  Appearance.getColorScheme(); NO branding, NO Text, NO safe-area provider/insets).
 - After hydration completes (typically <1 frame, but bounded), the theme builder reads
   uiStore.language === 'ja' and produces headline tokens with the Inter family.
 - First paint of any theme-consuming subtree therefore has the correct family already.
+- The neutral hold does not impersonate the iOS storyboard; on iOS it continues the
+  storyboard's flat system-background, on Android it continues the OS's flat launch color
+  (Android has no native launch screen — §9l). There is nothing for the hold to match,
+  so there is no native-divergence axis to review.
 
 Acceptance:
 - Manual: launch app on iOS sim with prior persisted Japanese setting; observe no Fraunces flash on screens with headline text.
-- Automated (preferred): a Jest unit test asserts that the App component renders its hydration splash when isHydrated('UIStore') is false, and renders the PaperProvider only when true.
+- Automated (preferred): a Jest unit test asserts that the gate host renders its neutral
+  hold (testID present, NO branded "PocketPal"/"LLM Ventures" text, NO PaperProvider) when
+  isHydrated(uiStore) is false, and renders the PaperProvider subtree only when true. A
+  second test flips hydration false->true after mount and asserts the hold unmounts and a
+  post-hydration app element appears (closes the round-1 "permanent splash" gap).
 ```
 
 ---
@@ -471,7 +548,7 @@ Acceptance:
 | `uiStore.colorScheme === 'dark'` | `uiStore.setColorScheme('dark')` | Theme builder; any direct consumer | User opted into dark mode (or system default was dark at first launch). (C.) |
 | `uiStore.language` ∈ non-Latin set | `uiStore.setLanguage(lang)` | Theme builder (typography fallback selector, §4d) | User's selected language is in `{fa, he, ja, ko, zh, zh_Hant}`. (P.) |
 | `I18nManager.isRTL` | RN platform / locale change at app launch | Components (later slices) | App is in RTL layout direction. Not consumed by this slice. (C — RN built-in.) |
-| `isHydrated('UIStore')` (from `mobx-persist-store`) | `makePersistable` lifecycle | `App.tsx` (gates `<PaperProvider>` mount) | UIStore has finished loading from AsyncStorage. (P — see I10, §4c.4.) |
+| `isHydrated(uiStore)` (from `mobx-persist-store`) | `makePersistable` lifecycle | `App.tsx` (gates `<PaperProvider>` mount; neutral hold while false) | UIStore has finished loading from AsyncStorage. (P — see I10, §4c.4, "Hydration / splash rework".) |
 
 ---
 
@@ -492,9 +569,13 @@ Acceptance:
 - **D8**: The `language` signal is read **inside** the theme builder, not on every component. Rationale: keeps components locale-agnostic and concentrates the (small) set of locale-aware swaps to one place; future RTL refinements happen in one file.
 - **D9**: Add the new Fraunces, Fraunces-Italic, and JetBrains Mono font weights `400` and `500` only (`*-Regular` and `*-Medium`) for each family in this slice. Rationale: the canonical Figma file only uses these weights; ship the minimum cuts; additional weights are added per future slice if a token demands them. Final per-family weight list is finalised in `how.md` against the resolved set of typography token weights (canonical file may also use 600/700 for one or two styles — that's a HOW-level confirmation, not a WHAT decision).
 - **D10**: The legacy `theme.fonts.*` MD3 typescale + custom TextStyles + `theme.spacing.default` + `theme.borders.*` + `theme.insets.*` are **preserved verbatim** in this slice — same `configureFonts` output, same custom keys, same values. Rationale: this is what guarantees I1 (no visual regression) for the ~18 existing consumers of MD3 typescale keys + ~4 `theme.spacing.default` consumers + every legacy color consumer. Selective preservation would force per-file edits in this slice, which is out of scope for an invisible foundation slice. The legacy surfaces are deleted in FOU-123 once consumers migrate to `theme.typography.*` + `theme.spacing.*` token keys.
-- **D11 (new)**: Gate the first render of `<PaperProvider>` on `mobx-persist-store` hydration of `UIStore`. Rationale: AsyncStorage hydration is async (`src/store/UIStore.ts:5,73-84`); without the gate, the first paint uses in-memory defaults (`colorScheme = Appearance.getColorScheme()`, `_language = 'en'`), and a persisted non-Latin language user would see Fraunces for one frame before hydration completes. This is a new visible regression introduced by the typography fallback rule (today's app uses Inter unconditionally for headlines, so there's no race to lose). The hydration gate is the minimum design that guarantees Scenario H. Alternatives considered:
+- **D11 (REVISED Round 2)**: Gate the first render of `<PaperProvider>` on `mobx-persist-store` hydration of `UIStore`, rendering a **neutral background-only hold** (NOT a branded native-launch impersonation) while unhydrated. Rationale: AsyncStorage hydration is async (`src/store/UIStore.ts:5,73-84`); without the gate, the first paint uses in-memory defaults (`colorScheme = Appearance.getColorScheme()`, `_language = 'en'`), and a persisted non-Latin language user would see Fraunces for one frame before hydration completes. This is a **new** visible regression introduced by the §4d typography fallback rule (today's app uses Inter unconditionally for headlines, so there's no race to lose), which is why FOU-114 owns fixing it. The gate + neutral hold is the minimum design that guarantees Scenario H with **no new dependency and no native-matching obligation** (see "Hydration / splash rework" Part A). Alternatives considered:
+  - *Branded JS splash impersonating the iOS launch storyboard (the Round-1 design)*: Rejected this round. Caused four review rounds of native-matching churn (branding, safe-area, initialMetrics) and introduces a novel branded screen on Android, which has no native launch screen (§9l). A neutral hold has nothing to match and ends the churn.
+  - *Hold the NATIVE launch screen via `react-native-bootsplash` / RN core splash API* (the architecturally-correct end state): deferred to **D12** — it is NATIVE_CHANGES=YES, scope-expanding (adds a native Android splash that never existed), and a human decision. Not in FOU-114.
   - *Pre-resolve a "safe" headline family if `language` is unhydrated but a persisted value exists*: requires reading AsyncStorage manually before MobX hydrates — duplicates the persistence layer. Rejected.
   - *Accept the one-frame flash and document it*: violates I1 spirit (the flash is a new behavior not present in today's build). Rejected.
+  - *Extract the gate to its own task and ship FOU-114 as pure tokens+fonts (no gate)*: Acceptable fallback, NOT the recommendation. Tolerable only because no in-scope FOU-114 screen renders a headline token yet (the token exists but no current consumer uses it, §9j-style), so the Fraunces race cannot fire until a later slice. But it lands a known regression's fix in a follow-up rather than in the PR that opens the regression. Recommendation: keep the gate (Part A) in FOU-114. If the human chooses the strict-invisible split, the gate MUST land before any later slice renders a Fraunces headline.
+- **D12 (new, DEFERRED — HUMAN DECISION)**: The architecturally-correct long-term mechanism is to **hold the native launch screen until hydration** via `react-native-bootsplash` (or RN's built-in splash-hide API): JS calls `hide()` once `isHydrated(uiStore)` is true, the real native launch screen IS the splash on both platforms, and JS renders no splash at all. This closes the Android gap natively (Android gains a real native splash theme, where branding belongs) and removes the JS splash entirely. **Not adopted in FOU-114** because it is NATIVE_CHANGES=YES (new dependency + iOS `pod install` + Android splash theme/drawable + native linking) AND it adds a *new branded launch surface on Android* that never existed — a product/design decision plus a native-build expansion that both warrant their own task and visual sign-off, not a rider on an invisible token-foundation slice. Recorded as a forward cleanup reminder (§10) and a designer/PM ask. Rationale for deferring rather than adopting now: FOU-114's acceptance is fully met by D11+I10 (Part A) with zero scope/dependency change; Part B is an enhancement, not a requirement of this slice.
 
 ---
 
@@ -520,9 +601,11 @@ The font is listed in `react-native.config.js` and present in `src/assets/fonts/
 
 **Problem:** App restarts with persisted `language = 'ja'`. `mobx-persist-store` hydrates `UIStore` from AsyncStorage asynchronously (verified at `src/store/UIStore.ts:73-84`, `storage: AsyncStorage`). There is no current code path that gates first render on hydration completion (verified: `grep -rn "isHydrated\|hasHydrated" src/` returns no hits). Without intervention, first paint would render with the in-memory defaults (`_language = 'en'`, headline = Fraunces), then re-render with Inter once hydration resolves — a visible flash.
 
-**Design:** App.tsx adds a hydration gate per §4c.4 / D11 / I10. The gate uses `mobx-persist-store`'s `isHydrated` (or `hasHydrated`) accessor on `UIStore` and renders a minimal splash (a `View` with `backgroundColor` resolved from `Appearance.getColorScheme()`) while `false`. Once `true`, `<PaperProvider>` mounts. First theme-consuming paint therefore reads the persisted `language` value. (Scenario H.)
+**Design (REVISED Round 2):** App.tsx adds a hydration gate per §4c.4 / D11 / I10. The gate uses `mobx-persist-store`'s `isHydrated(uiStore)` accessor and renders a **neutral background-only hold** (a single `View` with `backgroundColor` resolved from `Appearance.getColorScheme()`; no branding, no `Text`, no safe-area provider/insets, no `initialWindowMetrics`) while `false`. Once `true`, `<PaperProvider>` mounts. First theme-consuming paint therefore reads the persisted `language` value. (Scenario H.) The neutral hold is the design that ends the four-round native-matching churn: a flat colored `View` has nothing to match against the iOS storyboard or the (absent) Android launch screen, so there is no per-platform divergence to review (§9l).
 
 **Note on `colorScheme` flash:** today's app already exhibits a colorScheme flash on cold start (the in-memory default is `Appearance.getColorScheme()`, which may differ from the persisted value). The new hydration gate fixes that too as a side effect — but the gate's primary purpose is the language race, since the colorScheme race was already present and tolerated in (C).
+
+**Note on scope (Round 2):** The colorScheme race is **pre-existing** (C — `App.tsx` renders `<PaperProvider>` immediately today) and is NOT FOU-114's to fix; the gate fixes it only incidentally. FOU-114 owns only the **font** race, which the §4d fallback rule newly introduces. If the human elects to extract the gate to its own task (D11 fallback), FOU-114 ships strictly invisible (tokens+fonts, no gate) and the gate lands before any later slice renders a Fraunces headline.
 
 ### 9f. RTL locale without RTL screen mirroring
 
@@ -544,9 +627,15 @@ CI / `how.md` step verifies both targets are in sync. If a build slips with the 
 
 No (C) code today references JetBrains Mono explicitly. Code blocks in markdown render via `react-native-render-html` with default `<code>` styling. The new tokens module defines `codeM` / `codeS` but **no current consumer is updated in this slice to use it**. Expected: code blocks continue to render exactly as today (system monospace). The new token is available for the markdown / code-block restyle slice (FOU-117+) to opt into. This is consistent with I1: invisible foundation.
 
-### 9k. Hydration splash visible for too long
+### 9k. Hydration hold visible for too long
 
-`mobx-persist-store` hydration normally completes within a few microtasks (AsyncStorage read of one key). If it takes longer (slow device, cold disk cache), the splash View is visible for that duration. Expected: splash is visually neutral (a colored View matching the system color scheme), so a longer-than-microtask delay is acceptable as "app launching". No spinner is required in this slice. If hydration ever fails outright (AsyncStorage error), `mobx-persist-store` proceeds with in-memory defaults — accept the (C) behavior, do not invent error UI in this slice.
+`mobx-persist-store` hydration normally completes within a few microtasks (AsyncStorage read of one key). If it takes longer (slow device, cold disk cache), the neutral hold `View` is visible for that duration. Expected: the hold is a flat colored `View` matching the system color scheme, so a longer-than-microtask delay reads as plain "app launching" flat color on both platforms — acceptable. No spinner, no branding, no `Text` is required or permitted in this slice (per revised §4c.4 / I10). If hydration ever fails outright (AsyncStorage error), `mobx-persist-store` proceeds with in-memory defaults — accept the (C) behavior, do not invent error UI in this slice.
+
+### 9l. Android has no native launch screen (the per-platform divergence the rework addresses)
+
+(C, verified this round.) iOS has a branded native launch screen (`ios/PocketPal/Info.plist` `UILaunchStoryboardName = LaunchScreen`; `ios/PocketPal/LaunchScreen.storyboard` renders `PocketPal` + `LLM Ventures` on `systemBackgroundColor`). **Android has none**: `android/app/src/main/res/values/styles.xml` defines only `AppTheme` (`parent="Theme.AppCompat.DayNight.NoActionBar"`) with no `windowBackground` launch drawable, no Android-12 `windowSplashScreen*` theme, and there is no splash dependency in `package.json`. The OS shows a flat window background between process start and first JS frame, nothing more.
+
+Consequence for this slice: a branded JS splash (Round-1 design) would be a **novel branded screen on Android** that did not exist pre-FOU-114, and `initialWindowMetrics` can be `null` on Android, re-exposing the round-4 blank-frame risk. The revised neutral background-only hold (§4c.4 / I10) sidesteps both: it continues the OS's flat launch color on Android and the storyboard's flat background on iOS, matching neither's *content* because it has none. Closing the Android gap with a *real native* launch screen (so Android stops being the odd platform out) is the D12 deferred follow-up — explicitly NOT a FOU-114 deliverable because it adds a native dependency and a new branded surface.
 
 ---
 
@@ -561,10 +650,15 @@ No (C) code today references JetBrains Mono explicitly. Code blocks in markdown 
 
 **Cleanup reminders** (for the implementer / next architects to track):
 
-1. After this PR lands, **promote this WHAT to `context/architecture/theming.md`** (architect step on the same PR, per library lifecycle).
+1. After this PR lands, **promote this WHAT to `context/architecture/theming.md`** (architect step on the same PR, per library lifecycle). **Round-2 note — two distinct artifacts, do not conflate them:**
+
+   - **`App.tsx` *code* change (this PR):** the live code renders a *branded* hold (`HydrationSplashContent` with `PocketPal` / `LLM Ventures` `Text` labels, wrapped in a dedicated `SafeAreaProvider` reading `useSafeAreaInsets` / `initialWindowMetrics`). Strip it down to a single flat-`backgroundColor` `View` keyed off `Appearance.getColorScheme()` — remove the branded `Text` labels and the `SafeAreaProvider` / `useSafeAreaInsets` / `initialWindowMetrics` usage entirely (exact edits are HOW/implementer work, not this WHAT). The branding lives in *code*, not in theming.md.
+
+   - **`context/architecture/theming.md` *doc* change (SAME PR):** theming.md today (§4c.4 line ~229, I10 line ~253, §9k line ~401) already describes a *neutral* "minimal splash (a `View` with `backgroundColor` from the system color scheme)" — it never described branding, `Text`, `SafeAreaProvider`, or `initialWindowMetrics`, so there is **nothing to strip from the doc**. The doc change is *positive tightening*: make §4c.4 / I10 / §9k state the neutral constraints **explicitly** — no branding (`PocketPal` / `LLM Ventures` labels), no `Text`, no `SafeAreaProvider`, no `useSafeAreaInsets`, no `initialWindowMetrics` — so a future reader cannot re-add them; add the new §9l Android-no-native-launch note; and record D12 (native-launch hold) as a deferred follow-up. These three additions are genuinely absent from theming.md today.
 2. The deferred-cleanups list in §5 must be carried forward in the promoted doc until each item lands.
 3. If `how.md` step 0 (dark-token extraction) finds tokens with no dark binding in the canonical file, those are designer asks logged on FOU-112 — not invented at the engineering side.
 4. The Paper-surface reduction to the thin set (`Text/Button/IconButton/Portal/Provider`) tracked under FOU-115/123.
+5. **D12 (native launch-screen hold) — deferred, human decision.** The startup hold should eventually move from a JS neutral `View` to holding the *native* launch screen until hydration (`react-native-bootsplash` / RN core splash-hide API). This is NATIVE_CHANGES=YES, adds a real native splash to Android (which has none today — §9l), and is a product/design + native-build decision. Track as its own task with visual sign-off; do NOT fold into FOU-114.
 
 ---
 
@@ -583,4 +677,10 @@ Verified specifics (round-1 re-check):
 - **x1 deadness.** `src/utils/theme.ts:422` exports `x1Theme` but the type of `uiStore.colorScheme` is already `'light' | 'dark'` (`src/store/UIStore.ts:32`), meaning x1 has been dead code since UIStore was narrowed. D4 removes the stale export.
 - **`fontStyles` legacy module export.** `src/components/ChatInput/styles.ts:4,145,152,157,162` imports `fontStyles` from `'../../utils/theme'`. Preserved verbatim per §1d.
 
-Minor drift observed: none beyond the items already enumerated above.
+Verified specifics (round-2 re-check, native launch screens):
+
+- **iOS native launch screen exists and is branded.** `ios/PocketPal/Info.plist` sets `UILaunchStoryboardName = LaunchScreen`; `ios/PocketPal/LaunchScreen.storyboard` renders `PocketPal` (boldSystem 36pt) + `LLM Ventures` (system 17pt) on `systemBackgroundColor`, tagline pinned to safe-area-bottom + 20pt.
+- **Android has NO native launch screen.** `android/app/src/main/res/values/styles.xml` defines only `AppTheme` (`parent="Theme.AppCompat.DayNight.NoActionBar"`) with no `windowBackground` launch drawable and no Android-12 `windowSplashScreen*` theme. `AndroidManifest.xml` `application android:theme="@style/AppTheme"`; no splash dependency in `package.json` (`grep -i splash package.json` → none). The current Round-1 branded JS splash is therefore a novel branded screen on Android.
+- **`useTheme()` subscription path is stable as of round 4.** `src/hooks/useTheme.ts` retains `usePaperTheme()` as the React-context subscription path for non-`observer` consumers and caches by Paper-theme identity then `${mode}:${language}` (WeakMap). This rework does NOT touch the hook; it touches only the `App.tsx` startup hold.
+
+Minor drift observed: none beyond the items already enumerated above. No `context/architecture/theming.md` drift to reconcile against code at the splash surface — the doc has not yet been promoted from this WHAT (D7). theming.md today (§4c.4 ~line 229, I10 ~line 253, §9k ~line 401) already describes a **neutral** minimal splash (a `View` with `backgroundColor` from the system color scheme); it has never described branding, `Text`, `SafeAreaProvider`, or `initialWindowMetrics`. The Round-1 branded design lives only in App.tsx *code*. In the same PR the implementer therefore (a) strips the branded `Text` + `SafeAreaProvider`/insets/`initialWindowMetrics` from App.tsx *code*, and (b) makes a *positive* doc edit to theming.md — stating the neutral constraints explicitly + adding §9l + recording D12 (see §10 cleanup reminder 1). The doc edit adds constraints, it does not strip a branded design that was never in the doc.
