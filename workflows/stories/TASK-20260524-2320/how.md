@@ -64,39 +64,39 @@ WHAT §4b parenthetical says "alias TBD by planner; not a WHAT concern". Verifie
 
 | Step | Status | Commit | Notes |
 | --- | --- | --- | --- |
-| 1  Apply folded token-rename patch (foundation) | pending | - | §4a / D1 / I_DS8 |
-| 2  Update `theming.md` §1a key set + fix WHAT D3 + §4b nits | pending | - | §4a #2 / I_DS8 / PD3 / PD6 |
-| 3  Extend `jest/fixtures/theme.ts` with `byMode().byLocale()` factory | pending | - | §4h.6 / D33 |
-| 4  Add snapshot-matrix helper | pending | - | §4h.1–§4h.3 / PD2 |
-| 5  Build `primitives/Pressable/` + tests | pending | - | §4b primitives, §4c.4, §4k row 1 |
-| 6  Build shared DS types (`CommonDSProps`, discriminated a11y union) | pending | - | §4c, D34 |
-| 7  Build `Surface/` + tests | pending | - | §4f D32 |
-| 8  Build `Stack/` (only if needed by step 7 or downstream) | pending | - | §4b note "defer if unused" |
-| 9  Build `Header/` + tests (composition primitive for overlays) | pending | - | §4d / D30 / I_DS3 |
-| 10 Build `Button/` + tests | pending | - | §4f D13 |
-| 11 Build `IconButton/` + tests | pending | - | §4f D14 |
-| 12 Build `Card/` + `CardList/` + tests | pending | - | §4f D17 |
-| 13 Build `Chip/` + tests | pending | - | §4f D16 / D8 |
-| 14 Build `Divider/` + tests | pending | - | §4f (Divider absorbed in blocklist final state §4g.4) |
-| 15 Build `Input/` + tests | pending | - | §4f D15 |
-| 16 Build `Tabs/` + tests | pending | - | §4f D18 / D9 |
-| 17 Build `BottomNavBar/` + tests | pending | - | §4f D19 / D10 |
-| 18 Build `Label/` (Informational + Status) + tests | pending | - | §4f D23 |
-| 19 Build `CategoryBadge/` + tests | pending | - | §4f D24 |
-| 20 Build `Dropdown/` + tests | pending | - | §4f D25 |
-| 21 Build `MessageContent/` variants + tests | pending | - | §4f D26 |
-| 22 Build `Switch/` (Paper-wrap) + tests | pending | - | §4f D22, §4g #6 |
-| 23 Build `Checkbox/` (Paper-wrap) + tests | pending | - | §4f D21, §4g #6 |
-| 24 Build `RadioButton/` + `RadioSection/` (Paper-wrap) + tests | pending | - | §4f D20, §4g #6 |
-| 25 Build `Sheet/` (gorhom + Header composition) + tests | pending | - | §4e / D27 / D7 |
-| 26 Build `Modal/` (Portal + Header) + tests | pending | - | §4e / D28 |
-| 27 Build `Dialog/` (Portal + centered surface + Header) + tests | pending | - | §4e / D29 |
-| 28 Public DS barrel `src/components/ds/index.ts` | pending | - | §4b last paragraph |
-| 29 Surface consumer swap #1 — `UsageStats.tsx` | pending | - | §4g.7 / Scenario I |
-| 30 Surface consumer swap #2 — `PalDetailSheet.tsx` | pending | - | §4g.7 / Scenario I |
-| 31 ESLint `no-restricted-imports` Paper blocklist seed (`['Surface']`) + wrap-Paper overrides | pending | - | §4g.1–§4g.7, D31, I_DS4 |
-| 32 Run full `yarn jest` / `yarn lint` / `yarn typecheck` | pending | - | §6 all scenarios |
-| F1 Absorb Phase 2 delta into `context/architecture/theming.md` (DS component layer + I_DS1–8 + matrix D13–D30) | pending | - | I_DS8 / WHAT Cleanup reminders #1–4 |
+| 1  Apply folded token-rename patch (foundation) | DONE | 91dfd52 (worktree) | §4a / D1 / I_DS8 |
+| 2  Update `theming.md` §1a key set + fix WHAT D3 + §4b nits | DONE | 556b56e (dev-team) | §4a #2 / I_DS8 / PD3 / PD6 |
+| 3  Extend `jest/fixtures/theme.ts` with `byMode().byLocale()` factory | DONE | 346dbb4 | §4h.6 / D33 |
+| 4  Add snapshot-matrix helper | DONE | 78a93a5 | §4h.1–§4h.3 / PD2 |
+| 5  Build `primitives/Pressable/` + tests | DONE | 226cc0d | §4b primitives, §4c.4, §4k row 1 |
+| 6  Build shared DS types (`CommonDSProps`, discriminated a11y union) | DONE | 16fca93 | §4c, D34 |
+| 7  Build `Surface/` + tests | DONE | d79b95d | §4f D32 |
+| 8  Build `Stack/` (only if needed by step 7 or downstream) | SKIPPED | - | no consumer needed; revisit in Phase 3 |
+| 9  Build `Header/` + tests | DONE | 93f2d1a | §4d / D30 / I_DS3 |
+| 10 Build `Button/` + tests | DONE | a3a2f3b | §4f D13 |
+| 11 Build `IconButton/` + tests | DONE | 1da826b | §4f D14 |
+| 12 Build `Card/` + `CardList/` + tests | DONE | 8ab5178 | §4f D17 |
+| 13 Build `Chip/` + tests | DONE | 293ae73 | §4f D16 / D8 |
+| 14 Build `Divider/` + tests | DONE | bc28504 | §4f (Divider absorbed in blocklist final state) |
+| 15 Build `Input/` + tests | DONE | 74b14b1 | §4f D15 |
+| 16 Build `Tabs/` + tests | DONE | fc4a62d | §4f D18 / D9 |
+| 17 Build `BottomNavBar/` + tests | DONE | dac5913 | §4f D19 / D10 |
+| 18 Build `Label/` + tests | DONE | 6830c44 | §4f D23 |
+| 19 Build `CategoryBadge/` + tests | DONE | 98dc4cd | §4f D24 |
+| 20 Build `Dropdown/` + tests | DONE | 1c47639 | §4f D25 |
+| 21 Build `MessageContent/` + tests | DONE | c07308a | §4f D26 |
+| 22 Build `Switch/` (Paper-wrap) + tests | DONE | 57a281d | §4f D22, §4g #6 |
+| 23 Build `Checkbox/` (Paper-wrap) + tests | DONE | 80a03c5 + 0edf3e7 fix | §4f D21, §4g #6 |
+| 24 Build `RadioButton/` + `RadioSection/` (Paper-wrap) + tests | DONE | 12b8e6a | §4f D20, §4g #6 |
+| 25 Build `Sheet/` (gorhom + Header) + tests | DONE | 566ce0c | §4e / D27 / D7 |
+| 26 Build `Modal/` (Portal + Header) + tests | DONE | 67822ef | §4e / D28 |
+| 27 Build `Dialog/` (Portal + Surface + Header) + cross-overlay test | DONE | c2eb044 | §4e / D29 / Scenario F |
+| 28 Public DS barrel | DONE | db8fb8e | §4b last paragraph |
+| 29 Surface consumer swap #1 — `UsageStats.tsx` | DONE | 148f76c | §4g.7 / Scenario I |
+| 30 Surface consumer swap #2 — `PalDetailSheet.tsx` | DONE | 4919fcb | §4g.7 / Scenario I |
+| 31 ESLint `no-restricted-imports` Paper blocklist seed + wrap-Paper overrides + I_DS1 hex ban | DONE | 5f0ff16 (+ 5f631ed invariants allow-list fix) | §4g.1–§4g.7, D31, I_DS1, I_DS4 |
+| 32 Run full `yarn jest` / `yarn lint` / `yarn typecheck` | DONE | - | 214 suites / 3159 tests pass, 364 snapshots, lint 0 errors, typecheck clean |
+| F1 Absorb Phase 2 delta into `context/architecture/theming.md` | DONE | f4d50b8 (dev-team) | I_DS8 / WHAT Cleanup reminders #1–4 |
 
 ---
 
