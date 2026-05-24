@@ -9,16 +9,8 @@
       "Bash",
       "Agent",
       "Skill",
-      "Edit(**/worktrees/**)",
-      "Write(**/worktrees/**)",
-      "Edit(**/pocketpal-dev-team/**)",
-      "Write(**/pocketpal-dev-team/**)",
-      "Edit(pocketpal-dev-team/**)",
-      "Write(pocketpal-dev-team/**)",
-      "Edit(worktrees/**)",
-      "Write(worktrees/**)",
-      "Write(**/workflows/**)",
-      "Write(workflows/**)"
+      "Edit",
+      "Write"
     ],
     "ask": [
       "Bash(git reset:*)",
