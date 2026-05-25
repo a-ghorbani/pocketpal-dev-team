@@ -279,7 +279,7 @@ shutdown). Aborted runs therefore land in `done`, not a dedicated status.
 | `talentRegistry` entries     | (C) `registerDefaultTalents()` (and tests via `talentRegistry.reset()`).                            |
 | `talentUIRegistry` entries   | (C) `registerDefaultTalents()`.                                                                     |
 | `pal.pact`                   | (C) `PalStore` create/update flows, edited via `TalentSection` in `PalSheet`.                       |
-| `pal.greeting`               | (C) `PalStore` create/update flows, edited via `PalSheet`.                                          |
+| `pal.greeting`               | (C) `PalStore` create/update flows, edited via `PalSheet` → `GreetingSection` (in-app editor); also sourced from `createLocalPalFromPalsHub` on PalsHub download. |
 | `local_pals.pact` (DB)       | (C) `PalRepository` (writes JSON-stringified value).                                                |
 | `resolvedSettings.tools`     | (C) `ChatSessionStore.resolveCompletionSettings()` only.                                            |
 
