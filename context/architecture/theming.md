@@ -36,7 +36,7 @@ In scope:
 
 Also in scope (added by FOU-115 / Phase 2):
 
-- A new namespace `src/components/ds/` holding the Phase 2 shared component library, built against the tokens layer in parallel with the legacy `src/components/*` namespace (which keeps working through Phase 3 swaps and is removed in Phase 4 / FOU-123).
+- A new namespace `src/components/ui/` holding the Phase 2 shared component library, built against the tokens layer in parallel with the legacy `src/components/*` namespace (which keeps working through Phase 3 swaps and is removed in Phase 4 / FOU-123).
 - A per-component wrap-vs-rebuild matrix (D13–D32): rebuild visually-defining families from RN primitives + Pressable; wrap `react-native-paper` for a11y-heavy form controls (`Switch`, `Checkbox`, `RadioButton`).
 - A Header building block (Figma `3011:23955`) reused by every DS overlay (Sheet/Modal/Dialog) — see §4i.
 - Paper-import discipline enforced via ESLint `no-restricted-imports` `importNames` blocklist that grows entry-by-entry as DS replacements ship (replaces the retired `verify-paper-surface.js`). Phase 2 seed: `['Surface']`.
@@ -186,7 +186,7 @@ The two surfaces **do not cross-feed**. New tokens do not derive from legacy MD3
 The DS layer is a sibling of the tokens layer:
 
 ```
-src/components/ds/
+src/components/ui/
   index.ts                          // public barrel — DS surface for Phase 3
   types.ts                          // CommonDSProps + WithRequiredA11yLabel + warnIfNoA11yLabel
   primitives/
@@ -225,14 +225,14 @@ __tests__/
     <Component>.test.tsx.snap       // variant × size × state × mode snapshots
 ```
 
-Public DS surface is `src/components/ds/index.ts`. Phase 3 imports from `'src/components/ds'`. No DS-internal file is imported across components except via `primitives/`.
+Public DS surface is `src/components/ui/index.ts`. Phase 3 imports from `'src/components/ui'`. No DS-internal file is imported across components except via `primitives/`.
 
 Stored on disk: nothing new. The DS layer is pure code. Computed at render: every style is a function of the resolved `Theme` from `useTheme()`.
 
 **Glossary additions:**
 
-- **DS layer** — `src/components/ds/`. The Phase 2 shared component library. Built against `useTheme()`. Distinct from `src/components/*` (the legacy components, which keep working through Phase 3 swaps and are removed in Phase 4 / FOU-123).
-- **Header building block** — the DS `Header` component at `src/components/ds/Header/`. Figma node `3011:23955`. Reused as the header primitive by `Sheet`, `Modal`, and `Dialog`.
+- **DS layer** — `src/components/ui/`. The Phase 2 shared component library. Built against `useTheme()`. Distinct from `src/components/*` (the legacy components, which keep working through Phase 3 swaps and are removed in Phase 4 / FOU-123).
+- **Header building block** — the DS `Header` component at `src/components/ui/Header/`. Figma node `3011:23955`. Reused as the header primitive by `Sheet`, `Modal`, and `Dialog`.
 - **State layer** — the token-defined opacity overlay (`stateLayerOpacity`, `pressedStateOpacity`, `focusStateOpacity`, `hoverStateOpacity`) applied by the `Pressable` primitive on `pressed` / `focused`.
 - **Visual-parity snapshot** — a serialized React tree of a DS component for a specific `(variant, size, state, mode)` tuple. Used by Phase 3 swaps to detect unintended visual change (§4k).
 
@@ -341,22 +341,22 @@ No `'x1'` state — x1Theme was removed in FOU-114. UIStore's `colorScheme` type
 | `App.tsx` | (a) Hydration gate (I10) in `AppWithMigrationWrapper`: renders a **neutral background-only hold** (flat colored `View`, no branding/`Text`/safe-area) while `mobx-persist-store` hydrates `UIStore`. (b) `<PaperProvider theme={theme}>` — wraps app with `useTheme()` output once hydrated. | No theme construction logic. **No branded splash, no native-launch impersonation, no `SafeAreaProvider`/`useSafeAreaInsets`/`initialWindowMetrics` in the hold.** |
 | Existing component `styles.ts` files | Continue to read `theme.colors.*`, `theme.fonts.*` (MD3 typescale + custom), `theme.spacing.default`, `theme.borders.*`, `theme.insets.*`. | Direct font-file imports, raw hex values, or MD3 internals. |
 | `src/utils/types.ts`, `src/utils/index.ts`, `src/components/SidebarContent/styles.ts`, `src/components/RenameModal/styles.ts` | Continue to import `MD3Theme` / `MD3Colors` / `MD3Typescale`. | Migration to a Paper-free type is deferred — see §5 #5. |
-| `src/components/ds/primitives/Pressable` | A `Pressable` wrapper that resolves `pressed`/`focused`/`hovered` and renders the token-bound state-layer overlay. | Any visual outside the state layer (no padding, no radius). |
-| `src/components/ds/<Component>` (rebuild families) | A token-bound, observation-free presentational component. | Store reads. Raw hex / raw px. MD3 typescale references. |
-| `src/components/ds/{Switch,Checkbox,RadioButton}` | A thin Paper wrapper exposing the DS API contract (§4h). Forwards a11y props on the wrapping View. | Custom state machinery. Custom a11y. |
-| `src/components/ds/Header` | The shared overlay header building block (Figma `3011:23955`). | Sheet/Modal/Dialog mechanics. |
-| `src/components/ds/{Sheet,Modal,Dialog}` | Composition of `Header + Body + Actions` around an existing presentation primitive (gorhom for Sheet, Paper Portal for Modal/Dialog). Renders exactly one Header per overlay (I_DS3). | New animation primitives. |
-| `src/components/ds/*/styles.ts` | `createStyles(theme, {variant, size, state})` returning a `StyleSheet`. | Direct token-module imports. Raw values (hex literals banned by lint). |
-| `src/components/ds/index.ts` | The public DS barrel. | Re-exports from `src/components/*` (legacy namespace). |
-| `.eslintrc.js` | `no-restricted-imports` Paper `importNames` blocklist (seed `['Surface']`, grows per Phase 3 slice). Per-file override (`excludedFiles`) re-allowing Paper imports inside `src/components/ds/{Switch,Checkbox,RadioButton}/**`. Plus the `no-restricted-syntax` hex-literal ban scoped to `src/components/ds/**/styles.ts`. | Bulk Paper bans (entries accrue slice-by-slice, I_DS4). |
+| `src/components/ui/primitives/Pressable` | A `Pressable` wrapper that resolves `pressed`/`focused`/`hovered` and renders the token-bound state-layer overlay. | Any visual outside the state layer (no padding, no radius). |
+| `src/components/ui/<Component>` (rebuild families) | A token-bound, observation-free presentational component. | Store reads. Raw hex / raw px. MD3 typescale references. |
+| `src/components/ui/{Switch,Checkbox,RadioButton}` | A thin Paper wrapper exposing the DS API contract (§4h). Forwards a11y props on the wrapping View. | Custom state machinery. Custom a11y. |
+| `src/components/ui/Header` | The shared overlay header building block (Figma `3011:23955`). | Sheet/Modal/Dialog mechanics. |
+| `src/components/ui/{Sheet,Modal,Dialog}` | Composition of `Header + Body + Actions` around an existing presentation primitive (gorhom for Sheet, Paper Portal for Modal/Dialog). Renders exactly one Header per overlay (I_UI3). | New animation primitives. |
+| `src/components/ui/*/styles.ts` | `createStyles(theme, {variant, size, state})` returning a `StyleSheet`. | Direct token-module imports. Raw values (hex literals banned by lint). |
+| `src/components/ui/index.ts` | The public DS barrel. | Re-exports from `src/components/*` (legacy namespace). |
+| `.eslintrc.js` | `no-restricted-imports` Paper `importNames` blocklist (seed `['Surface']`, grows per Phase 3 slice). Per-file override (`excludedFiles`) re-allowing Paper imports inside `src/components/ui/{Switch,Checkbox,RadioButton}/**`. Plus the `no-restricted-syntax` hex-literal ban scoped to `src/components/ui/**/styles.ts`. | Bulk Paper bans (entries accrue slice-by-slice, I_UI4). |
 
-### 4g. DS component layer (`src/components/ds/`) — added by FOU-115 / Phase 2
+### 4g. DS component layer (`src/components/ui/`) — added by FOU-115 / Phase 2
 
-1. Every DS component reads tokens through `useTheme()` only — no direct token-module imports, no raw hex (lint-enforced by `no-restricted-syntax` on `src/components/ds/**/styles.ts`), no raw px in `styles.ts`.
+1. Every DS component reads tokens through `useTheme()` only — no direct token-module imports, no raw hex (lint-enforced by `no-restricted-syntax` on `src/components/ui/**/styles.ts`), no raw px in `styles.ts`.
 2. Every interactive DS component is built on the `Pressable` primitive in `primitives/Pressable/`. The primitive is the single writer of pressed/focused state-layer overlays.
-3. DS components are **observation-free**: they do not import `mobx-react`, `observer`, or any store. Stateful integration is the caller's responsibility in Phase 3 (I_DS2).
+3. DS components are **observation-free**: they do not import `mobx-react`, `observer`, or any store. Stateful integration is the caller's responsibility in Phase 3 (I_UI2).
 4. DS components do not import from `src/components/*` (the legacy namespace) — the only exception is `Dropdown` which composes the sanctioned `src/components/Menu` wrapper (which itself wraps Paper Menu), so the DS layer does NOT import Paper directly outside the wrap-Paper trio.
-5. The `Header` component is the single source of structural truth for all DS overlay headers. A DS overlay that needs a header MUST compose `<Header>`; bespoke headers are forbidden inside the DS layer (I_DS3).
+5. The `Header` component is the single source of structural truth for all DS overlay headers. A DS overlay that needs a header MUST compose `<Header>`; bespoke headers are forbidden inside the DS layer (I_UI3).
 6. DS component public APIs follow the `variant` + `size` + `state` axis convention (§4h). New variants are added to the existing axis, not as new components.
 7. Every DS component file exports a single named React component (no default exports).
 
@@ -381,7 +381,7 @@ Rules:
 2. Defaults declared in JSDoc above each component.
 3. Token-binding pattern: `styles.ts` exposes `createStyles(theme, {variant, size, state})` and is the only place that maps a `(variant, size, state)` triple to token reads.
 4. State model: `Pressable` resolves `pressed`/`focused` (via RN Pressable's child callback) and the primitive overlays the state-layer accordingly. `disabled` is part of the same state model. Wrap-Paper trio (Switch/Checkbox/RadioButton) delegates `pressed`/`focused` to Paper.
-5. **`accessibilityLabel` is required** for interactive components. Primary enforcement = TypeScript discriminated-union constraint (`WithRequiredA11yLabel<P>` in `src/components/ds/types.ts`): consumers must supply `label` (which doubles as the spoken label) OR an explicit `accessibilityLabel`. Dev-only `__DEV__` runtime fallback (`warnIfNoA11yLabel`) catches type bypasses (D34).
+5. **`accessibilityLabel` is required** for interactive components. Primary enforcement = TypeScript discriminated-union constraint (`WithRequiredA11yLabel<P>` in `src/components/ui/types.ts`): consumers must supply `label` (which doubles as the spoken label) OR an explicit `accessibilityLabel`. Dev-only `__DEV__` runtime fallback (`warnIfNoA11yLabel`) catches type bypasses (D34).
 6. `accessibilityRole` defaults: `Button`/`IconButton`/`Chip` (interactive) → `'button'`; `Chip` (display) → `'text'`; `Switch` → `'switch'`; `Checkbox` → `'checkbox'`; `RadioButton` → `'radio'`; `Tabs`/`BottomNavBar` root → `'tablist'`, item → `'tab'`; `Header` → `'header'` (D35 — desired landmark collision with native nav headers); `Label`/`CategoryBadge` → `'text'`; `Card`/`Surface`/`Divider` → `'none'`.
 
 ### 4i. The Header building block (Figma `3011:23955`)
@@ -398,7 +398,7 @@ type HeaderProps = CommonDSProps & {
 };
 ```
 
-Reads `theme.typography.titleM` for title, `theme.typography.captionS` for subtitle. Horizontal padding = `theme.spacing.m`; vertical padding = `theme.spacing.s`. `testID` default `'ds-header'`; `accessibilityRole` default `'header'` (D35).
+Reads `theme.typography.titleM` for title, `theme.typography.captionS` for subtitle. Horizontal padding = `theme.spacing.m`; vertical padding = `theme.spacing.s`. `testID` default `'ui-header'`; `accessibilityRole` default `'header'` (D35).
 
 ### 4j. Wrap-vs-rebuild matrix (the central architectural decision of FOU-115)
 
@@ -430,7 +430,7 @@ Summary: 15 rebuilt families, 3 wrap-Paper families.
 ### 4k. Visual-parity snapshot strategy (bounded matrix)
 
 #### 4k.1 Mechanism
-Each DS component ships a Jest snapshot test using `@testing-library/react-native`'s `render().toJSON()` + `toMatchSnapshot()`. A shared helper `src/components/ds/__tests__/helpers/snapshotMatrix.tsx` generates the per-family matrix.
+Each DS component ships a Jest snapshot test using `@testing-library/react-native`'s `render().toJSON()` + `toMatchSnapshot()`. A shared helper `src/components/ui/__tests__/helpers/snapshotMatrix.tsx` generates the per-family matrix.
 
 #### 4k.2 Rebuild-family matrix (bounded)
 - Baseline: `variant × size × {default, disabled} × {light, dark}` — every (variant, size) under both static states under both modes.
@@ -446,7 +446,7 @@ Restricted matrix: `variant × size × {default, disabled} × {light, dark} × v
 Each snapshot renders against a real `Theme` from `themeFixtures.byMode(mode).byLocale(language)` (D33 — `jest/fixtures/theme.ts` extended with the `byMode().byLocale()` factory).
 
 #### 4k.5 Phase 3 swap contract
-Snapshots are the Phase 3 comparison baseline. When a Phase 3 slice swaps a screen, the relevant DS snapshots MUST NOT change in that PR — any DS-side visual change must be a separate, intentional commit (I_DS5).
+Snapshots are the Phase 3 comparison baseline. When a Phase 3 slice swaps a screen, the relevant DS snapshots MUST NOT change in that PR — any DS-side visual change must be a separate, intentional commit (I_UI5).
 
 ### 4l. `testID` + accessibility-label freeze contract
 
@@ -454,50 +454,50 @@ Defaults table (the migration handshake Phase 3 relies on):
 
 | Component | Default `testID` | `accessibilityRole` |
 | --- | --- | --- |
-| `Button` | `'ds-button'` | `'button'` |
-| `IconButton` | `'ds-icon-button'` | `'button'` |
-| `Input` | `'ds-input'` | `'none'` (RN TextInput owns its own a11y) |
-| `Chip` | `'ds-chip'` | `'button'` (interactive) / `'text'` (display) |
-| `Tabs` (root) | `'ds-tabs'` | `'tablist'` |
-| `Tabs` (item) | `'ds-tab-item-<value>'` | `'tab'` |
-| `BottomNavBar` (root) | `'ds-bottom-nav'` | `'tablist'` |
-| `BottomNavBar` (item) | `'ds-bottom-nav-item-<value>'` | `'tab'` |
-| `RadioButton` | `'ds-radio-<value>'` | `'radio'` |
-| `Checkbox` | `'ds-checkbox'` | `'checkbox'` |
-| `Switch` | `'ds-switch'` | `'switch'` |
-| `Header` | `'ds-header'` | `'header'` (D35) |
-| `Card` | `'ds-card'` | `'none'` |
-| `Surface` | `'ds-surface'` | `'none'` |
-| `Sheet` | `'ds-sheet'` | n/a (overlay) |
-| `Modal` | `'ds-modal'` | n/a |
-| `Dialog` | `'ds-dialog'` | n/a |
-| `Divider` | `'ds-divider'` | `'none'` |
-| `Label` | `'ds-label'` | `'text'` |
-| `CategoryBadge` | `'ds-category-badge'` | `'text'` |
-| `Dropdown` | `'ds-dropdown'` | `'button'` |
-| `MessageContent` | `'ds-message-content'` | `'none'` |
+| `Button` | `'ui-button'` | `'button'` |
+| `IconButton` | `'ui-icon-button'` | `'button'` |
+| `Input` | `'ui-input'` | `'none'` (RN TextInput owns its own a11y) |
+| `Chip` | `'ui-chip'` | `'button'` (interactive) / `'text'` (display) |
+| `Tabs` (root) | `'ui-tabs'` | `'tablist'` |
+| `Tabs` (item) | `'ui-tab-item-<value>'` | `'tab'` |
+| `BottomNavBar` (root) | `'ui-bottom-nav'` | `'tablist'` |
+| `BottomNavBar` (item) | `'ui-bottom-nav-item-<value>'` | `'tab'` |
+| `RadioButton` | `'ui-radio-<value>'` | `'radio'` |
+| `Checkbox` | `'ui-checkbox'` | `'checkbox'` |
+| `Switch` | `'ui-switch'` | `'switch'` |
+| `Header` | `'ui-header'` | `'header'` (D35) |
+| `Card` | `'ui-card'` | `'none'` |
+| `Surface` | `'ui-surface'` | `'none'` |
+| `Sheet` | `'ui-sheet'` | n/a (overlay) |
+| `Modal` | `'ui-modal'` | n/a |
+| `Dialog` | `'ui-dialog'` | n/a |
+| `Divider` | `'ui-divider'` | `'none'` |
+| `Label` | `'ui-label'` | `'text'` |
+| `CategoryBadge` | `'ui-category-badge'` | `'text'` |
+| `Dropdown` | `'ui-dropdown'` | `'button'` |
+| `MessageContent` | `'ui-message-content'` | `'none'` |
 
-Naming policy: `ds-<kebab-component-name>` and `ds-<kebab-component-name>-<discriminator>` for repeated items. Phase 3 swap PRs MUST pass the legacy testID at each call-site so Appium selectors continue to resolve (I_DS6).
+Naming policy: `ds-<kebab-component-name>` and `ds-<kebab-component-name>-<discriminator>` for repeated items. Phase 3 swap PRs MUST pass the legacy testID at each call-site so Appium selectors continue to resolve (I_UI6).
 
 ### 4m. Paper-import discipline (`no-restricted-imports` blocklist)
 
 1. `.eslintrc.js` extends its existing `src/**/*.{ts,tsx}` `overrides` entry with a `paths` rule for `'react-native-paper'` carrying an `importNames` blocklist.
 2. **Phase 2 seed = `['Surface']`** (D31 proof-of-life). Both pre-existing `Surface` consumers (`UsageStats.tsx`, `PalDetailSheet.tsx`) swap to `DSSurface` in the same PR (Scenario I' / WHAT §4g.7).
-3. The blocklist grows entry-by-entry as each Phase 3 swap lands its DS replacement and migrates all call-sites (I_DS4 monotonic growth).
+3. The blocklist grows entry-by-entry as each Phase 3 swap lands its DS replacement and migrates all call-sites (I_UI4 monotonic growth).
 4. Wrap-Paper DS components (`Switch`, `Checkbox`, `RadioButton`) are listed in `excludedFiles` so they keep their direct Paper imports — the only legal place those imports live by Phase 4.
 5. Final-state blocklist (when Phase 4 / FOU-123 lands) = inversion of the locked thin set: `'ActivityIndicator', 'Card', 'Checkbox', 'Chip', 'Dialog', 'Divider', 'DividerProps', 'Drawer', 'FAB', 'List', 'MD3Theme', 'Menu', 'Paragraph', 'ProgressBar', 'RadioButton', 'SegmentedButtons', 'Snackbar', 'Surface', 'Switch', 'TextInput', 'Tooltip', 'useTheme'`. Locked thin set (never banned): `Text, Button, IconButton, Portal, Provider`.
 6. The ESLint rule is the only enforcement vector for Paper-import discipline post-FOU-114 (the snapshot guard `verify-paper-surface.js` is gone).
 
 ### 4n. Hard invariants — DS layer (added by FOU-115)
 
-- **I_DS1 (DS components are tokens-only)**: No DS component reads a raw hex, raw px, MD3 typescale key, or `theme.fonts.*` legacy alias. All visual values flow through `theme.colors.*`, `theme.typography.*`, `theme.spacing.*`, `theme.radius.*`, `theme.stroke.*`. Mechanically enforced for hex literals by `no-restricted-syntax` scoped to `src/components/ds/**/styles.ts`.
-- **I_DS2 (DS layer is observation-free)**: No file under `src/components/ds/` imports `mobx`, `mobx-react`, or any store.
-- **I_DS3 (Header is the sole overlay header)**: No DS overlay (`Sheet`, `Modal`, `Dialog`) renders inline header markup; they MUST compose `<Header>`. Each overlay's behaviour test asserts the rendered tree contains exactly one `testID='ds-header'`.
-- **I_DS4 (Paper-import discipline grows monotonically)**: Once a Paper `importName` is added to the blocklist, it MUST NOT be removed (other than the per-file `excludedFiles` re-allow for the wrap-Paper trio).
-- **I_DS5 (Phase 3 swaps preserve DS snapshots)**: A Phase 3 slice PR may change a screen's snapshot, but MUST NOT change any DS component's snapshot. DS visual changes are separate, intentional commits.
-- **I_DS6 (testID freeze)**: The Appium-observable testID tree at any screen MUST be identical pre- and post-Phase-3-swap. New DS testIDs are additive at the leaves, never replacing.
-- **I_DS7 (canonical-variant choices are recorded)**: For each duplicated DS family (Chips×3, Tabs×3, nav×2), the canonical variant choice (D8/D9/D10) is recorded here. Phase 3 implements against the canonical choice; other variants are explicit dead designs until a designer-sourced reconciliation.
-- **I_DS8 (folded rename is one commit, doc update in same PR)**: The token-rename patch lands as the FIRST commit of the FOU-115 PR; §1a is updated in the same PR. (Promoted to (C) on this merge.)
+- **I_UI1 (DS components are tokens-only)**: No DS component reads a raw hex, raw px, MD3 typescale key, or `theme.fonts.*` legacy alias. All visual values flow through `theme.colors.*`, `theme.typography.*`, `theme.spacing.*`, `theme.radius.*`, `theme.stroke.*`. Mechanically enforced for hex literals by `no-restricted-syntax` scoped to `src/components/ui/**/styles.ts`.
+- **I_UI2 (DS layer is observation-free)**: No file under `src/components/ui/` imports `mobx`, `mobx-react`, or any store.
+- **I_UI3 (Header is the sole overlay header)**: No DS overlay (`Sheet`, `Modal`, `Dialog`) renders inline header markup; they MUST compose `<Header>`. Each overlay's behaviour test asserts the rendered tree contains exactly one `testID='ui-header'`.
+- **I_UI4 (Paper-import discipline grows monotonically)**: Once a Paper `importName` is added to the blocklist, it MUST NOT be removed (other than the per-file `excludedFiles` re-allow for the wrap-Paper trio).
+- **I_UI5 (Phase 3 swaps preserve DS snapshots)**: A Phase 3 slice PR may change a screen's snapshot, but MUST NOT change any DS component's snapshot. DS visual changes are separate, intentional commits.
+- **I_UI6 (testID freeze)**: The Appium-observable testID tree at any screen MUST be identical pre- and post-Phase-3-swap. New DS testIDs are additive at the leaves, never replacing.
+- **I_UI7 (canonical-variant choices are recorded)**: For each duplicated DS family (Chips×3, Tabs×3, nav×2), the canonical variant choice (D8/D9/D10) is recorded here. Phase 3 implements against the canonical choice; other variants are explicit dead designs until a designer-sourced reconciliation.
+- **I_UI8 (folded rename is one commit, doc update in same PR)**: The token-rename patch lands as the FIRST commit of the FOU-115 PR; §1a is updated in the same PR. (Promoted to (C) on this merge.)
 
 ---
 
@@ -525,7 +525,7 @@ Naming policy: `ds-<kebab-component-name>` and `ds-<kebab-component-name>-<discr
    Belongs to FOU-123.
 6. Remove the comment "(currently withOpacity-derived, FOU-115)" from §1a `colors.surfaceContainer*` once item #4 lands.
 7. Migrate `src/components/Sheet/Sheet.tsx`, `src/components/Dialog/Dialog.tsx` call-sites from the legacy wrappers to the DS `Sheet`/`Modal`/`Dialog`. Per-screen Phase 3 work (FOU-117+).
-8. Grow the Paper-import blocklist (`.eslintrc.js` `no-restricted-imports` `importNames`) per Phase 3 slice. Each Phase 3 slice that ships a DS replacement for a Paper family adds that family's `importName` and migrates all call-sites in the same PR (I_DS4 monotonic growth).
+8. Grow the Paper-import blocklist (`.eslintrc.js` `no-restricted-imports` `importNames`) per Phase 3 slice. Each Phase 3 slice that ships a DS replacement for a Paper family adds that family's `importName` and migrates all call-sites in the same PR (I_UI4 monotonic growth).
 
 ---
 
@@ -619,7 +619,7 @@ Prior session: `uiStore.setLanguage('ja')` was called and persisted. App restart
 - **D34** (`accessibilityLabel` enforcement = TS discriminated union, with __DEV__ runtime fallback): Primary mechanism rejects calls at compile time via `WithRequiredA11yLabel<P>` union forcing `label` OR `accessibilityLabel`. Runtime fallback `warnIfNoA11yLabel` catches dynamic-spread / `any`-typed bypasses.
 - **D35** (`Header` default `accessibilityRole='header'` collides with RN nav headers — by design): Assistive tech (VoiceOver, TalkBack) treats both as document landmarks; sharing the role lets users navigate by landmark consistently across native nav headers and DS overlay headers.
 
-### Phase 2 canonical-variant decisions (recorded under I_DS7)
+### Phase 2 canonical-variant decisions (recorded under I_UI7)
 
 - **D8 → Chip×3** (FOU-115): Canonical = `890:29153` (the standalone Chip definition). `768:29722` is the Chip-as-rendered-in-input-context variant; deferred Phase 4 designer ask.
 - **D9 → Tabs×3** (FOU-115): Canonical = `764:27807`. `408:11226` is an older Tabs render preserved as legacy reference; deferred.
@@ -696,6 +696,6 @@ iOS ships a branded launch storyboard (`UILaunchStoryboardName = LaunchScreen` i
 
 1. The deferred-cleanups list in §5 must be carried forward in this doc until each item lands.
 2. If a future slice's dark-token extraction finds tokens with no dark binding in the canonical file, those are designer asks logged on FOU-112 — not invented at the engineering side.
-3. The Phase 3 blocklist growth contract (I_DS4) must be re-stated when each Phase 3 slice ships, so every Phase 3 WHAT cites it as a check-off item.
-4. The wrap-vs-rebuild matrix (D13–D32) and canonical-variant decisions (D8/D9/D10 under I_DS7) are the contract Phase 3 slices implement against. Widening a `variant` union or adding a non-canonical variant requires a delta WHAT that updates this doc.
+3. The Phase 3 blocklist growth contract (I_UI4) must be re-stated when each Phase 3 slice ships, so every Phase 3 WHAT cites it as a check-off item.
+4. The wrap-vs-rebuild matrix (D13–D32) and canonical-variant decisions (D8/D9/D10 under I_UI7) are the contract Phase 3 slices implement against. Widening a `variant` union or adding a non-canonical variant requires a delta WHAT that updates this doc.
 3. The Paper-surface reduction to the thin set tracked under FOU-115/123.
