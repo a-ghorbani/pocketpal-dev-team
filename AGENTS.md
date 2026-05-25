@@ -16,6 +16,7 @@ This repo is the workflow control plane for PocketPal AI. The target app code is
 - **Run the pipeline autonomously.** After each stage returns, the calling session immediately invokes the next agent in the chain. Do NOT use `AskUserQuestion` or any other interactive prompt between stages. There is no human approval gate between stages. Stop ONLY for:
   - `NEEDS_INPUT` from the orchestrator (unanswered clarifications in the brief)
   - `HAS_BLOCKERS` persisting after round 2 of either critic loop
+- **Public artifacts hygiene.** In GitHub artifacts (PR title/body/comment, issue, commit message) and in `repos/pocketpal-ai/` source/tests/configs, reference only public things — public GitHub issues/PRs, file paths, library names. No Linear (`FOU-*`, `linear.app`), no internal task IDs, no story-doc anchors (`I_DSn`, `Dn`, `§4x`, `Scenario X`, `WHAT/HOW`, `round N`). Source comments stay terse — current state, not the story.
 
 ## Workflow
 
