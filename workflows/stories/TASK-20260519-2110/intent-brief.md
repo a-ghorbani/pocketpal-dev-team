@@ -6,13 +6,14 @@
 
 - **Task ID**: TASK-20260519-2110
 - **Source**: Linear FOU-114 (Phase 1 of parent initiative FOU-112, "PocketPal redesign — Figma UX rollout"). Rollout plan: `context/redesign/FOU-112-rollout.md` in the dev-team control-plane repo (not committed; not present in the worktree).
-- **Worktree**: `./worktrees/TASK-20260519-2110`
+- **Worktree**: `./worktrees/TASK-20260519-2110` (removed 2026-05-26)
 - **Branch**: `feature/TASK-20260519-2110`
 - **Complexity**: standard (touches a contract: theme/token model + native build; multi-file; full pipeline)
 - **Native Changes**: YES (adds fonts; updates `react-native.config.js`; requires native font linking, `pod install`, iOS build, Android build)
 - **Visual Confirmation**: YES (this slice must produce NO visible change — visual capture is needed to prove the no-regression claim)
 - **Created**: 2026-05-19
-- **Status**: approved
+- **Status**: merged (main body in PR #732); token-rename leftover folded into FOU-115 / PR #742
+- **PR**: https://github.com/a-ghorbani/pocketpal-ai/pull/732 (main body, merged separately); the 5-file token-rename leftover ride-along merged via https://github.com/a-ghorbani/pocketpal-ai/pull/742 (squash `6187c4c`, 2026-05-26).
 
 ---
 
