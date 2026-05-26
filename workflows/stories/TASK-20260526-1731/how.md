@@ -22,22 +22,22 @@ Executable worklist that lands the WHAT delta in `workflows/stories/TASK-2026052
 
 | Step | Status | Commit | Notes |
 | --- | --- | --- | --- |
-| Step 1 — Token: spacing.xxl=40 | pending | - | App-side half of D11 / I_OB11 |
-| Step 2 — UIStore: persisted + ephemeral onboarding fields | pending | - | §1a / §5 |
-| Step 3 — PalStore: initializePipPal seeded from initialize() | pending | - | §1b / §4d |
-| Step 4 — RECOMMENDED_PAL_MODEL_SET constant + unit test | pending | - | D2 model-id stability test |
-| Step 5 — DS Stepper component + tests + snapshots (8 cells via `variants=['2','3','4','5']`) | pending | - | §4c / §4c.5 / §4l |
-| Step 6 — l10n keys under onboarding.* | pending | - | §4j |
-| Step 7 — Splash + Onboarding{1..6} screens (light + dark) | pending | - | §4b / §4h / §4i |
-| Step 8 — OnboardingStack navigator | pending | - | §4a / §4g |
-| Step 9 — SwitchPoint inside App.tsx (Drawer vs OnboardingStack) | pending | - | §4a |
-| Step 10 — Visual capture (per-screen light + dark) | pending | - | §4l |
-| Step 11 — E2E onboarding spec | pending | - | §6 |
-| Step 12 — AutomationBridge opt-IN onboarding bypass | pending | - | §9j |
-| Step 13 — Lint + typecheck + Jest | pending | - | repo gates |
-| Step 14 — Promote WHAT to new `context/architecture/onboarding.md` | pending | - | dev-team-repo PR, cited from app PR |
-| Step 15 — Amend `context/architecture/theming.md` §1a (xxl) | pending | - | dev-team-repo PR, cited from app PR |
-| Step 16 — Paired-edit cross-cite handshake | pending | - | App PR ↔ dev-team-repo commit |
+| Step 1 — Token: spacing.xxl=40 | DONE | app `e205be1` | App-side half of D11 / I_OB11 |
+| Step 2 — UIStore: persisted + ephemeral onboarding fields | DONE | app `a991d9c` | §1a / §5 |
+| Step 3 — PalStore: initializePipPal seeded from initialize() | DONE | app `6761343` | §1b / §4d |
+| Step 4 — RECOMMENDED_PAL_MODEL_SET constant + unit test | DONE | app `f11ea89` | D2 model-id stability test |
+| Step 5 — DS Stepper component + tests + snapshots (8 cells via `variants=['2','3','4','5']`) | DONE | app `9c03290` | §4c / §4c.5 / §4l — 8 snapshots emitted |
+| Step 6 — l10n keys under onboarding.* | DONE | app `247d106` | §4j — bodies logged as designer asks |
+| Step 7 — Splash + Onboarding{1..6} screens | DONE | app `2932063` | §4b / §4h / §4i |
+| Step 8 — OnboardingStack navigator | DONE | app `2932063` | §4a / §4g |
+| Step 9 — SwitchPoint inside App.tsx | DONE | app `2932063` | §4a |
+| Step 10 — Visual capture (per-screen light + dark) | PENDING-HUMAN | app `39da448` (placeholder dir) | Captures require running sim/emu — implementer left README + slot list |
+| Step 11 — E2E onboarding spec + OnboardingPage | DONE | app `39da448` | §6 |
+| Step 12 — AutomationBridge opt-IN onboarding bypass | DONE | app `df74063` | §9j |
+| Step 13 — Lint + typecheck + Jest | DONE | app `1fca72f` | 3188/3190 passed; warnings pre-existing |
+| Step 14 — Promote WHAT to `context/architecture/onboarding.md` | DONE | dev-team `a448d3f` | New flow doc |
+| Step 15 — Amend `context/architecture/theming.md` §1a (xxl) | DONE | dev-team `a448d3f` | One-line edit |
+| Step 16 — Paired-edit cross-cite handshake | DONE-PARTIAL | dev-team `a448d3f`; app PR URL pending | Pipeline-reviewer reconciles app PR URL after open |
 | Cleanup reminders | pending | - | Track in WHAT §10 — none landing here |
 
 ---
