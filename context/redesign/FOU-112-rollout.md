@@ -71,7 +71,7 @@ file is **cleaner than the older audited file** — no remaining designer blocke
 | 0 — Decisions | **FOU-113** | Inputs locked (this doc). Remaining: confirm component-variant canon per slice as encountered. |
 | 1 — Foundation (invisible) | **FOU-114** | Token module (single Spacing/Radius scale + aliases); add Fraunces + Fraunces-Italic + JetBrains Mono (static cuts, iOS+Android); decouple theme from MD3; **RTL + non-Latin fallback rule**; map current visuals onto tokens so app is unchanged. `NATIVE_CHANGES=YES`. |
 | 2 — Component library (parallel) | **FOU-115** | New components against tokens, same API where possible. Pick **one representative bespoke sheet** as the working sheet/modal pattern — do not block on a delivered Modal component. |
-| 3a — Onboarding | **FOU-116** | Screens 1–6 (`884:28223`). Greenfield (no onboarding today). relatedTo FOU-98. |
+| 3a — Onboarding | **FOU-116** (TASK-20260526-1731, app PR pending) | Screens 1–6 (`884:28223`). Greenfield (no onboarding today). relatedTo FOU-98. Promoted flow doc: `context/architecture/onboarding.md`. |
 | 3b — Home + Chat | **FOU-117** | Homepage + Chat (advanced details/reasoning, multiple answers, audio, temp chat). Preserve markdown/table/thinking rendering. |
 | 3c — Models + recovery | **FOU-118** | Model screens + load/error/recovery states. UX improvement, not pure reskin. |
 | 3d — Pals | **FOU-119** | My Pals + Create/modify pal (General/Generation, assistant/Roleplay/video). |

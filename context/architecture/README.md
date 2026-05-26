@@ -16,6 +16,7 @@ One file per **flow**. A flow is bounded by a single user-facing concept:
 - `persistence.md` — DB schema, migrations, exports, MMKV keys
 - `vision.md` — multimodal pipeline (when it lands)
 - `release.md` — CI / build / TestFlight / Play Store
+- `onboarding.md` — first-launch flow (Splash + 6 onboarding screens; gated by `uiStore.hasCompletedOnboarding`)
 
 Per-flow is the right granularity. Per-component is too narrow (components churn). Per-system is too broad (becomes a book nobody reads).
 

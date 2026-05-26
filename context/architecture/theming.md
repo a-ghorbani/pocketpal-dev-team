@@ -92,7 +92,7 @@ Tokens
     codeM, codeS                       // JetBrains Mono
 
   spacing: TokenSpacing
-    none: 0, xxs: 2, xs: 4, s: 8, sm: 12, m: 16, ml: 20, l: 24, xl: 32   // NEW: xl
+    none: 0, xxs: 2, xs: 4, s: 8, sm: 12, m: 16, ml: 20, l: 24, xl: 32, xxl: 40   // NEW: xl, xxl
 
   radius: TokenRadius
     none: 0, xxs: 2, xs: 4, s: 8, m: 12, ml: 16, l: 20, xl: 32, xxl: 40
