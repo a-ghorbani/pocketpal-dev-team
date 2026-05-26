@@ -233,7 +233,7 @@ Stored on disk: nothing new. The DS layer is pure code. Computed at render: ever
 
 - **DS layer** — `src/components/ui/`. The Phase 2 shared component library. Built against `useTheme()`. Distinct from `src/components/*` (the legacy components, which keep working through Phase 3 swaps and are removed in Phase 4 / FOU-123).
 - **Header building block** — the DS `Header` component at `src/components/ui/Header/`. Figma node `3011:23955`. Reused as the header primitive by `Sheet`, `Modal`, and `Dialog`.
-- **State layer** — the token-defined opacity overlay (`stateLayerOpacity`, `pressedStateOpacity`, `focusStateOpacity`, `hoverStateOpacity`) applied by the `Pressable` primitive on `pressed` / `focused`.
+- **State layer** — the token-defined opacity overlay (`stateLayerOpacity`, `pressedStateOpacity`, `focusStateOpacity`, `hoverStateOpacity`) applied by the `Pressable` primitive on `pressed`. `focusStateOpacity` and `hoverStateOpacity` remain token-level constants for future consumer-driven focus/hover branches; the Pressable primitive itself only resolves `pressed` on mobile.
 - **Visual-parity snapshot** — a serialized React tree of a DS component for a specific `(variant, size, state, mode)` tuple. Used by Phase 3 swaps to detect unintended visual change (§4k).
 
 ---
@@ -341,7 +341,7 @@ No `'x1'` state — x1Theme was removed in FOU-114. UIStore's `colorScheme` type
 | `App.tsx` | (a) Hydration gate (I10) in `AppWithMigrationWrapper`: renders a **neutral background-only hold** (flat colored `View`, no branding/`Text`/safe-area) while `mobx-persist-store` hydrates `UIStore`. (b) `<PaperProvider theme={theme}>` — wraps app with `useTheme()` output once hydrated. | No theme construction logic. **No branded splash, no native-launch impersonation, no `SafeAreaProvider`/`useSafeAreaInsets`/`initialWindowMetrics` in the hold.** |
 | Existing component `styles.ts` files | Continue to read `theme.colors.*`, `theme.fonts.*` (MD3 typescale + custom), `theme.spacing.default`, `theme.borders.*`, `theme.insets.*`. | Direct font-file imports, raw hex values, or MD3 internals. |
 | `src/utils/types.ts`, `src/utils/index.ts`, `src/components/SidebarContent/styles.ts`, `src/components/RenameModal/styles.ts` | Continue to import `MD3Theme` / `MD3Colors` / `MD3Typescale`. | Migration to a Paper-free type is deferred — see §5 #5. |
-| `src/components/ui/primitives/Pressable` | A `Pressable` wrapper that resolves `pressed`/`focused`/`hovered` and renders the token-bound state-layer overlay. | Any visual outside the state layer (no padding, no radius). |
+| `src/components/ui/primitives/Pressable` | A `Pressable` wrapper that resolves `pressed` and renders the token-bound state-layer overlay. | `focused`/`hovered` resolution (RN's `Pressable` does not surface these on mobile — consumers wrap `onFocus`/`onBlur` themselves). Any visual outside the state layer (no padding, no radius). |
 | `src/components/ui/<Component>` (rebuild families) | A token-bound, observation-free presentational component. | Store reads. Raw hex / raw px. MD3 typescale references. |
 | `src/components/ui/{Switch,Checkbox,RadioButton}` | A thin Paper wrapper exposing the DS API contract (§4h). Forwards a11y props on the wrapping View. | Custom state machinery. Custom a11y. |
 | `src/components/ui/Header` | The shared overlay header building block (Figma `3011:23955`). | Sheet/Modal/Dialog mechanics. |
@@ -353,9 +353,9 @@ No `'x1'` state — x1Theme was removed in FOU-114. UIStore's `colorScheme` type
 ### 4g. DS component layer (`src/components/ui/`) — added by FOU-115 / Phase 2
 
 1. Every DS component reads tokens through `useTheme()` only — no direct token-module imports, no raw hex (lint-enforced by `no-restricted-syntax` on `src/components/ui/**/styles.ts`), no raw px in `styles.ts`.
-2. Every interactive DS component is built on the `Pressable` primitive in `primitives/Pressable/`. The primitive is the single writer of pressed/focused state-layer overlays.
+2. Every interactive DS component is built on the `Pressable` primitive in `primitives/Pressable/`. The primitive is the single writer of `pressed` state-layer overlays (the only interactive state RN's `Pressable` exposes via its `style` callback on mobile). Focus, where it applies, is consumer-driven (e.g. `Input` owns its `onFocus`/`onBlur` render branch); hover is web-only and out of mobile scope.
 3. DS components are **observation-free**: they do not import `mobx-react`, `observer`, or any store. Stateful integration is the caller's responsibility in Phase 3 (I_UI2).
-4. DS components do not import from `src/components/*` (the legacy namespace) — the only exception is `Dropdown` which composes the sanctioned `src/components/Menu` wrapper (which itself wraps Paper Menu), so the DS layer does NOT import Paper directly outside the wrap-Paper trio.
+4. DS components do not import from `src/components/*` (the legacy namespace). The wrap-Paper families (`Switch`, `Checkbox`, `RadioButton`, `Dropdown`) import `react-native-paper` directly; their folders are the only legal place those Paper symbols live by Phase 4.
 5. The `Header` component is the single source of structural truth for all DS overlay headers. A DS overlay that needs a header MUST compose `<Header>`; bespoke headers are forbidden inside the DS layer (I_UI3).
 6. DS component public APIs follow the `variant` + `size` + `state` axis convention (§4h). New variants are added to the existing axis, not as new components.
 7. Every DS component file exports a single named React component (no default exports).
@@ -380,7 +380,7 @@ Rules:
 1. `variant` and `size` are **closed string unions per component**, not free strings. Adding a variant widens the union in `Component.tsx`.
 2. Defaults declared in JSDoc above each component.
 3. Token-binding pattern: `styles.ts` exposes `createStyles(theme, {variant, size, state})` and is the only place that maps a `(variant, size, state)` triple to token reads.
-4. State model: `Pressable` resolves `pressed`/`focused` (via RN Pressable's child callback) and the primitive overlays the state-layer accordingly. `disabled` is part of the same state model. Wrap-Paper trio (Switch/Checkbox/RadioButton) delegates `pressed`/`focused` to Paper.
+4. State model: `Pressable` resolves `pressed` (the only state RN's `Pressable` exposes via its `style` callback on mobile) and the primitive overlays the state-layer accordingly. `disabled` is part of the same state model. Wrap-Paper families (Switch/Checkbox/RadioButton/Dropdown) delegate `pressed`/`focused` to Paper. Focus on rebuilt families (e.g. Input's focus ring) is consumer-driven via `onFocus`/`onBlur`, not resolved by the primitive.
 5. **`accessibilityLabel` is required** for interactive components. Primary enforcement = TypeScript discriminated-union constraint (`WithRequiredA11yLabel<P>` in `src/components/ui/types.ts`): consumers must supply `label` (which doubles as the spoken label) OR an explicit `accessibilityLabel`. Dev-only `__DEV__` runtime fallback (`warnIfNoA11yLabel`) catches type bypasses (D34).
 6. `accessibilityRole` defaults: `Button`/`IconButton`/`Chip` (interactive) → `'button'`; `Chip` (display) → `'text'`; `Switch` → `'switch'`; `Checkbox` → `'checkbox'`; `RadioButton` → `'radio'`; `Tabs`/`BottomNavBar` root → `'tablist'`, item → `'tab'`; `Header` → `'header'` (D35 — desired landmark collision with native nav headers); `Label`/`CategoryBadge` → `'text'`; `Card`/`Surface`/`Divider` → `'none'`.
 
@@ -414,7 +414,7 @@ Per-family decisions:
 | `BottomNavBar` (canonical `143:4685`) | Rebuild — presentational shell only | D19, D10 |
 | `Label` (Informational + Status) | Rebuild | D23 |
 | `CategoryBadge` | Rebuild | D24 |
-| `Dropdown` | Rebuild trigger; composes sanctioned `src/components/Menu` wrapper for the popup | D25 |
+| `Dropdown` | Wrap Paper `Menu` directly; trigger rebuilt against tokens | D25 |
 | `MessageContent` | Rebuild | D26 |
 | `Divider` | Rebuild | (final blocklist §4n) |
 | `Surface` | Rebuild — primitive backing the Phase 2 blocklist seed | D32 |
@@ -425,7 +425,7 @@ Per-family decisions:
 | `Switch`, `Checkbox`, `RadioButton` | **Wrap Paper** (a11y-heavy form controls) | D20, D21, D22 |
 | `RadioSection` | Rebuild composite on top of wrapped `RadioButton` | D20 |
 
-Summary: 15 rebuilt families, 3 wrap-Paper families.
+Summary: 14 rebuilt families, 4 wrap-Paper families (`Switch`, `Checkbox`, `RadioButton`, `Dropdown`).
 
 ### 4k. Visual-parity snapshot strategy (bounded matrix)
 
@@ -433,14 +433,13 @@ Summary: 15 rebuilt families, 3 wrap-Paper families.
 Each DS component ships a Jest snapshot test using `@testing-library/react-native`'s `render().toJSON()` + `toMatchSnapshot()`. A shared helper `src/components/ui/__tests__/helpers/snapshotMatrix.tsx` generates the per-family matrix.
 
 #### 4k.2 Rebuild-family matrix (bounded)
-- Baseline: `variant × size × {default, disabled} × {light, dark}` — every (variant, size) under both static states under both modes.
-- Pressed: `variant × size=<default> × pressed × light` — one snapshot per `variant` (state layer is size-invariant).
-- Focused: `variant × size=<default> × focused × light` — **only `Input` and `Button`**. Other rebuilt families have no focus-ring contract worth snapshotting.
-- RTL canary: ONE snapshot at `rtlCanaryVariant × <default> × default × light × <lang='fa'>`. `Chip` passes `rtlCanaryVariant: 'selectable'` so the canary exercises the state-layer interactive path.
+- Baseline: `variant × size × {default, disabled} × {light, dark}` — every (variant, size) under both static states under both modes. The `disabled` cell is rendered by passing `disabled` through to the component (not by labelling alone) — the snapshot factory consumes `cell.state` and forwards `disabled={state === 'disabled'}`.
+- Pressed / focused: NOT snapshotted in Phase 2. Jest's `render()` cannot trigger Pressable's `pressed` via the style callback path, and Input's focused state needs `fireEvent.focus`. Emitting these cells produced misleading byte-identical-to-default coverage in the initial Phase 2 ship; pressed/focused signal is deferred to Phase 3 via a per-component `fireEvent`-driven harness that lands with each call-site swap.
+- Non-Latin font-fallback canary: ONE snapshot at `canaryVariant × <default> × default × light × <lang='fa'>` — exercises the typography-fallback path through `buildTheme` (Fraunces → Inter for non-Latin). `Chip` passes `rtlCanaryVariant: 'selectable'` so the canary exercises the state-layer interactive path. This canary does NOT exercise `I18nManager.isRTL` layout direction (deferred to Phase 3 with a per-test isolation harness, since `forceRTL` is irreversible in the same process).
 - Hover is NOT snapshotted (mobile-first; same overlay code path as pressed).
 
-#### 4k.3 Wrap-Paper trio (Switch/Checkbox/RadioButton)
-Restricted matrix: `variant × size × {default, disabled} × {light, dark} × value={true, false}`. **Pressed/focused are NOT snapshotted** — they are Paper internals; testing them would test Paper, not the DS layer.
+#### 4k.3 Wrap-Paper families (Switch/Checkbox/RadioButton/Dropdown)
+Restricted matrix: `variant × {default, disabled} × {light, dark} × value={true, false}` for the trio (`Switch`/`Checkbox`/`RadioButton`) — `size` axis dropped because Paper owns sizing and the DS layer does not widen it; the trio's public `size` prop is also dropped accordingly. `Dropdown` keeps the `size` axis (its rebuilt trigger has a size variant). **Pressed/focused are NOT snapshotted** — they are Paper internals; testing them would test Paper, not the DS layer.
 
 #### 4k.4 Theme construction in tests
 Each snapshot renders against a real `Theme` from `themeFixtures.byMode(mode).byLocale(language)` (D33 — `jest/fixtures/theme.ts` extended with the `byMode().byLocale()` factory).
@@ -493,11 +492,11 @@ Naming policy: `ui-<kebab-component-name>` and `ui-<kebab-component-name>-<discr
 - **I_UI1 (DS components are tokens-only)**: No DS component reads a raw hex, raw px, MD3 typescale key, or `theme.fonts.*` legacy alias. All visual values flow through `theme.colors.*`, `theme.typography.*`, `theme.spacing.*`, `theme.radius.*`, `theme.stroke.*`. Mechanically enforced for hex literals by `no-restricted-syntax` scoped to `src/components/ui/**/styles.ts`.
 - **I_UI2 (DS layer is observation-free)**: No file under `src/components/ui/` imports `mobx`, `mobx-react`, or any store.
 - **I_UI3 (Header is the sole overlay header)**: No DS overlay (`Sheet`, `Modal`, `Dialog`) renders inline header markup; they MUST compose `<Header>`. Each overlay's behaviour test asserts the rendered tree contains exactly one `testID='ui-header'`.
-- **I_UI4 (Paper-import discipline grows monotonically)**: Once a Paper `importName` is added to the blocklist, it MUST NOT be removed (other than the per-file `excludedFiles` re-allow for the wrap-Paper trio).
+- **I_UI4 (Paper-import discipline grows monotonically)**: Once a Paper `importName` is added to the blocklist, it MUST NOT be removed (other than the per-file `excludedFiles` re-allow for the four wrap-Paper folders: `Switch`/`Checkbox`/`RadioButton`/`Dropdown`).
 - **I_UI5 (Phase 3 swaps preserve DS snapshots)**: A Phase 3 slice PR may change a screen's snapshot, but MUST NOT change any DS component's snapshot. DS visual changes are separate, intentional commits.
 - **I_UI6 (testID freeze)**: The Appium-observable testID tree at any screen MUST be identical pre- and post-Phase-3-swap. New DS testIDs are additive at the leaves, never replacing.
 - **I_UI7 (canonical-variant choices are recorded)**: For each duplicated DS family (Chips×3, Tabs×3, nav×2), the canonical variant choice (D8/D9/D10) is recorded here. Phase 3 implements against the canonical choice; other variants are explicit dead designs until a designer-sourced reconciliation.
-- **I_UI8 (folded rename is one commit, doc update in same PR)**: The token-rename patch lands as the FIRST commit of the FOU-115 PR; §1a is updated in the same PR. (Promoted to (C) on this merge.)
+- **I_UI8 (folded rename + architecture doc absorption are cross-linked in the same review cycle)**: The token-rename patch lands as the FIRST commit of the FOU-115 app-PR; §1a is updated in a paired dev-team-repo commit referenced from the PR description (app PR cites dev-team commit SHA; dev-team commit cites app PR URL). Same-PR-atomicity is not literally enforceable because app code and architecture docs live in different repos by submodule structure. Splitting them across review cycles is forbidden. (Promoted to (C) on this merge; wording reflects round-1 pipeline-reviewer C8 — original I_UI8 text implied same-PR which is structurally impossible.)
 
 ---
 
@@ -607,7 +606,7 @@ Prior session: `uiStore.setLanguage('ja')` was called and persisted. App restart
 - **D22** (`Switch`, wrap Paper): Paper's `Switch` handles `accessibilityRole="switch"`, value semantics, platform-specific iOS/Android thumb-track.
 - **D23** (`Label` Informational/Status, rebuild): Pure visual primitive.
 - **D24** (`CategoryBadge`, rebuild): Same as Label — visual primitive. Closed-union palette in Phase 2.
-- **D25** (`Dropdown`, rebuild trigger + Menu wrapper): Trigger Pressable opening the sanctioned `src/components/Menu` wrapper (NOT Paper Menu directly). Preserves the exact 3-file wrap-Paper exception list (Switch/Checkbox/RadioButton).
+- **D25** (`Dropdown`, wrap Paper `Menu` + rebuild trigger): Trigger Pressable rebuilt against tokens; popup uses Paper's `Menu` directly (positioning + dismiss + item rendering). Reclassified from Rebuild to Wrap-Paper post-pipeline-review-round-1 — the initial Rebuild classification implicitly assumed the trigger-only delta sufficed, but the popup branch was Paper-coupled via the legacy `src/components/Menu` wrapper, breaching §4g #4 (one-way dependency). Dropdown's folder gets the same per-file ESLint allowance the other wrap-Paper families get when `Menu` enters the blocklist in Phase 3.
 - **D26** (`MessageContent`, rebuild): Message bubbles are PocketPal-bespoke. The existing `src/components/Message/*` continues to render; this is the additive DS variant for Phase 3.
 - **D27** (`Sheet`, compose gorhom): Sheet mechanics are non-trivial and well-handled by the existing `@gorhom/bottom-sheet` dependency. DS adds Header + Body + Actions composition.
 - **D28** (`Modal`, compose Paper Portal): Paper Portal is the existing full-screen-overlay primitive (already in locked thin set). DS adds Header + Body + Actions composition.
