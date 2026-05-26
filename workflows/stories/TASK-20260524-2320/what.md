@@ -44,7 +44,7 @@ Explicitly NOT in scope this slice (additions to §0 "Explicitly NOT in scope"):
 
 - Wiring any DS component into a real screen. (Phase 3a–3g.)
 - Deleting any `src/components/*` file or its tests. (Phase 3 swaps, then Phase 4 cleanup.)
-- Removing existing `react-native-paper` imports outside the **two `Surface` consumers** (`src/components/UsageStats/UsageStats.tsx`, `src/components/PalsHub/PalDetailSheet/PalDetailSheet.tsx`) which swap to `DSSurface` in this PR as proof-of-life. Beyond `Surface`, the `no-restricted-imports` blocklist grows only as each subsequent DS component lands its replacement (Phase 3).
+- Removing existing `react-native-paper` imports outside the **two `Surface` consumers** (`src/components/UsageStats/UsageStats.tsx`, `src/components/PalsHub/PalDetailSheet/PalDetailSheet.tsx`) which swap to `Surface` in this PR as proof-of-life. Beyond `Surface`, the `no-restricted-imports` blocklist grows only as each subsequent DS component lands its replacement (Phase 3).
 - New native deps. **NATIVE_CHANGES = NO.** If during HOW/implementation a chosen icon font or asset registration requires native linking, flip to YES and re-route through the orchestrator — but the WHAT does not commit to any new native dep.
 - Migrating `MD3Theme`/`MD3Colors`/`MD3Typescale` consumers (carried forward from `theming.md` §5 #5 — still FOU-123).
 - Sheet/Modal/Dialog rework of existing call-sites. The existing `src/components/Sheet/Sheet.tsx` and `src/components/Dialog/Dialog.tsx` wrappers stay in place. The DS `Sheet` is built alongside; Phase 3 slices migrate call-sites incrementally.
@@ -285,7 +285,7 @@ This replaces the retired `scripts/verify-paper-surface.js` snapshot guard. Mech
 4. The blocklist's "final state" (what must be banned by the time Phase 4 / FOU-123 lands) is the inversion of the locked thin set: `'ActivityIndicator', 'Card', 'Checkbox', 'Chip', 'Dialog', 'Divider', 'DividerProps', 'Drawer', 'FAB', 'List', 'MD3Theme', 'Menu', 'Paragraph', 'ProgressBar', 'RadioButton', 'SegmentedButtons', 'Snackbar', 'Surface', 'Switch', 'TextInput', 'Tooltip', 'useTheme'`. The locked thin set (never banned) is `Text`, `Button`, `IconButton`, `Portal`, `Provider` (matches `theming.md` §4c #3 and `FOU-112-rollout.md` §1).
 5. The ESLint rule is the **only** enforcement vector for Paper-import discipline in Phase 2+ (the snapshot guard `verify-paper-surface.js` (C — does not exist in this worktree) is gone).
 6. The rule must be configured to allow `import {...} from 'react-native-paper'` **inside `src/components/ui/`** for the three wrap-Paper components (`Switch`, `Checkbox`, `RadioButton`). Mechanism: a per-file ESLint override that re-allows the relevant `importNames` for `src/components/ui/{Switch,Checkbox,RadioButton}/**`. (P — actual ESLint config shape is a planner concern; the contract here is "DS wrap-Paper files are the only legal place those Paper imports live by Phase 4".)
-7. **Phase 2 seed = `['Surface']`** (proof-of-life). Both call-sites (`src/components/UsageStats/UsageStats.tsx`, `src/components/PalsHub/PalDetailSheet/PalDetailSheet.tsx`) MUST swap to `DSSurface` in this PR, in the same commit that adds `'Surface'` to the blocklist. Verified (C): the only two Paper-`Surface` imports in `src/` are those two files; both pass `elevation={0}` with a `style` override, so the DS rebuild covers them. This is the only Paper symbol banned at end of Phase 2; subsequent entries accrue in Phase 3.
+7. **Phase 2 seed = `['Surface']`** (proof-of-life). Both call-sites (`src/components/UsageStats/UsageStats.tsx`, `src/components/PalsHub/PalDetailSheet/PalDetailSheet.tsx`) MUST swap to `Surface` in this PR, in the same commit that adds `'Surface'` to the blocklist. Verified (C): the only two Paper-`Surface` imports in `src/` are those two files; both pass `elevation={0}` with a `style` override, so the DS rebuild covers them. This is the only Paper symbol banned at end of Phase 2; subsequent entries accrue in Phase 3.
 
 ### 4h. Visual-parity snapshot strategy
 
@@ -354,7 +354,7 @@ This is the migration handshake the rollout doc §5 calls "testID freeze". Phase
 ¹ **D35** — `Header` defaults `accessibilityRole='header'` deliberately matching RN navigation headers. Rationale: assistive tech (VoiceOver, TalkBack) treats both as document landmarks; sharing the role lets users navigate by landmark consistently across native nav headers and DS overlay headers. The alternative — defaulting to `'none'` to avoid landmark collision — would force every consumer to opt in, fragmenting a11y behaviour across overlays. The collision is desirable, not accidental.
 
 2. Defaults are documented in the JSDoc above each component. Consumers override per call-site (this is the Phase 3 freeze hook — Phase 3 passes the SAME `testID` the legacy component used at that call-site, so Appium selectors don't break).
-3. Naming policy: `ds-<kebab-component-name>` and `ds-<kebab-component-name>-<discriminator>` for repeated items. This namespace prefix lets Appium selectors disambiguate DS instances from legacy ones during the Phase 3 transition window.
+3. Naming policy: `ui-<kebab-component-name>` and `ui-<kebab-component-name>-<discriminator>` for repeated items. This namespace prefix lets Appium selectors disambiguate DS instances from legacy ones during the Phase 3 transition window.
 4. `accessibilityLabel` is a required prop on the components flagged in §4c.5. **Primary enforcement = TypeScript discriminated-union constraint** (D34): the public Props type for each interactive DS component forces the consumer to supply `label`, `accessibilityLabel`, or both — calls supplying neither fail to typecheck. The dev-only `__DEV__` warning is the runtime fallback for the case where types are bypassed (dynamic spreads, `any`-typed consumers); it does not block production renders.
 5. After a Phase 3 slice swaps a screen, the `testID`s observed by Appium MUST equal the pre-swap ones. The freeze contract is "what Appium queries returns the same node tree shape post-swap as pre-swap". This is invariant I_UI6 (§4j).
 
@@ -492,10 +492,10 @@ Distinct from the light snapshot. The pair is the dark-parity verification artef
 
 ### I. Phase 2 ships zero **screen** changes (one component-layer swap excepted)
 
-After this PR lands, every existing `src/components/*` import path renders identically to today, with the single exception of the two `Surface` consumers (`UsageStats.tsx`, `PalDetailSheet.tsx`) which now import `DSSurface` from `src/components/ui/Surface`. Verified by:
+After this PR lands, every existing `src/components/*` import path renders identically to today, with the single exception of the two `Surface` consumers (`UsageStats.tsx`, `PalDetailSheet.tsx`) which now import `Surface` from `src/components/ui/Surface`. Verified by:
 - The existing `src/components/Sheet/Sheet.tsx`, `src/components/Dialog/Dialog.tsx`, `src/components/Selector/Selector.tsx`, etc. — all untouched.
 - No screen file under `src/screens/` is modified by this PR (planner enforces).
-- The two `Surface` swap commits change `import {Surface} from 'react-native-paper'` to `import {Surface as DSSurface} from '@/components/ui'` (or equivalent) and nothing else in those files — visual diff is zero (DS Surface renders the same `View` + background + elevation).
+- The two `Surface` swap commits change `import {Surface} from 'react-native-paper'` to `import {Surface as Surface} from '@/components/ui'` (or equivalent) and nothing else in those files — visual diff is zero (DS Surface renders the same `View` + background + elevation).
 - `yarn jest` passes with the additive DS test files plus updated snapshots for `UsageStats` / `PalDetailSheet`.
 
 ### I'. Paper-`Surface` blocklist enforces immediately

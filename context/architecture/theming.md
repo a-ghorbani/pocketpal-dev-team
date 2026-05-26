@@ -477,12 +477,12 @@ Defaults table (the migration handshake Phase 3 relies on):
 | `Dropdown` | `'ui-dropdown'` | `'button'` |
 | `MessageContent` | `'ui-message-content'` | `'none'` |
 
-Naming policy: `ds-<kebab-component-name>` and `ds-<kebab-component-name>-<discriminator>` for repeated items. Phase 3 swap PRs MUST pass the legacy testID at each call-site so Appium selectors continue to resolve (I_UI6).
+Naming policy: `ui-<kebab-component-name>` and `ui-<kebab-component-name>-<discriminator>` for repeated items. Phase 3 swap PRs MUST pass the legacy testID at each call-site so Appium selectors continue to resolve (I_UI6).
 
 ### 4m. Paper-import discipline (`no-restricted-imports` blocklist)
 
 1. `.eslintrc.js` extends its existing `src/**/*.{ts,tsx}` `overrides` entry with a `paths` rule for `'react-native-paper'` carrying an `importNames` blocklist.
-2. **Phase 2 seed = `['Surface']`** (D31 proof-of-life). Both pre-existing `Surface` consumers (`UsageStats.tsx`, `PalDetailSheet.tsx`) swap to `DSSurface` in the same PR (Scenario I' / WHAT §4g.7).
+2. **Phase 2 seed = `['Surface']`** (D31 proof-of-life). Both pre-existing `Surface` consumers (`UsageStats.tsx`, `PalDetailSheet.tsx`) swap to `Surface` in the same PR (Scenario I' / WHAT §4g.7).
 3. The blocklist grows entry-by-entry as each Phase 3 swap lands its DS replacement and migrates all call-sites (I_UI4 monotonic growth).
 4. Wrap-Paper DS components (`Switch`, `Checkbox`, `RadioButton`) are listed in `excludedFiles` so they keep their direct Paper imports — the only legal place those imports live by Phase 4.
 5. Final-state blocklist (when Phase 4 / FOU-123 lands) = inversion of the locked thin set: `'ActivityIndicator', 'Card', 'Checkbox', 'Chip', 'Dialog', 'Divider', 'DividerProps', 'Drawer', 'FAB', 'List', 'MD3Theme', 'Menu', 'Paragraph', 'ProgressBar', 'RadioButton', 'SegmentedButtons', 'Snackbar', 'Surface', 'Switch', 'TextInput', 'Tooltip', 'useTheme'`. Locked thin set (never banned): `Text, Button, IconButton, Portal, Provider`.
@@ -613,8 +613,8 @@ Prior session: `uiStore.setLanguage('ja')` was called and persisted. App restart
 - **D28** (`Modal`, compose Paper Portal): Paper Portal is the existing full-screen-overlay primitive (already in locked thin set). DS adds Header + Body + Actions composition.
 - **D29** (`Dialog`, compose Paper Portal + centered DS Surface): Same rationale as Modal.
 - **D30** (`Header`, rebuild): Net-new building block. Pure presentational shell.
-- **D31** (Phase 2 blocklist seed `['Surface']`): Proof-of-life entry. Both Surface consumers (`UsageStats.tsx`, `PalDetailSheet.tsx`) swap to `DSSurface` in the same PR. Subsequent entries accrue in Phase 3 slice PRs.
-- **D32** (`Surface`, rebuild — added as a 15th rebuild family): Needed as the replacement target for the blocklist seed (D31). Both consumers use `elevation={0}` with a `style` override (UsageStats omits elevation → DSSurface default elevation=1 keeps the Android shadow; PalDetailSheet passes elevation={0} explicitly). Minimal snapshot surface (1 variant × 1 size × 2 modes).
+- **D31** (Phase 2 blocklist seed `['Surface']`): Proof-of-life entry. Both Surface consumers (`UsageStats.tsx`, `PalDetailSheet.tsx`) swap to `Surface` in the same PR. Subsequent entries accrue in Phase 3 slice PRs.
+- **D32** (`Surface`, rebuild — added as a 15th rebuild family): Needed as the replacement target for the blocklist seed (D31). Both consumers use `elevation={0}` with a `style` override (UsageStats omits elevation → Surface default elevation=1 keeps the Android shadow; PalDetailSheet passes elevation={0} explicitly). Minimal snapshot surface (1 variant × 1 size × 2 modes).
 - **D33** (Theme fixtures byMode/byLocale factory): Extended `jest/fixtures/theme.ts` with `themeFixtures.byMode(mode).byLocale(language)`, memoized per `(mode, language)`. Rationale: the snapshot matrix needs `fa` in addition to `en`; the factory centralizes memoization and keeps every DS test reaching the theme through the same fixture surface.
 - **D34** (`accessibilityLabel` enforcement = TS discriminated union, with __DEV__ runtime fallback): Primary mechanism rejects calls at compile time via `WithRequiredA11yLabel<P>` union forcing `label` OR `accessibilityLabel`. Runtime fallback `warnIfNoA11yLabel` catches dynamic-spread / `any`-typed bypasses.
 - **D35** (`Header` default `accessibilityRole='header'` collides with RN nav headers — by design): Assistive tech (VoiceOver, TalkBack) treats both as document landmarks; sharing the role lets users navigate by landmark consistently across native nav headers and DS overlay headers.

@@ -1,6 +1,6 @@
 # Implementation Plan: FOU-115 Phase 2 shared component library (`src/components/ui/`)
 
-**Purpose**: land the design specified in `what.md` (LGTM round 2). Phase 2 ships **library + snapshots + Surface proof-of-life only** — no screen wired (Phase 3 swaps). The build must look pixel-identical to today everywhere except the two `Surface` consumers (`UsageStats.tsx`, `PalDetailSheet.tsx`), which swap to `DSSurface` in this PR (the same `View`+background+elevation tree — visual diff = zero).
+**Purpose**: land the design specified in `what.md` (LGTM round 2). Phase 2 ships **library + snapshots + Surface proof-of-life only** — no screen wired (Phase 3 swaps). The build must look pixel-identical to today everywhere except the two `Surface` consumers (`UsageStats.tsx`, `PalDetailSheet.tsx`), which swap to `Surface` in this PR (the same `View`+background+elevation tree — visual diff = zero).
 
 This HOW translates `what.md` §4a–§4j and decisions D1–D35 into ordered commits. No design decisions are introduced here; every step references the WHAT section it executes.
 
@@ -751,7 +751,7 @@ Each step is one commit unless explicitly noted. Commit messages follow the repo
 - `src/components/ui/Dialog/__tests__/CrossOverlayHeader.test.tsx` (cross-overlay shape assertion — Scenario F)
 
 **Approach**:
-1. Uses Paper `Portal` + a centered `DSSurface`. Same API shape as Sheet/Modal. Renders `<Header>` exactly once.
+1. Uses Paper `Portal` + a centered `Surface`. Same API shape as Sheet/Modal. Renders `<Header>` exactly once.
 2. `testID='ui-dialog'`.
 3. Cross-overlay test: render `<DSSheet>`, `<DSModal>`, `<DSDialog>` each with `title='Hello' subtitle='World'`. Use `getByTestId('ui-header')` against each rendered tree; assert `toJSON()` subtree under `ui-header` is structurally equal across the three (modulo outermost overlay surface) — proves Scenario F.
 
@@ -769,7 +769,7 @@ Each step is one commit unless explicitly noted. Commit messages follow the repo
 
 **Approach**:
 1. Named re-exports for every shipped family. Use `export {Surface} from './Surface'` form (not default exports per §4b.7).
-2. Re-export `Surface as DSSurface` is not required at the barrel — consumers can `import {Surface} from '.../components/ui'` and alias at the call-site. (Steps 29–30 use `import {Surface as DSSurface}` to disambiguate from any leftover legacy import during the swap.)
+2. Re-export `Surface as Surface` is not required at the barrel — consumers can `import {Surface} from '.../components/ui'` and alias at the call-site. (Steps 29–30 use `import {Surface as Surface}` to disambiguate from any leftover legacy import during the swap.)
 3. Do NOT re-export `primitives/Pressable` (DS-internal per §4b last paragraph).
 4. Do NOT re-export anything from `src/components/*` (legacy namespace — §4b.4).
 
@@ -790,15 +790,15 @@ Each step is one commit unless explicitly noted. Commit messages follow the repo
 **Approach**:
 1. Replace `import {Surface, Portal} from 'react-native-paper';` with two imports:
    - `import {Portal} from 'react-native-paper';` (Portal stays — locked thin set)
-   - `import {Surface as DSSurface} from '../ds';` (relative path; barrel)
-2. Replace the JSX usage `<Surface testID="memory-usage-tooltip" style={[...]}>` with `<DSSurface testID="memory-usage-tooltip" style={[...]}>` — props identical, no other changes. UsageStats does not pass `elevation`; DS Surface's default `elevation = 1` (committed in Step 7 per CONCERN 4 resolution) matches Paper's default, so the Android visual is preserved without an explicit override. The Step 7 elevation-parity unit test is the mechanical gate; the screen-level diff here is confirmation.
+   - `import {Surface as Surface} from '../ui';` (relative path; barrel)
+2. Replace the JSX usage `<Surface testID="memory-usage-tooltip" style={[...]}>` with `<Surface testID="memory-usage-tooltip" style={[...]}>` — props identical, no other changes. UsageStats does not pass `elevation`; DS Surface's default `elevation = 1` (committed in Step 7 per CONCERN 4 resolution) matches Paper's default, so the Android visual is preserved without an explicit override. The Step 7 elevation-parity unit test is the mechanical gate; the screen-level diff here is confirmation.
 3. Update any related `__tests__/UsageStats.test.tsx` if it asserts on Surface's rendered tree.
 
 **Verification**:
 - `yarn jest src/components/UsageStats` — existing tests pass; if a snapshot exists, regenerate ONLY if visual diff is intentional (it should not be; the swap is meant to be a no-op).
 - `yarn lint`, `yarn typecheck` green.
 
-**Commit message**: `refactor(usage-stats): swap Paper Surface for DSSurface (FOU-115)`
+**Commit message**: `refactor(usage-stats): swap Paper Surface for Surface (FOU-115)`
 
 ---
 
@@ -811,15 +811,15 @@ Each step is one commit unless explicitly noted. Commit messages follow the repo
 **Approach**:
 1. Change `import {Text, Button, Surface, Divider} from 'react-native-paper';` to:
    - `import {Text, Button, Divider} from 'react-native-paper';` (these remain — `Text`/`Button` are in the locked thin set; `Divider` is in the to-be-blocked set but its replacement ships in Step 14 — call-site swap is deferred to Phase 3 per D5/D31).
-   - `import {Surface as DSSurface} from '../../ds';` (relative; barrel).
-2. Replace the JSX `<Surface style={styles.statsSection} elevation={0}>...</Surface>` with `<DSSurface style={styles.statsSection} elevation={0}>...</DSSurface>` — `elevation={0}` is passed explicitly, identical visual.
+   - `import {Surface as Surface} from '../../ui';` (relative; barrel).
+2. Replace the JSX `<Surface style={styles.statsSection} elevation={0}>...</Surface>` with `<Surface style={styles.statsSection} elevation={0}>...</Surface>` — `elevation={0}` is passed explicitly, identical visual.
 3. Update related tests if they assert on Surface tree.
 
 **Verification**:
 - `yarn jest src/components/PalsHub/PalDetailSheet` — green; snapshots if any unchanged.
 - `yarn lint`, `yarn typecheck` green.
 
-**Commit message**: `refactor(palshub): swap Paper Surface for DSSurface (FOU-115)`
+**Commit message**: `refactor(palshub): swap Paper Surface for Surface (FOU-115)`
 
 ---
 
