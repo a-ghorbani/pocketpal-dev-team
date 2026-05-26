@@ -1,5 +1,7 @@
 # Completion Settings Architecture
 
+> **Doc status (2026-05-25):** original snapshot identified four bugs; all four are now closed. Bugs 1/2/3 were fixed when the toggle moved to an async resolver-backed read and `addMessageToCurrentSession` started resolving pal before `createNewSession`. Bug 4 was fixed by DB migration v6 (`settings_source` column). The latest delta is the **`newChatThinkingOverride`** layer added for issue #744 — see new "No-session override layer" section below.
+
 ## Data Stores
 
 ```
@@ -28,10 +30,21 @@
 │     SessionMetaData.completionSettings                      │
 │     UI: ChatGenerationSettingsSheet (when active session)   │
 │                                                             │
-│  5. settingsSource (IN-MEMORY ONLY - NOT in DB!)            │
+│  5. settingsSource (DB: chat_sessions.settings_source)      │
 │     SessionMetaData.settingsSource: 'pal' | 'custom'       │
 │     Controls whether pal layer is used or bypassed          │
-│     Defaults to 'pal' on every app restart                  │
+│     Persisted across restarts (migration v6 added column;   │
+│     legacy rows without a value fall back to 'pal')         │
+│                                                             │
+│  6. newChatThinkingOverride (IN-MEMORY ONLY, ephemeral)     │
+│     ChatSessionStore.newChatThinkingOverride: bool | undef  │
+│     Per-chat user override for the thinking toggle in chat  │
+│     input, ONLY consulted when no session exists yet.       │
+│     Carrier between toggle-tap and session-birth; cleared   │
+│     on createNewSession / resetActiveSession /              │
+│     setActiveSession. Forces session.settingsSource to      │
+│     'custom' at birth so the baked snapshot survives into   │
+│     the first inference.                                    │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -60,14 +73,29 @@ resolveCompletionSettings(sessionId?, palId?)
   │ e.g. temp: 0.9   │  (from DB local_pals.generation_settings)
   │ thinking: false   │  (merged with defaults via getter)
   └────────┬─────────┘
+           │ if palId provided AND pal.pact.talents present:
+           │   {...merged, tools: deriveToolSchemas(talents)}
+           ▼
+  ┌──────────────────┐
+  │ PACT tools        │  resolvedSettings.tools
+  │ (when applicable) │  (single-writer for tools key)
+  └────────┬─────────┘
+           │ if !sessionId AND newChatThinkingOverride !== undefined:
+           │   {...merged, enable_thinking: newChatThinkingOverride}
+           ▼
+  ┌──────────────────────┐
+  │ No-session override   │  newChatThinkingOverride
+  │ (no-session path only)│  per-chat user override
+  └────────┬─────────────┘
            │
            ▼
   ┌──────────────────────────────────────────┐
   │ settingsSource === 'custom' ?            │
   │                                          │
   │   YES → REPLACE all with                 │
-  │          session.completionSettings       │
-  │          (total override, not merge!)     │
+  │          session.completionSettings,      │
+  │          THEN re-inject PACT tools        │
+  │          (preserves talent-derived tools) │
   │                                          │
   │   NO  → Keep merged result from above    │
   └──────────────────────────────────────────┘
@@ -95,13 +123,22 @@ handleSendPress()
   │        │  activeSessionId is null → create new session
   │        │
   │        ▼
-  │      const settings = {...this.newChatCompletionSettings}  ← GLOBAL ONLY!
-  │      createNewSession(title, [message], settings)
+  │      const palIdForSettings =
+  │        newChatSettingsSource === 'pal' ? newChatPalId : undefined;
+  │      const settings = await resolveCompletionSettings(
+  │        undefined, palIdForSettings);
+  │      // (settings includes pal overlay + override if set)
+  │      const birthSource =
+  │        newChatThinkingOverride !== undefined
+  │          ? 'custom'              // force custom so snapshot wins
+  │          : newChatSettingsSource;
+  │      createNewSession(title, [message], settings, palId, birthSource)
   │        │
   │        │  Session stored in DB with:
-  │        │    completionSettings = GLOBAL settings (not pal!)
+  │        │    completionSettings = resolved snapshot (pal + override)
   │        │    activePalId = newChatPalId
-  │        │    settingsSource = 'pal' (in-memory only)
+  │        │    settings_source = birthSource (PERSISTED in DB v6+)
+  │        │  Override + newChatPalId cleared in same code block.
   │        │
   │        ▼
   │      Session NOW EXISTS with activeSessionId set
@@ -117,7 +154,14 @@ handleSendPress()
   │        │  1. System defaults (enable_thinking: true)
   │        │  2. + Global settings
   │        │  3. + Pal settings (enable_thinking: false, temp: 0.9)
-  │        │  4. settingsSource === 'pal' → keep merged result
+  │        │  4. + PACT tools (if pal has talents)
+  │        │  5. No-session override skipped (sessionId is set now)
+  │        │  6. settingsSource branch:
+  │        │     - 'pal' → keep merged result
+  │        │     - 'custom' (e.g. user tapped thinking before send)
+  │        │       → REPLACE with session.completionSettings
+  │        │         which IS the resolved snapshot baked at birth
+  │        │       → re-inject PACT tools
   │        │
   │        ▼
   │      Returns: { enable_thinking: false, temperature: 0.9 }  ← CORRECT!
@@ -126,68 +170,78 @@ handleSendPress()
 Completion runs with enable_thinking=false  ← CORRECT for model
 ```
 
-**But the session.completionSettings in DB still has the GLOBAL values (enable_thinking: true, temperature: 0.7) — this matters later!**
+The `session.completionSettings` in DB now matches what the model received (the resolved snapshot was baked at session creation, not the raw global settings). Previously this snapshot was the global-only values, which caused divergence — closed by the `addMessageToCurrentSession` resolve-before-create change.
 
-## Thinking Toggle Display vs Reality
+## Thinking Toggle Display vs Reality (current — Bug 1 closed)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │              THINKING TOGGLE (ChatScreen.tsx)                │
 │                                                             │
-│  READS FROM:                                                │
-│    currentSession?.completionSettings                       │
-│      ?? chatSessionStore.newChatCompletionSettings           │
+│  READS FROM (useEffect re-runs on deps):                    │
+│    await chatSessionStore.getCurrentCompletionSettings()    │
+│    → resolveCompletionSettings(activeSessionId, palId)      │
+│    → includes pal overlay AND newChatThinkingOverride       │
 │                                                             │
-│  For new chat:  newChatCompletionSettings.enable_thinking   │
-│  For session:   session.completionSettings.enable_thinking  │
-│                                                             │
-│  DOES NOT read from:                                        │
-│    - resolveCompletionSettings()                            │
-│    - pal.completionSettings                                 │
-│    - the merged/resolved value                              │
+│  Deps: activeSessionId, settingsSource, completionSettings, │
+│        newChatCompletionSettings, activePalId,              │
+│        newChatThinkingOverride                              │
 │                                                             │
 │  COMPLETION USES:                                           │
-│    resolveCompletionSettings() → merged value               │
+│    same resolveCompletionSettings()                         │
 │                                                             │
-│  ═══════════════════════════════════════════                 │
-│  INCONSISTENCY:                                             │
-│  Toggle shows global/session value (e.g. true)              │
-│  Model receives resolved value (e.g. false from pal)        │
-│  ═══════════════════════════════════════════                 │
+│  Toggle and model see the SAME value (consistent).          │
+│                                                             │
+│  The override exists so the user can flip the displayed     │
+│  value without (a) tainting their global preset or          │
+│  (b) being silently overwritten by the pal layer on the     │
+│  next re-resolve.                                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## What Happens When User Toggles Thinking
+## What Happens When User Toggles Thinking (current — Bug 2 closed)
 
 ```
-User toggles thinking (e.g. OFF → ON) during active session
+Branch A: active session (was the only fix path the doc originally covered)
   │
   ▼
 handleThinkingToggle(true)
   │
-  ├── Spreads: { ...currentSession.completionSettings }
-  │   These are the SESSION's stored settings (global values from creation!)
-  │   NOT the resolved/merged values that include pal settings
+  ├── const resolved = await getCurrentCompletionSettings()   ← RESOLVED!
+  │   { ...defaults, ...global, ...pal, tools }
+  │   (includes pal's temperature: 0.9 — not lost any more)
   │
-  │   Result: { ...globalValues, enable_thinking: true }
-  │           temperature: 0.7 (global, NOT pal's 0.9!)
+  ├── const updated = { ...resolved, enable_thinking: true }
   │
-  ├── Calls: updateSessionCompletionSettings(updatedSettings)
-  │     │
-  │     ├── Saves to DB
-  │     └── Sets settingsSource = 'custom'  ← AUTO-SWITCH!
+  ├── updateSessionCompletionSettings(updated)
+  │     ├── Saves snapshot to DB
+  │     └── Sets settings_source = 'custom' (DB-persisted, v6+)
   │
   ▼
-Next completion: resolveCompletionSettings()
-  │
-  │  settingsSource === 'custom'
-  │  → REPLACES entire result with session.completionSettings
-  │  → Returns: { enable_thinking: true, temperature: 0.7 }
-  │
-  │  Pal's temperature: 0.9 is LOST
-  │  Pal layer completely bypassed
+Next completion: session-branch returns session.completionSettings
+verbatim (with PACT tools re-injected). Pal's temp 0.9 preserved.
+
+Branch B: no active session (the path that produced issue #744)
   │
   ▼
+handleThinkingToggle(false)
+  │
+  ├── runInAction(() => {
+  │     chatSessionStore.newChatThinkingOverride = false;
+  │   })
+  │   (NOT written into newChatCompletionSettings — keeps preset clean)
+  │
+  ▼
+Toggle UI re-resolves and sees the override layer → reflects false.
+On next createNewSession (from sending the first message):
+  ├── settings = resolveCompletionSettings(undefined, palId)
+  │   includes override → { ...pal, enable_thinking: false }
+  ├── birthSource = 'custom'  (because override !== undefined)
+  ├── DB row stores snapshot + settings_source='custom'
+  └── Override + newChatPalId cleared in same code block.
+First inference: session-branch with source='custom' → snapshot wins
+→ enable_thinking=false reaches the model. Override does not leak
+into the user's global preset.
 ```
 
 ## All UI Components That Touch Settings
@@ -230,60 +284,134 @@ Next completion: resolveCompletionSettings()
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Bugs Found (Triple-Verified)
+## Bugs Found (all CLOSED — kept as history)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  BUG 1: Toggle shows wrong state                           │
+│  BUG 1: Toggle shows wrong state                  [CLOSED] │
 │  ─────────────────────────────────                          │
-│  WHERE:   ChatScreen.tsx lines 110-118                      │
-│  WHAT:    Toggle reads session/global settings directly     │
-│  SHOULD:  Read from resolved settings (including pal)       │
-│  EFFECT:  Toggle shows ON when pal sets thinking=false      │
+│  ORIGINAL: Toggle read session/global directly, missing pal.│
+│  FIX:    ChatScreen.tsx useEffect now calls                 │
+│          getCurrentCompletionSettings() (the resolver) so   │
+│          the toggle reflects the pal overlay.               │
+│          This change introduced the no-session re-overlay   │
+│          symptom — fixed by Bug 5 below.                    │
 │                                                             │
-│  BUG 2: Toggle nukes pal settings                          │
+│  BUG 2: Toggle nukes pal settings                 [CLOSED] │
 │  ─────────────────────────────────                          │
-│  WHERE:   ChatScreen.tsx lines 128-134                      │
-│  WHAT:    Spreads session.completionSettings (global vals)  │
-│           + sets settingsSource='custom' automatically      │
-│  SHOULD:  Either resolve first, or not switch settingsSource│
-│  EFFECT:  Pal's temperature lost after toggling thinking    │
+│  ORIGINAL: Session-bound toggle spread stored snapshot      │
+│          (global vals) and switched source='custom', losing │
+│          pal's temperature.                                 │
+│  FIX:    handleThinkingToggle session branch now calls      │
+│          getCurrentCompletionSettings() first, then spreads │
+│          the resolved snapshot with the toggled value, then │
+│          updateSessionCompletionSettings (which also sets   │
+│          source='custom'). Pal-derived params survive.      │
 │                                                             │
-│  BUG 3: Session created with wrong settings                │
+│  BUG 3: Session created with wrong settings       [CLOSED] │
 │  ──────────────────────────────────────────                  │
-│  WHERE:   ChatSessionStore.ts line 347                      │
-│  WHAT:    New session gets newChatCompletionSettings only    │
-│  SHOULD:  Get resolved settings (including pal)             │
-│  EFFECT:  session.completionSettings ≠ what model receives  │
-│           (works at completion time via resolve, but         │
-│            session snapshot is wrong for later use)          │
+│  ORIGINAL: createNewSession received raw                    │
+│          newChatCompletionSettings (no pal overlay).        │
+│  FIX:    addMessageToCurrentSession now resolves first      │
+│          (with palIdForSettings gated on                    │
+│          newChatSettingsSource) and passes the resolved     │
+│          snapshot to createNewSession. DB snapshot matches  │
+│          what the model received.                           │
 │                                                             │
-│  BUG 4: settingsSource not persisted                       │
+│  BUG 4: settingsSource not persisted              [CLOSED] │
 │  ────────────────────────────────────                        │
-│  WHERE:   ChatSessionStore.ts updateSessionSettingsSource   │
-│  WHAT:    Only updates in-memory MobX, not DB               │
-│  ALSO:    No settingsSource column in DB schema at all      │
-│  EFFECT:  User choice lost on app restart                   │
-│           All sessions default to 'pal' on reload           │
+│  ORIGINAL: settingsSource was MobX-only; no DB column.      │
+│  FIX:    Migration v6 added chat_sessions.settings_source.  │
+│          ChatSessionRepository.createSession and            │
+│          setSessionSettingsSource both write it.            │
+│          loadSessionList hydrates it back on app start      │
+│          (legacy rows fall back to 'pal' for compat).       │
+│                                                             │
+│  BUG 5: Pal re-overlays user's toggle (issue #744) [CLOSED]│
+│  ────────────────────────────────────────────────            │
+│  ORIGINAL: After Bug 1 was fixed, the no-session toggle     │
+│          handler wrote to newChatCompletionSettings; pal    │
+│          still wins on every re-resolve, so the user's flip │
+│          snapped back. Writing to global also tainted the   │
+│          user's preset across all future no-pal chats.      │
+│  FIX:    Added newChatThinkingOverride (in-memory, ephemeral│
+│          one-shot, single-key). Resolver applies it as a    │
+│          no-session-only last layer. createNewSession bakes │
+│          the overlaid snapshot AND forces                   │
+│          settings_source='custom' so the snapshot survives  │
+│          into the first inference. Cleared at all three     │
+│          new-chat reset sites.                              │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Settings Consistency Matrix
+## No-Session Override Layer (current state)
 
 ```
-┌──────────────────────┬──────────────┬──────────────┬────────────┐
-│ Scenario             │ Toggle Shows │ Model Gets   │ Consistent │
-├──────────────────────┼──────────────┼──────────────┼────────────┤
-│ New chat, no pal     │ global       │ global       │ ✅ YES     │
-│ New chat, pal        │ global       │ global+pal   │ ❌ NO      │
-│ Session, source=pal  │ session(=gl) │ global+pal   │ ❌ NO      │
-│ Session, source=cust │ session      │ session      │ ✅ YES     │
-│ After toggle         │ session(mod) │ session(mod) │ ✅ YES     │
-│ After app restart    │ session(=gl) │ global+pal   │ ❌ NO      │
-└──────────────────────┴──────────────┴──────────────┴────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  WHY a dedicated field instead of writing to global?         │
+│                                                             │
+│  newChatCompletionSettings IS the user's preset baseline    │
+│  for any future no-pal chat. The thinking toggle in chat    │
+│  input is per-chat ephemeral intent. Conflating the two:    │
+│                                                             │
+│   1. Pal still wins on re-resolve (pal applied AFTER global).│
+│      So writing to global only "works" with no pal active.   │
+│   2. Taints the preset — silently leaks the toggle's value   │
+│      into the NEXT no-pal new chat. Wrong scope.            │
+│                                                             │
+│  The session-bound toggle path dodges both: writes to       │
+│  session.completionSettings (per-session) and flips         │
+│  session.settings_source='custom' (per-session). The        │
+│  no-session path has no equivalent per-chat storage         │
+│  *before* the session exists — that's the gap               │
+│  newChatThinkingOverride fills.                             │
+│                                                             │
+│  INVARIANTS                                                  │
+│  ─ Single key (enable_thinking) — does NOT touch tools or    │
+│    any other field.                                         │
+│  ─ Applied AFTER pal overlay and AFTER PACT tools injection. │
+│  ─ Resolver consults it ONLY when sessionId === undefined.   │
+│  ─ Survives across session boundary via 'custom'-at-birth,   │
+│    not via cross-session resolver lookup.                   │
+│  ─ Cleared at createNewSession / resetActiveSession /        │
+│    setActiveSession. No leak across new-chat or session      │
+│    switch.                                                  │
+│                                                             │
+│  GENERALIZATION                                             │
+│  If a second per-chat ephemeral toggle ever lands in chat    │
+│  input, promote this field to                               │
+│  newChatOverrides: Partial<CompletionParams> and apply it   │
+│  generically in the same slot. Current shape is sized to     │
+│  today's only consumer.                                     │
+└─────────────────────────────────────────────────────────────┘
+```
 
-gl = global defaults stored at session creation
+## Settings Consistency Matrix (current — all consistent)
+
+```
+┌────────────────────────────┬───────────────┬───────────────┬────────────┐
+│ Scenario                   │ Toggle Shows  │ Model Gets    │ Consistent │
+├────────────────────────────┼───────────────┼───────────────┼────────────┤
+│ New chat, no pal           │ global        │ global        │ ✅ YES     │
+│ New chat, pal              │ global+pal    │ global+pal    │ ✅ YES     │
+│ New chat, pal, user toggled│ resolved+ovr  │ resolved+ovr  │ ✅ YES     │
+│ Session, source=pal        │ global+pal    │ global+pal    │ ✅ YES     │
+│ Session, source=custom     │ session snap  │ session snap  │ ✅ YES     │
+│ After session toggle       │ session+mod   │ session+mod   │ ✅ YES     │
+│ After app restart          │ same as above │ same as above │ ✅ YES     │
+└────────────────────────────┴───────────────┴───────────────┴────────────┘
+
+gl  = global preset (newChatCompletionSettings)
 pal = pal.completionSettings overlay
+ovr = newChatThinkingOverride (no-session, ephemeral, single-key)
 mod = modified by user toggle
+session snap = session.completionSettings (baked at birth, source='custom')
+
+Notes on the restart row:
+  - settings_source is persisted in DB (migration v6), so source='custom'
+    sessions remain custom after restart.
+  - newChatThinkingOverride is in-memory only — but it's already cleared
+    by the time createNewSession returns, so there's nothing to persist;
+    the user's choice has been baked into the resulting session snapshot.
 ```

@@ -420,6 +420,9 @@ the latest turn — see D4.
 | `chatSessionStore.isStopping`            | `useChatSession.handleStopPress` (set), `handleSendPress` cleanup paths (clear) |
 | `modelStore.inferencing` / `isStreaming` | `useChatSession` at run boundaries (legacy; see Cleanup-DEFERRED below) |
 | TTS streaming handle (out-of-band)       | `useChatSession.applyEventToStore` token branch — opens on first content/reasoning token, forwards diffed substrings to `ttsStore.onAssistantMessageChunk`, closes at `run_finished` / abort. Persistence side is unaffected; see `tts.md`. |
+| `session.completionSettings` (sessions[].metadata) | `createNewSession` at birth (`ChatSessionStore.ts`) — baked from the resolver's no-session output; updated thereafter only by `ChatGenerationSettingsSheet` save flow via `updateSessionCompletionSettings`. (C) |
+| `session.settingsSource` (sessions[].metadata) | `createNewSession` at birth (`ChatSessionStore.ts`); updated thereafter only by `ChatGenerationSettingsSheet` save flow. Birth-rule: `'custom'` if `newChatThinkingOverride !== undefined`, else `newChatSettingsSource`. (C) |
+| `chatSessionStore.newChatThinkingOverride` | `ChatScreen.handleThinkingToggle` (set, no-session branch only); `createNewSession`, `resetActiveSession`, `setActiveSession` (clear). Read by `resolveCompletionSettings` no-session branch only. (C) |
 
 Reading is unrestricted.
 

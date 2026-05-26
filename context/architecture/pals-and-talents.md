@@ -159,6 +159,11 @@ Pal.pact.talents = [{name: 'calculate', necessity: 'required'},
 When `settingsSource === 'custom'` (per-session override), generation params
 come from the session but `tools` is preserved from PACT — see D2 and §7D.
 
+In the no-session chat path the resolver also applies a single-key user
+override for `enable_thinking` AFTER PACT tools are injected (see
+`chat-flow.md` §5). The override never touches `tools`, so PACT remains the
+sole source of truth for tool availability (I2).
+
 ---
 
 ## 4. Talent execution lifecycle (state machine)
