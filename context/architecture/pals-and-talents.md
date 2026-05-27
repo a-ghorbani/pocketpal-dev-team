@@ -38,6 +38,7 @@ TalentEngine (src/services/talents/types.ts:26)   // execute side
   execute(args)        → Promise<TalentResult>    // tool body — pure, no
                                                   //   React/MobX/store (I4)
   toToolDefinition()   → ToolDefinition           // OpenAI function schema
+  recommendedContextTokens? : number              // declarative hint, see I6
 
 TalentUI    (src/services/talents/TalentUIRegistry.ts:5)  // render side
   name           : string
@@ -261,6 +262,14 @@ shutdown). Aborted runs therefore land in `done`, not a dedicated status.
   matters: built-ins go first, any future plugin layer registers after and may
   not shadow built-ins by accident. There is no diagnostic for collisions —
   treat unique names as an authoring contract.
+- **I8 (recommendedContextTokens is declarative)**: the optional
+  `TalentEngine.recommendedContextTokens` is read at exactly two pure
+  sites — the pal-load hint trigger (`usePalLoadHint`) and the
+  heavy-talent post-fail sub-copy lookup in the banner-variant
+  resolver. It never drives per-turn behaviour; engines without the
+  field continue to work unchanged. `RenderHtmlEngine` declares
+  `4096`; `CalculateEngine` and `DatetimeEngine` omit. See
+  `chat-flow.md` §§ 4a–4i for the full banner / snackbar contract.
 
 ### 5b. What each component does
 

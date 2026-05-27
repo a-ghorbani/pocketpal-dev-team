@@ -22,9 +22,15 @@ Session
         metadata                            // turn-level chrome + run flags
             timings?         : { predicted_per_second, predicted_per_token_ms,
                                  time_to_first_token_ms, ... }   // llama.rn shape
-            completionResult?: raw final result from llama.rn
+            completionResult?: { content, reasoning_content?,
+                                 tokensCached, tokensEvaluated,
+                                 tokensPredicted, contextFull,
+                                 finishReason }                  // turn snapshot
             copyable?        : boolean      // turn has user-visible content worth copying
             interrupted?     : boolean      // run failed/aborted with partial content
+            truncationLikely?: true         // set ONLY when the tool-args JSON
+                                            //   parse error fires on abort
+                                            //   (n_ctx-exhaustion smoking gun)
             hitMaxTurns?     : true         // set ONLY when the loop hit the guard
                                             //   (absent otherwise — not `false`)
         AgentStep
@@ -387,6 +393,10 @@ bubble (a UX regression we don't want).
 | `AssistantTurnFooter`             | timing, copy                                                                          | text, talent, sender name  |
 | `PendingIndicator`                | subtle dot-row indicator + optional label / token-count / "Stopping…" overlay         | text, chrome               |
 | `ChatView`                        | message list + pending indicator (visibility-gated by `status` + `isStopping`)        | per-turn structure         |
+| `BannerRow` (inline in `ChatView`) | ONE of five variants resolved by `bannerVariantResolver` (`context-full` / `context-warning` / `context-remote-hedged` / `html-soft-cap` / none) | per-variant logic (lives in the resolver) |
+| `IncreaseContextSheet`            | confirm sheet for the banner CTA + reload feedback snackbar                          | tier selection (resolver / `pickNextTier`) |
+| `bannerVariantResolver` (pure)    | resolved variant + payload (next tier tokens, heavy-talent name)                     | JSX, MobX writes, async    |
+| `usePalLoadHint` (pure hook)      | one-shot snackbar trigger when a heavy-talent pal loads at insufficient n_ctx        | banner state (I8 — snackbar layer is separate) |
 
 **Footer-ownership decision (D9)**: Message owns chrome **universally** for all
 assistant rows, not only for `assistant_turn` rows. `Bubble` is a pure shape
@@ -412,10 +422,17 @@ the latest turn — see D4.
 | `step.toolOutcomes`                      | `appendToolOutcome` (`ChatSessionStore.ts`), one per `tool_call_finished` |
 | `step.partial`                           | `pushAgentStep` (true), `finalizeActiveStep` (false; `ChatSessionStore.ts`) |
 | New step                                 | `pushAgentStep` (`ChatSessionStore.ts`)             |
-| `metadata.timings`, `metadata.completionResult` | `updateMessage` at `run_finished` (`useChatSession.ts`) |
+| `metadata.timings`                       | `updateMessage` at `run_finished` (`useChatSession.ts`) |
+| `metadata.completionResult` (snapshot shape) | `updateMessage` at `run_finished` AND the catch path on abort with partial content (`useChatSession.ts`). Same write also seeds `chatSessionStore.lastCompletionResult`. |
 | `metadata.copyable`                      | `updateMessage` from EITHER `run_finished` OR the catch path on abort (`useChatSession.ts`). Sequential, not racing. |
 | `metadata.interrupted`                   | `updateMessage` from the catch path (abort with partial content) |
+| `metadata.truncationLikely`              | `updateMessage` from the catch path, only when the tool-args JSON parse error fires |
 | `metadata.hitMaxTurns`                   | `updateMessage` from `run_finished`, only when `result.hitMaxTurns === true` (absent otherwise) |
+| `chatSessionStore.lastCompletionResult`  | `useChatSession` at `run_finished` AND abort-with-partial-content (same write that updates `metadata.completionResult`); `setActiveSession` hydrates from disk; `resetActiveSession` clears |
+| `chatSessionStore.dismissedBannerVariants` | `ChatView` `BannerRow` on user dismiss (`setBannerDismissed`); cleared per-session by the `run_finished` writer and on `deleteSession` |
+| `chatSessionStore.consecutiveFullFailures` | `useChatSession` at `run_finished` / abort-with-partial-content: increment on `snap.contextFull`, reset otherwise |
+| `chatSessionStore.sessionContextOverrides[sessionId]` | `ChatView` confirm handler on the "Increase context" CTA; cleared on `deleteSession` |
+| `chatSessionStore.palLoadHintSeen` | `usePalLoadHint` at emit time (`markPalLoadHintSeen`); cleared on `resetActiveSession` |
 | `agentUiState` (full bag)                | `agentStateReducer` only (canonical state source)   |
 | `chatSessionStore.isStopping`            | `useChatSession.handleStopPress` (set), `handleSendPress` cleanup paths (clear) |
 | `modelStore.inferencing` / `isStreaming` | `useChatSession` at run boundaries (legacy; see Cleanup-DEFERRED below) |
@@ -425,6 +442,17 @@ the latest turn — see D4.
 | `chatSessionStore.newChatThinkingOverride` | `ChatScreen.handleThinkingToggle` (set, no-session branch only); `createNewSession`, `resetActiveSession`, `setActiveSession` (clear). Read by `resolveCompletionSettings` no-session branch only. (C) |
 
 Reading is unrestricted.
+
+**Cross-store read (banner / increase-context CTA)**: a single one-way
+read direction `ModelStore → ChatSessionStore` is permitted.
+`ModelStore.getEffectiveContextInitParams` consults
+`chatSessionStore.sessionContextOverrides.get(activeSessionId)` to pick
+the effective n_ctx (override wins over `contextInitParams.n_ctx`). The
+same precedence rule is encoded once in the resolver helper
+`effectiveNCtx(overrides, activeSessionId, baseNCtx)` in
+`src/utils/bannerVariantResolver.ts`, so the banner resolver and the
+context init path can never disagree. `ChatSessionStore` does NOT read
+`ModelStore`; no cycle.
 
 **Cleanup-LANDED (id reconciliation, was cleanup #1)**: `step.toolCalls` is
 appended **once** after `step_finished` via `appendToolCall`, with normalized
@@ -912,6 +940,53 @@ Step₀ has two tool calls. The first succeeds, the second fails.
   in array order (I2).
 - The follow-up step proceeds normally; the model can apologise for B,
   proceed without it, or both.
+
+---
+
+## 9f. Context-full banner / increase-context CTA
+
+The chat input has ONE banner slot (the existing soft-cap shell). Its
+content is computed by a pure resolver from a single
+`CompletionResultSnapshot` written at every turn boundary. The resolver
+returns exactly one of five variants in this precedence order:
+
+1. `context-full` — `snap.contextFull === true`. Sticky (no dismiss);
+   exits via auto-clear when the next turn satisfies
+   `used < nCtx - AUTOCLEAR_RUNWAY` AND no §4a match.
+2. `context-warning` — local session, `ratio >= WARNING_THRESHOLD` (0.80),
+   not `contextFull`. Per-draft dismiss, reappears next turn if still
+   triggered.
+3. `context-remote-hedged` — remote session, weak-signal heuristic
+   (all four conditions: not `finishReason==='length'`,
+   `tokensPredicted >= 500`, text doesn't end on terminal punctuation).
+   Per-draft dismiss; re-derives every render.
+4. `html-soft-cap` — `htmlPreviewCount >= 4`. Existing rule preserved;
+   context variants take precedence so the visible bug (truncated
+   replies) wins over the preventative hint.
+5. `none` — banner shell hidden.
+
+Hard invariants:
+
+- ONE banner visible at any time (resolver short-circuits).
+- `snap.contextFull === true` iff the most recent finished turn matches
+  the OR predicate (`result.context_full` / `result.truncated` /
+  `metadata.truncationLikely` / remote `finish_reason==='length'`).
+- `lastCompletionResult` and `metadata.completionResult` are written
+  together, in the same MobX action.
+- The pal-load hint (`usePalLoadHint`) is a snackbar, not a banner.
+  Snackbar lives on a separate surface and cannot displace a banner
+  variant.
+
+The "Increase context" CTA opens `IncreaseContextSheet`. Confirm writes
+`sessionContextOverrides[sessionId]=target`, runs
+`releaseContext → initContext`, and shows an indefinite reload snackbar
+that flips to success / failure on completion. Failure reverts the
+override; chat history is preserved (messages live in
+`ChatSessionStore`, not in `LlamaContext`).
+
+See `pals-and-talents.md` §5a I8 for the `recommendedContextTokens`
+declarative hint that powers (a) the pal-load snackbar trigger and
+(b) the heavy-talent sub-copy on the `context-full` banner.
 
 ---
 
