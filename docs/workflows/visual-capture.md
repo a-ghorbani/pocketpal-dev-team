@@ -2,14 +2,19 @@
 
 When a story has `Visual Confirmation: YES`, the reviewer runs this procedure to capture screenshots.
 
-There are **two flavours**, picked by what the change touches:
+There are **three flavours**, picked by what the change touches:
 
 | Surface | Flavour | Spec |
 | --- | --- | --- |
 | Chat output (prompt → assistant response) | **Parametrized** | `e2e/specs/visual-capture.spec.ts` driven by `VISUAL_CAPTURES` env JSON |
 | Anything else (settings panel, sheet, header indicator, drawer state, etc.) | **Per-task, one-shot** | `e2e/specs/visual-capture/<TASK-ID>.spec.ts` authored in the worktree, **gitignored**, dies with the worktree |
+| **Figma-sourced screen / component** (any redesign-rollout slice) | **Figma parity diff** | Pair of `<screen>-figma.png` + `<screen>-sim.png` committed under `workflows/stories/<TASK-ID>/visual-diff/`. Drive via the [`figma-implement`](../../.claude/skills/figma-implement/SKILL.md) skill; reviewed by the `pocketpal-design-parity-reviewer` subagent. |
 
-Decision rule: if the surface can be reached by "send a prompt, screenshot the response," use the parametrized flavour. Otherwise write a per-task one-shot.
+Decision rule:
+
+- "Send a prompt, screenshot the response" → Flavour A.
+- "Drive Appium to a non-chat surface that isn't tied to a Figma spec" → Flavour B.
+- "Implementing a Figma node id" → Flavour C (mandatory side-by-side captures committed into the story dir; the parity reviewer is a pipeline gate).
 
 ## Flavour A — Parametrized (chat output)
 
@@ -70,6 +75,35 @@ git checkout feature/<branch>
 ```
 
 The two output dirs (`<TASK-ID>/pre/` and `<TASK-ID>/post/`) are diffed by the reviewer or attached side-by-side as PR comments. Screenshots can be committed to the dev-team story dir at `workflows/stories/<TASK-ID>/screenshots/` if they need to be referenced from the PR.
+
+## Flavour C — Figma parity diff
+
+When the work is "implement Figma node id X into the app" (any FOU-112 redesign-rollout slice, any task that pins a canonical Figma file), the implementer follows the [`figma-implement`](../../.claude/skills/figma-implement/SKILL.md) skill, which mandates a committed side-by-side per screen:
+
+```
+workflows/stories/<TASK-ID>/visual-diff/<screen>-figma.png
+workflows/stories/<TASK-ID>/visual-diff/<screen>-sim.png
+```
+
+When light + dark + RTL are in scope, capture each variant separately (`<screen>-light-figma.png`, etc.).
+
+### How to produce each pair
+
+1. **Figma render**: `mcp__plugin_figma_figma__get_screenshot(fileKey, nodeId, maxDimension=2622)` → download the PNG.
+2. **Sim screenshot**: build + run the app on a sim whose width matches the design (iPhone 17 Pro / 13 Pro for 393pt designs). Either drive Appium (Flavour B-style spec under `e2e/specs/visual-capture/<TASK-ID>.spec.ts`) or capture by hand with `xcrun simctl io <udid> screenshot`.
+3. Commit both PNGs into the story dir on the same branch as the implementation.
+
+### Why this lives in the story dir (not `e2e/debug-output/`)
+
+`e2e/debug-output/` is gitignored — captures vanish with the worktree. Flavour C captures need to survive the PR review and are referenced from the parity-review subagent's report, so they live alongside `intent-brief.md` / `what.md` / `how.md`.
+
+### Review gate
+
+The `pocketpal-design-parity-reviewer` subagent runs after the implementer, before the pipeline reviewer. It compares each `*-figma.png` against `*-sim.png` pair, walks the Figma node tree to catch silently-dropped children, and greps for raw hex in screens. Its findings route back to the implementer (max 2 parity rounds before human escalation).
+
+### Bonus: pre/post diff for restyle slices
+
+For FOU-112 phase slices that touch an existing screen (e.g. theming a previously-styled Home / Chat), capture the same screen on `origin/main` before the restyle to file `<screen>-pre.png`, and the post-restyle as `<screen>-sim.png`. The reviewer compares `pre` vs `sim` (regression check) AND `figma` vs `sim` (design parity).
 
 ## Failure handling
 
