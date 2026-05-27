@@ -81,6 +81,7 @@ Tokens
     menu*, authorBubbleBackground, receivedMessage*, sentMessage*,
     userAvatar*, searchBarBackground, thinkingBubble*,
     bgStatus*, btn*, iconModelType*
+    accent.peach                      // NEW (FOU-116): peach pill highlight + Recommended-tier card background
 
   typography: TokenTypography
     bodyM, bodyS                       // Inter

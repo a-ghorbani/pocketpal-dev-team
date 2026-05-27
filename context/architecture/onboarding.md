@@ -1,11 +1,11 @@
 # Onboarding Flow — Architecture & Flow Board
 
-Promoted from `workflows/stories/TASK-20260526-1731/what.md` on merge of FOU-116 (Phase 3a of the FOU-112 redesign rollout). This is the cumulative truth for the first-launch onboarding flow.
+Promoted from `workflows/stories/TASK-20260526-1731/what.md` on merge of FOU-116 (Phase 3a of the FOU-112 redesign rollout). This is the cumulative truth for the first-launch onboarding flow. The Round-3 Figma-faithful pass (PR #747 retrofit) is absorbed in-place; see "Round-3 corrections absorbed" at the end.
 
-**This is the first FOU-112 slice that produces real screens against the FOU-114 token + FOU-115 DS layer.** It is a greenfield flow: the app has no onboarding today. On PR merge the contents of this delta are promoted to `context/architecture/onboarding.md` (a new flow doc) in the same PR that lands the code.
+**This is the first FOU-112 slice that produces real screens against the FOU-114 token + FOU-115 DS layer.** It is a greenfield flow: the app has no onboarding today.
 
-Consumer references only (do NOT modify in this slice except where I_OB11 / D11 explicitly amends `theming.md` §1a):
-- `context/architecture/theming.md` — token + DS surface (FOU-114 / FOU-115). One paired line edit required (spacing.xxl); see D11.
+Consumer references only:
+- `context/architecture/theming.md` — token + DS surface (FOU-114 / FOU-115). Two paired line edits required in §1a: Spacing axis gains `xxl` (D11 / satisfied), Color axis gains `accent.peach` (D15 / FOU-116 Round-3).
 - `context/architecture/chat-flow.md` — destination Chat session model after onboarding completes.
 - `context/architecture/pals-and-talents.md` — `Pal` data model used by the seeded recommended pal.
 
@@ -13,7 +13,7 @@ Canonical inputs (LOCKED, per `context/redesign/FOU-112-rollout.md` §1):
 - Figma file `RZxDJea4t6jnBZrV4YBacF`, page `0:1` "App design".
 - Light frames: `884:28223` (Onboarding section, 6 screens + Splash + Homepage-first-time).
 - Dark frames: `3011:25220` (Onboarding 7–12 = light 1–6 dark renders).
-- Variable defs read for the section (verified 2026-05-26 via Figma MCP `get_variable_defs`): every value used below resolves to a token name already present in `theme.colors.*`, `theme.typography.*`, `theme.spacing.*`, `theme.radius.*`, `theme.stroke.*` (with the single exception `Spacing/XXL=40` — see I_OB11 / D11).
+- Variable defs read for the section (verified 2026-05-26 via Figma MCP `get_variable_defs`; Round-3 re-confirmed 2026-05-27): every value used below resolves to a token name already present in `theme.colors.*`, `theme.typography.*`, `theme.spacing.*`, `theme.radius.*`, `theme.stroke.*` plus the FOU-116 additions `spacing.xxl` (D11, satisfied) and `colors.accent.peach` (D15, FOU-116 Round-3).
 
 ---
 
@@ -51,8 +51,8 @@ Explicitly NOT in scope:
 - Migration of users who already have the app — there is no migration; on first install of the build with this slice, the user sees onboarding. On second-and-later launches the persisted `hasCompletedOnboarding === true` skips the flow.
 - Server-side user accounts, sign-in, Palshub auth — never present in onboarding (Figma confirms; no auth surface anywhere in screens 1–6).
 - Model download UI / progress UI inside onboarding. Screen 6 selects a model for `Pip` and **enqueues** the download via the existing `modelStore.checkSpaceAndDownload(modelId)` API; the actual download surface is the existing Models flow.
-- Tokens / typography / DS-component changes beyond the new `Stepper` and the single `spacing.xxl=40` addition (I_OB11). The slice MUST consume the existing `theme.*` surface (theming.md §1a–§1d).
-- Architecture-doc updates to `chat-flow.md`, `pals-and-talents.md`. `theming.md` §1a receives a single paired line edit for `spacing.xxl` (see D11 / I_OB11). The new flow doc `onboarding.md` is the other architecture-library change.
+- Tokens / typography / DS-component changes beyond: (a) the new `Stepper` DS component, (b) the `spacing.xxl=40` and `colors.accent.peach` token additions (D11 / D15), and (c) one screen-internal primitive added by Round 3 (`HighlightText`, plus the screen-only wrappers `OnboardingAudioButton` / `DeviceInfoChip` / `ComparisonCards` / `ItalicAccentTitle` / `OnboardingBackButton` / `OnboardingSkipButton` / `OnboardingArrowGlyph`). The slice MUST consume the existing `theme.*` surface (theming.md §1a–§1d).
+- Architecture-doc updates to `chat-flow.md`, `pals-and-talents.md`. `theming.md` §1a receives two paired line edits — `spacing.xxl` (D11, satisfied) and `colors.accent.peach` (D15, Round-3). This flow doc absorbs the Round-3 contract changes in-place.
 
 ---
 
@@ -71,22 +71,30 @@ UIStore (additions to (C) src/store/UIStore.ts)
 ```
 OnboardingState (C)
   currentStep   : 1 | 2 | 3 | 4 | 5 | 6
-  selectedTopics: TopicKey[]          // screen 5 selection (multi-select chip grid)
+  selectedTopic : TopicKey | null     // screen 5 single-select chip grid; tap = auto-advance to screen 6
   selectedModelId: string | null      // screen 6 radio selection (must resolve in ModelStore default catalogue)
 ```
 
 ```
-TopicKey = 'everyday' | 'creative' | 'learning' | 'coding' | 'productivity' | 'roleplay'
-  // (C) Closed union — matches the 6 chip slots in Figma 884:28282 / 890:29650.
-  // Exact final labels + icons are designer-owned; engineering owns the union.
+TopicKey =
+  | 'smartchat'        // speech-bubble icon — general everyday chat
+  | 'coding'           // angle-bracket `<>` icon
+  | 'education'        // books icon
+  | 'roleplay'         // theater-masks icon
+  | 'creative_writing' // feather icon
+  | 'else'             // escape-hatch "Looking for something else?" — outlined chip, no icon, no preference recorded
+  // (C) Closed union — verbatim from Figma frames 884:28282 (light) / 3011 dark band.
+  // The 'else' chip writes `selectedTopic = null` but still triggers the
+  // auto-advance to screen 6.
 ```
 
-`selectedTopics` is captured but **not used to alter the recommended pal in this slice** — the recommended pal is always seeded `Pip` (see §4d). Topics persist into `palStore` only as a future-pal-suggestion signal, recorded under `uiStore.onboardingTopicsSnapshot` (C) on completion so the post-onboarding Homepage (FOU-117) can use it later. Persisting topics is **not** the same as persisting `OnboardingState.selectedTopics`; the snapshot is a one-write flat array.
+`selectedTopic` is captured but **not used to alter the recommended pal in this slice** — the recommended pal is always seeded `Pip` (see §4d). The pick persists into `uiStore.onboardingTopicsSnapshot` on completion so the post-onboarding Homepage (FOU-117) can use it later as a future-pal-suggestion signal. The snapshot is written exactly once at completion and never edited after; the persisted shape stays a `TopicKey[]` array (FOU-117 multi-tag headroom), derived from the scalar as `topic === null ? [] : [topic]`.
 
 ```
-UIStore (P, persisted)
+UIStore (C, persisted)
   hasCompletedOnboarding   : boolean
-  onboardingTopicsSnapshot : TopicKey[]   // (C) frozen at completion, never re-edited
+  onboardingTopicsSnapshot : TopicKey[]   // (C) frozen at completion; length 0 or 1 in this slice;
+                                          //     kept as an array to leave headroom for FOU-117 multi-tag work
 ```
 
 ### 1b. PalStore additions
@@ -113,7 +121,10 @@ Pip is created idempotently from `PalStore.initialize()` after the database is l
 - **Hydration hold** — pre-`<PaperProvider>` neutral `View` rendered while `mobx-persist-store` is loading `UIStore` from AsyncStorage (theming.md §4c #4 / I10). NOT a splash screen. Stays neutral; reads from `Appearance.getColorScheme()`. Out of scope here; mentioned only to delineate.
 - **Brand splash** (this slice) — the **post-hydration** branded screen at Figma `884:28349`. Rendered as the initial route of the Onboarding stack when `hasCompletedOnboarding === false`. Transitions to Onboarding-1 after a fixed minimum dwell (D6).
 - **Stepper** — the 4-dot progress indicator on screens 1–4 (Figma `896:29130`-band). Note: screens 5 and 6 do NOT show a stepper in the Figma frames (screen 5 has a fullwidth header; screen 6 has the recommended-pal header). The stepper is therefore visually 1-of-4, 2-of-4, 3-of-4, 4-of-4 across screens 1–4 only.
-- **Topic** — a category the user picks on screen 5. Closed union of 6 keys (`TopicKey`).
+- **Topic** — a category the user picks on screen 5. Closed union of 6 keys (`TopicKey`), single-select. Tapping a chip auto-advances to screen 6; there is no Continue button on screen 5.
+- **Recommended tier** — the middle (Balanced / Q4_K_M) model card on screen 6. Renders with a peach-tinted background (`theme.colors.accent.peach`) and a "Recommended" pill badge per Figma.
+- **Audio button** — a 40×40 IconButton (speaker / headphones glyph) in the top-right of screens 5 and 6 (in the same slot that screens 1–4 use for Skip). On tap, the screen's title + body text is announced via `AccessibilityInfo.announceForAccessibility(text)`. Side-effect only; no app state.
+- **HighlightText** — a Text primitive that renders one or more inline phrases against a peach pill background. Used inline within screen 2 / 3 / 4 body copy.
 - **Recommended pal** — the system-seeded `Pip` shown on screen 6.
 
 ---
@@ -657,8 +668,33 @@ Stepper is exported from the DS barrel. Tree-shaking should remove it from the b
 **Cleanup reminders**:
 
 1. The new flow doc `context/architecture/onboarding.md` is promoted from this delta on the same PR that lands the code.
-2. The `spacing.xxl = 40` token (I_OB11 / D11) requires a paired line edit in `context/architecture/theming.md` §1a. Because the two files live in different repos, the I_UI8 cross-cite handshake applies: app PR description cites the dev-team-repo commit SHA; the dev-team-repo commit message cites the app PR URL. The planner MUST emit this as a discrete step in HOW.
+2. Token paired-edits: `spacing.xxl = 40` (satisfied in dev-team commit `a448d3f`) and `colors.accent.peach` (Round-3 absorb). The I_UI8 cross-cite handshake applies: app PR cites the dev-team commit SHAs in its description; the dev-team commits cite the app PR URL.
 3. Once FOU-117 lands the real Homepage, this doc references it instead of "out of scope here".
 4. The `Stepper` DS component is subject to the same snapshot freeze contract (I_UI5) as every other DS component starting next slice.
+
+---
+
+## Round-3 corrections absorbed (2026-05-27 — PR #747 retrofit)
+
+The Round-1/2 wireframe shipped in PR #747 was a token-faithful skeleton; the user-driven Round-3 visual review against the canonical Figma file produced 14 corrections, all absorbed in-place above. Summary:
+
+| # | Area | Round-3 contract (replaces the wireframe behaviour above) |
+| - | ---- | --------------------------------------------------------- |
+| A | Skip presence | Skip on screens 1–4 ONLY. Screens 5 + 6 replace the slot with an Audio button (`onboarding-audio` testID). |
+| B | Screen-6 Skip | DELETED. Screen 6 has no Skip; the only forward path is pick + download. |
+| C | Topic union + selection | `selectedTopic: TopicKey \| null` (single-select); chip-tap auto-advances to screen 6 (no Continue). Keys: `smartchat / coding / education / roleplay / creative_writing / else`. Setter renamed `setOnboardingTopic`. Persisted snapshot stays `TopicKey[]` (FOU-117 headroom). |
+| D | `RECOMMENDED_PAL_MODEL_SET` | Three quants of one base model (Llama-3.2-1B Q2_K / Q4_K_M / Q8_0) rendered as Quick / Balanced / Best. Balanced carries the Recommended badge + peach-tinted card. Typed shape (`RecommendedPalModelEntry[]`). |
+| E | Audio button | New 40×40 IconButton on screens 5+6 top-right; `AccessibilityInfo.announceForAccessibility(title + body)` on press. Side-effect only. |
+| F | Italic title accents | Each title has a Fraunces-Italic accent fragment (screen 1 "*pals*", screen 3 "*Smaller,*", screen 4 "*leaves*") or is fully italic (screen 2, screen 6 "*Pip*"). |
+| G | Peach pill highlights | `HighlightText` primitive wraps the per-screen highlighted phrases (screen 2 "No internet, no signal", screen 3 "quick and private", screen 4 "No accounts. No cloud. No tracking.") against `theme.colors.accent.peach`. |
+| H | Body copy | All body / title / CTA copy ported verbatim from Figma. No empty slots. |
+| I | CTA copy + arrows | Per-screen CTAs verbatim: "Show me Around →", "Next →", "Got it →", "Get Started →", screen 6 "Download Pip (\<size\>) ↓" with the runtime-bound size. |
+| J | Back chevron | Bottom-bar left slot on screens 2/3/4/6; top-left header slot on screen 5 (no bottom bar). Both render under the same `onboarding-back` testID. |
+| K | Illustration sources | Seven assets sourced from Figma under `src/assets/onboarding/`. When an asset is unavailable, the screen renders a small text placeholder rather than a broken image. |
+| L | Device-info chip | New `DeviceInfoChip` reads device name + RAM + free disk via `react-native-device-info`. Each field falls back independently (no orphan `·` separators). |
+| M | Screen-6 title hierarchy | Inverted: big italic "Pip" headline (with Pip mascot above); the long description is the body. |
+| N | Designer asks | The pre-Round-3 "body copy pending" entries are removed. The single remaining ask is the Audio-button announcement intent (D14). |
+
+The Round-3 retrofit added the following invariants to the original set: **I_OB12** (`colors.accent.peach` paired-edit handshake — landed via the dev-team commit that absorbs this section); **I_OB13** (screen 5 single forward control: no `onboarding-primary` testID on screen 5); **I_OB14** (no Skip on screen 6).
 
 ---
