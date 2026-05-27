@@ -1,8 +1,6 @@
 # Implementation Plan: <one-line summary>
 
-**Purpose**: an executable worklist that lands the design specified in `what.md`. Reference WHAT sections by number; do not re-derive design content here. If a step requires a design decision that isn't already in WHAT, stop and route back to the architect.
-
-This file lives at `workflows/stories/<TASK-ID>/how.md`.
+Executable worklist for the design source (`what.md` for standard/complex, `context/architecture/<flow>.md` for quick). Reference design-source sections by number; do not re-derive design here. If a step needs a decision not in the source, STOP and route back.
 
 ---
 
@@ -14,82 +12,57 @@ This file lives at `workflows/stories/<TASK-ID>/how.md`.
 - **Native Changes**: YES | NO
 - **Visual Confirmation**: YES | NO
 - **Intent Brief**: `./workflows/stories/<TASK-ID>/intent-brief.md`
-- **WHAT**: `./workflows/stories/<TASK-ID>/what.md`
-- **Architecture doc(s) being updated**: `./context/architecture/<flow>.md` (and any others)
+- **WHAT**: `./workflows/stories/<TASK-ID>/what.md` (omit for quick)
+- **Architecture doc(s)**: `./context/architecture/<flow>.md`
 - **Status**: draft | in-review | approved | implementing | done
 
 ---
 
-## Progress Tracking
+## Progress
 
 | Step | Status | Commit | Notes |
 | --- | --- | --- | --- |
-| Step 1 | pending | - |  |
-| Step 2 | pending | - |  |
-| Step N | pending | - |  |
-| Architecture doc updated | pending | - | absorb WHAT delta into `context/architecture/<flow>.md` |
-| Cleanup reminders applied | pending | - | remove diagnostic code listed in WHAT §10 |
+| Step 1 | pending | - | |
+| Architecture doc updated | pending | - | absorbs WHAT delta (standard/complex only) |
+| Cleanup reminders applied | pending | - | per WHAT §10 |
 
 ---
 
-## Affected Files
+## Affected files
 
-| Path     | Change kind                  | WHAT reference |
-| -------- | ---------------------------- | -------------- |
-| `<path>` | <add / edit / delete / move> | `<§N>`         |
-| `<path>` | <add / edit / delete / move> | `<§N>`         |
+| Path | Change | Design ref |
+| --- | --- | --- |
+| `<path>` | add / edit / delete / move | `<§N>` |
 
 ---
 
-## Implementation Steps
+## Steps
 
-Each step:
-
-- references the WHAT section(s) it's executing (`§4a`, `§5`, etc.)
-- is atomic (one logical change, one commit)
-- specifies the file paths it touches
-- states the acceptance check (lint, typecheck, targeted test, manual scenario)
+Each step is atomic — one logical change, one commit.
 
 ### Step 1: <one-line>
 
-**Implements**: WHAT §<N>.
+**Implements**: §<N>.
 
-**Files**:
+**Files**: `<path>` — <what changes>
 
-- `<path>` — <what changes>
+**Approach** (≤ 5 lines): <what to do; reference design source for the contract>
 
-**Approach**: <short — what to do, in 3–5 lines max. Refer to WHAT for the contract.>
-
-**Verification**:
-
-- `yarn lint` passes
-- `yarn typecheck` passes
-- `yarn test --findRelatedTests <path>` passes
-- (if applicable) Scenario `<§6.X>` from WHAT renders as expected
-
-### Step 2: <one-line>
-
-...
+**Verification**: lint / typecheck / `yarn test --findRelatedTests <path>` / scenario `§6.X`.
 
 ---
 
-## Testable-Contract Coverage
+## Testable-contract coverage
 
-The testable contract — the list of items the implementation must deliver — comes from:
+Standard/complex: one row per WHAT §6 scenario. Quick: enumerate user-visible outcomes from the intent brief, one row each.
 
-- **standard / complex**: canonical scenarios in WHAT §6.
-- **quick** (no WHAT): the user-visible outcomes implied by the request in `intent-brief.md`. Enumerate them here, briefly, before mapping to tests.
-
-Map every contract item to a test (or manual scenario):
-
-| Contract item | Verified by                                |
-| ------------- | ------------------------------------------ |
-| §6.A          | `<test file or manual scenario reference>` |
-| §6.B          | `<test file or manual scenario reference>` |
+| Contract item | Verified by |
+| --- | --- |
+| §6.A | `<test file or manual scenario>` |
 
 ---
 
-## Native Verification (if NATIVE_CHANGES=YES)
+## Native verification (if NATIVE_CHANGES=YES)
 
 ```bash
 cd "${WORKTREE_PATH}"
@@ -98,36 +71,28 @@ yarn ios --configuration Release
 yarn android --variant=release
 ```
 
-Note: skipping this step is a blocking review issue.
+Skipping is a blocking review issue.
 
 ---
 
-## Visual Confirmation (if Visual Confirmation=YES)
-
-VISUAL_CAPTURES JSON specifying the prompts the reviewer will use to capture screenshots. Each entry names what to look for in the screenshot.
+## Visual confirmation (if Visual Confirmation=YES)
 
 ```json
 [
-  {
-    "label": "<scenario>",
-    "prompt": "<what to enter in the chat>",
-    "look_for": "<what should be visible in the screenshot>"
-  }
+  {"label": "<scenario>", "prompt": "<chat input>", "look_for": "<what should be visible>"}
 ]
 ```
 
 ---
 
-## Deferred Items
+## Deferred items
 
-Anything WHAT explicitly defers (cleanups #1, #2 in WHAT §5). These do NOT land in this PR. They stay listed in WHAT for the next story to pick up.
-
-- <ref to WHAT deferred cleanup, with brief reason it's out of scope here>
+- <ref to WHAT deferred item, ≤ 1 line>
 
 ---
 
-## What this plan is NOT
+## Review History
 
-- not a design doc — design lives in `what.md`
-- not a justification — `intent-brief.md` is where the request lives
-- not exhaustive — only steps the implementer needs; if a step would just be "obey WHAT §N", reference WHAT instead of restating
+| Round | Finding | Severity | Resolution |
+| --- | --- | --- | --- |
+| 1 | <one-line> | BLOCKER / CONCERN / SUGGESTION | FIXED <ref> / REJECTED <evidence file:line> / DEFERRED <ref> |
