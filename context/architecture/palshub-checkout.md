@@ -21,14 +21,18 @@ the session's completion promise — **not** through the OS deep-link pipeline a
 suppresses Universal Links that point back into the app from inside the app's own
 `SFSafariViewController`, so the auto-return never fired. See §10.)
 
+The custom-scheme callback is namespaced by feature — host segment `checkout`
+(`pocketpal://checkout/{success|cancel}`) — matching the `pocketpal://<feature>/...`
+convention so the shared scheme stays collision-free as return types grow.
+
 Convention:
 - **(C)** = current behaviour, documented from code
 - **(D)** = decision (was open, now resolved)
 
-The `<HOST>` in `success_url`/`cancel_url` is a **PLACEHOLDER** (currently
-`palshub.ai`) pending confirmation of apex-vs-www. It is now just a string inside
-those URLs — there is no entitlement or host-symmetry coupling (D6). The callback
-scheme is `"pocketpal"` (already registered, C `Info.plist:38-41`).
+The `<HOST>` in `success_url`/`cancel_url` is the canonical PalsHub apex
+`palshub.ai`. It is just a string inside those URLs — there is no entitlement or
+host-symmetry coupling (D6). The callback scheme is `"pocketpal"` (already
+registered, C `Info.plist:38-41`).
 
 ---
 
@@ -52,8 +56,8 @@ branch on Platform.OS                                                          (
                    ▼
                  Stripe-hosted checkout → user pays / cancels
                    ▼
-                 PalsHub /app-return/{success|cancel} page 302 →                (C)
-                     pocketpal://app-return/{success|cancel}?purchase_id=...&session_id=...
+                 PalsHub /app-return/checkout/{success|cancel} page 302 →        (C)
+                     pocketpal://checkout/{success|cancel}?purchase_id=...&session_id=...
                    │  ASWebAuthenticationSession captures the custom-scheme callback,
                    │  dismisses its sheet, and resolves the promise with the callback URL
                    ▼
@@ -98,15 +102,15 @@ Authorization: Bearer <access_token>      (C reuse — getAuthHeaders)
 Content-Type:  application/json
 {
   pal_id:                 string,
-  success_url:            "https://<HOST>/app-return/success",
-  cancel_url:             "https://<HOST>/app-return/cancel",
+  success_url:            "https://<HOST>/app-return/checkout/success",
+  cancel_url:             "https://<HOST>/app-return/checkout/cancel",
   selected_country_code?: string          // 2-letter only (§5 rule 3)
 }
 ```
 
 `success_url`/`cancel_url` stay **https** (Stripe rejects custom schemes). The
-PalsHub `/app-return/*` page then **302-redirects** to
-`pocketpal://app-return/{success|cancel}?purchase_id=...&session_id=...`.
+PalsHub `/app-return/checkout/*` page then **302-redirects** to
+`pocketpal://checkout/{success|cancel}?purchase_id=...&session_id=...`.
 
 **Response 200** — `{ checkout_url, session_url, session_id, purchase_id, platform_fee_cents }`
 
@@ -120,19 +124,19 @@ PalsHub `/app-return/*` page then **302-redirects** to
 | 404 | not purchasable | non-fatal "unavailable" |
 | 500 / network | server/transport | generic retryable error |
 
-**Return callback (iOS)** — `pocketpal://app-return/{success|cancel}`, delivered
+**Return callback (iOS)** — `pocketpal://checkout/{success|cancel}`, delivered
 through the **`ASWebAuthenticationSession` completion promise** (NOT
 `DeepLinkService` / `useDeepLinking` / a Universal Link). `CheckoutFlowStore`
-parses the path (`/app-return/success` vs `/app-return/cancel`) and `purchase_id`
-from the resolved URL string. A rejected session (user-dismiss / error) is a
-silent cancel (I5).
+matches host `checkout` and the trailing `success` vs `cancel` segment, and reads
+`purchase_id` from the resolved URL string. A rejected session (user-dismiss /
+error) is a silent cancel (I5).
 
 ### 2c. Glossary
 
-- **Checkout callback** — `pocketpal://app-return/{success|cancel}`, the custom-
-  scheme URL the `/app-return/*` page redirects to; captured by the session.
-- **`<HOST>`** — canonical PalsHub host (apex vs www **unconfirmed**, D6); a plain
-  string inside `success_url`/`cancel_url`, with no entitlement coupling.
+- **Checkout callback** — `pocketpal://checkout/{success|cancel}`, the custom-
+  scheme URL the `/app-return/checkout/*` page redirects to; captured by the session.
+- **`<HOST>`** — canonical PalsHub apex `palshub.ai` (D6); a plain string inside
+  `success_url`/`cancel_url`, with no entitlement coupling.
 - **Webhook-latency race** — gap between user return and PalsHub's Stripe webhook
   marking the purchase owned.
 - **Reconcile poll** — bounded ownership re-check after a success return (§4).
@@ -169,7 +173,7 @@ US Android does not enter this machine — its press goes straight to
 
 ## 4. Reconcile lifecycle (webhook-latency race)
 
-Entered on a `/app-return/success` callback. Up to ~6 attempts over ~15–20s with
+Entered on a `checkout/success` callback. Up to ~6 attempts over ~15–20s with
 backoff, each calling `palsHubService.checkPalOwnership(palId)` (C,
 `PalsHubService.ts:64`, which delegates to `getPal().is_owned`).
 
@@ -212,7 +216,7 @@ Buy-press rules (order matters):
 4. `checkout_url` opens via `ASWebAuthenticationSession`
    (`callbackURLScheme:"pocketpal"`, `prefersEphemeralWebBrowserSession:true`),
    never an embedded WebView (I2, §5c).
-5. A `/app-return/success` callback → reconcile poll (§4). A `/app-return/cancel`
+5. A `checkout/success` callback → reconcile poll (§4). A `checkout/cancel`
    callback, a user-dismiss, or a session error → silent idle (I5).
 
 ### 5a. Hard invariants
@@ -253,7 +257,7 @@ Buy-press rules (order matters):
 | `SyncService.syncUserLibrary` | (C) library cache backstop for deferred ownership / app-kill recovery | drive checkout |
 
 The OS deep-link path (`useDeepLinking` / `DeepLinkService`) is **not** part of
-the checkout return (I6) and is not wired for `/app-return/*`.
+the checkout return (I6) and is not wired for `pocketpal://checkout/*`.
 
 ### 5c. Browser dependency
 
@@ -295,7 +299,7 @@ multi-writer race. No local ownership write exists, so none can drift.
 
 ```
 US iOS premium !owned → Buy → 200 → ASWebAuthenticationSession → pay
-/app-return/success 302 → pocketpal://app-return/success → session resolves
+/app-return/checkout/success 302 → pocketpal://checkout/success → session resolves
 → finalizing → owned on attempt 1 → download button
 ```
 
@@ -309,7 +313,7 @@ SyncService later reflects ownership; no error
 ### C. Cancel (iOS)
 
 ```
-user dismisses session (or /app-return/cancel) → cancelled (silent) → idle
+user dismisses session (or checkout/cancel) → cancelled (silent) → idle
 ```
 
 ### D. Already owned (iOS)
@@ -350,9 +354,9 @@ no error shown
   user already owns the pal; opening Stripe would be wrong.
 - **D3** — `selected_country_code` sent only when alpha-2. Alpha-3 ("USA", iOS 15)
   and `null` are omitted; server IP fallback handles them. It is a tax hint only.
-- **D6** — `<HOST>` is a plain placeholder string inside `success_url`/`cancel_url`;
-  no entitlement or host-symmetry coupling (the callback scheme is `"pocketpal"`).
-  Apex-vs-www is unconfirmed; everything except the final host string can ship now.
+- **D6** — `<HOST>` is the canonical PalsHub apex `palshub.ai`, a plain string
+  inside `success_url`/`cancel_url`; no entitlement or host-symmetry coupling (the
+  callback scheme is `"pocketpal"`, the callback host is the feature `checkout`).
 - **D7** — `session_url` / `session_id` are not used to open the browser;
   `checkout_url` is the only URL the session opens.
 - **D8** — Ownership is confirmed via the server, never written locally on return
@@ -385,9 +389,9 @@ no error shown
 | 9e | Force-quit during checkout | session dies with process; no cold-launch return; SyncService reconciles on next open (scenario G, I8) |
 | 9f | Callback for a reset()/idle flow | ignored (I6, I7) |
 | 9g | Double-tap Buy (iOS) | no-op while creating/finalizing (I7) |
-| 9h | User dismisses the session sheet | session rejects → silent `cancelled` (I5); indistinguishable from /app-return/cancel |
+| 9h | User dismisses the session sheet | session rejects → silent `cancelled` (I5); indistinguishable from checkout/cancel |
 | 9i | iOS 15 alpha-3 country | field omitted (D3) |
-| 9j | palshub `/app-return/*` not deployed / not redirecting to scheme | session never resolves; user dismiss → silent cancel; gated on palshub prod deploy |
+| 9j | palshub `/app-return/checkout/*` not deployed / not redirecting to scheme | session never resolves; user dismiss → silent cancel; gated on palshub prod deploy |
 | 9k | US Android taps Buy | unchanged web path via `getPalBuyUrl` (I1) |
 
 ---
@@ -437,9 +441,9 @@ native config.
 - **`SyncService.ts`** — library cache; the deferred-ownership / app-kill backstop
   (§4, scenario G).
 
-**Cross-repo (palshub):** the `/app-return/*` pages now **302-redirect to the
-custom scheme** `pocketpal://app-return/{success|cancel}?purchase_id=...&session_id=...`
-(the palshub server change already shipped). The `.well-known` association files
+**Cross-repo (palshub):** the `/app-return/checkout/*` pages **302-redirect to the
+custom scheme** `pocketpal://checkout/{success|cancel}?purchase_id=...&session_id=...`
+(gated on the palshub prod deploy). The `.well-known` association files
 (`apple-app-site-association` / `assetlinks.json`) are **dropped** — the return no
 longer relies on Universal/App Links.
 
