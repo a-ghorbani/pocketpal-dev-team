@@ -1,7 +1,13 @@
-# Implementation Plan: US iOS PalsHub authenticated in-app checkout
+# Implementation Plan: US iOS PalsHub checkout — switch return to ASWebAuthenticationSession
 
 Executable worklist for `what.md` + `context/architecture/palshub-checkout.md`. Section
 refs (§N, In, Dn, scenario X) point at those two docs — design is not re-derived here.
+
+This is a **revision against already-landed code**. The committed branch implemented the
+**Universal-Link** return (entitlement, AppDelegate UL forwarding, `/app-return/*` deep-link
+route, `RETURN_HOST` coupling, `react-native-inappbrowser-reborn`). The WHAT now mandates an
+**`ASWebAuthenticationSession`** callback (scheme `"pocketpal"`, ephemeral). Each step below
+is tagged **ADD/CHANGE** or **REMOVE**; REMOVE steps delete now-dead code rather than orphan it.
 
 ---
 
@@ -15,7 +21,7 @@ refs (§N, In, Dn, scenario X) point at those two docs — design is not re-deri
 - **Intent Brief**: `./workflows/stories/TASK-20260529-2105/intent-brief.md`
 - **WHAT**: `./workflows/stories/TASK-20260529-2105/what.md`
 - **Architecture doc(s)**: `./context/architecture/palshub-checkout.md`
-- **Status**: implemented
+- **Status**: revised — re-planning against landed Universal-Link code
 
 ---
 
@@ -23,34 +29,45 @@ refs (§N, In, Dn, scenario X) point at those two docs — design is not re-deri
 
 | Step | Status | Commit | Notes |
 | --- | --- | --- | --- |
-| Step 1 (dep) | DONE | eb8e92c | react-native-inappbrowser-reborn@3.7.1 (SFSafariVC); New-Arch build + isAvailable() probe verified |
-| Step 2 (API) | DONE | 0ed1d98 | createCheckoutSession; status via apiRequest details.status (400→already_owned) |
-| Step 3 (store) | DONE | e9e92ad | CheckoutFlowStore (state, onReturn, reset) |
-| Step 4 (browser open) | DONE | e9e92ad | start() + InAppBrowser.open; 400→owned |
-| Step 5 (reconcile) | DONE | e9e92ad | bounded poll, epoch-abort, exhaustion→processing_deferred |
-| Step 6 (sheet UI) | DONE | 011fbc4 | Platform branch + feedback + onSignInPress (6a/6b) |
-| Step 7 (deep-link route) | DONE | ae8c536 | path-based /app-return/* |
-| Step 8 (iOS native) | DONE | 93f5fe4 | applinks entitlement + continueUserActivity |
-| Step 9 (l10n) | DONE | 011fbc4 | new copy keys in en.json |
-| Step 10 (tests) | DONE | ed86feb, 011fbc4 | API + store + sheet + deep-link routing |
-| Architecture doc updated | DONE | c23c4c5 (dev-team) | promote (P)→(C) in palshub-checkout.md |
-| Native verification | DONE | - | pod install (New Arch) + iOS Release + Android Release all SUCCEEDED |
+| Step 1 (native module + spec, GATE) | DONE | 4a7c585 | ADD ASWebAuthenticationSession TurboModule + spec + pbxproj wiring |
+| Step 2 (store: open via module) | DONE | 2e14182 | openAuth + parse callback; dropped InAppBrowser + exported RETURN_HOST |
+| Step 3 (revert AppDelegate UL) | DONE | 7162c3c | continueUserActivity reverted to `return false` |
+| Step 4 (drop applinks entitlement) | DONE | 7162c3c | associated-domains block removed |
+| Step 5 (drop /app-return deep-link route) | DONE | 7162c3c | useDeepLinking checkout branch + checkoutFlowStore import removed |
+| Step 6 (drop inappbrowser dep) | DONE | 7162c3c | dep + pod + jest mapper + mock removed |
+| Step 7 (tests) | DONE | 04830d0 | module mock + openAuth resolve/reject paths; dead UL `it` blocks removed |
+| Step 8 (arch-doc promote) | DONE | (control-plane) | already (C); neutralized lone Linear mention; zero (?) |
+| Native verification (GATE) | DONE | - | pod install (RNInAppBrowser gone) + iOS Release New-Arch build + Android Release |
 
 ---
 
-## Key location decision (round-2 SUGGESTION 2)
+## What changed vs the prior HOW (add / remove summary)
 
-The buy-flow state owner is an **app-global MobX store** (`CheckoutFlowStore`), not
-local `PalDetailSheet` state. Rationale grounded in code:
-- `PalDetailSheet` is conditionally mounted (`{selectedPal && ...}`,
-  `PalsScreen.tsx:452-461`) and is unmounted on dismiss; on **cold launch** via the
-  return URL the sheet is not mounted at all (§9h).
-- The deep-link return — warm AND cold (`DeepLinkModule.getInitialURL`,
-  `DeepLinkService.ts:93-110`) — is delivered through `useDeepLinking`, mounted
-  app-globally in `App.tsx:56-57,88` (`DeepLinkHandler`), **not** inside the sheet.
-So the store (lifetime = app process) owns `CheckoutFlowState`; `useDeepLinking`
-writes return events into it; `PalDetailSheet` reads it as a MobX observer. This
-mirrors the existing `DeepLinkStore` pattern (`store/DeepLinkStore.ts`).
+**ADD / CHANGE**
+- New thin native module `AuthSessionModule` (Swift + `.m`) wrapping
+  `ASWebAuthenticationSession`, plus its codegen spec `src/specs/NativeAuthSession.ts`
+  (mirrors `StorefrontModule` + `NativeStorefront`). Step 1, now the load-bearing GATE.
+- `CheckoutFlowStore.start()` opens `checkout_url` via the module's `openAuth(url, "pocketpal")`
+  and parses path + `purchase_id` from the **resolved callback URL string**, then drives the
+  existing reconcile poll. The store's `onReturn`/reconcile machine is reused, now called
+  inline from the promise instead of from `useDeepLinking`.
+
+**REMOVE (now dead under the session-callback mechanism)**
+- `react-native-inappbrowser-reborn` (package.json, yarn.lock, ios/Podfile.lock) + jest mapper +
+  `__mocks__/external/react-native-inappbrowser-reborn.ts`.
+- `applinks:` associated-domains block in `ios/PocketPal/PocketPal.entitlements`.
+- `AppDelegate.continueUserActivity` web-URL forwarding → revert to original `return false`.
+- `useDeepLinking` `/app-return/*` path route + its two dead UL `it` blocks
+  (`useDeepLinking.test.ts:299-323`). The `checkoutFlowStore` import (`:22`) and the
+  chat-host regression test (`:325-336`) are KEPT. DeepLinkService/DeepLinkModule are no
+  longer part of the checkout return.
+- `RETURN_HOST` constant in `CheckoutFlowStore.ts` + its assertions (`CheckoutFlowStore.test.ts:64-69`).
+
+**KEEP unchanged** (no step touches these): `createCheckoutSession` / `POST /api/mobile/purchases`
+(Bearer, status map, 400→`already_owned`); the `Platform.OS` iOS-only gate (Android keeps
+`Linking.openURL(getPalBuyUrl).catch`); the reconcile state machine + I4 error semantics;
+alpha-2 `selected_country_code` gate; the 401 re-auth surface via `PalsScreen onSignInPress`;
+server-derived ownership. `PalDetailSheet` already consumes store state — no UI change needed.
 
 ---
 
@@ -58,283 +75,227 @@ mirrors the existing `DeepLinkStore` pattern (`store/DeepLinkStore.ts`).
 
 | Path | Change | Design ref |
 | --- | --- | --- |
-| `package.json`, `yarn.lock`, `ios/Podfile.lock` | add chosen SFSafariVC pod (Step 1 verifies under New Arch) | §4d / §5c |
-| `src/services/palshub/PalsHubApiService.ts` | add `createCheckoutSession` + types | §1b, §3 status map |
-| `src/services/palshub/PalsHubService.ts` | re-export `createCheckoutSession` | §5b |
-| `src/store/CheckoutFlowStore.ts` | new — state owner + reconcile poll | §1 (CheckoutFlowState), §3, §4 |
-| `src/store/index.ts` | export new store | - |
-| `src/components/PalsHub/PalDetailSheet/PalDetailSheet.tsx` | `Platform` import + branch + state feedback + `onSignInPress` prop | §2, §4a, §4c |
-| `src/screens/PalsScreen/PalsScreen.tsx` | pass `onSignInPress={() => setShowAuth(true)}` into `PalDetailSheet` | §6.E re-auth |
-| `src/hooks/useDeepLinking.ts` | path-based `/app-return/*` route → store | §4c, D4, §9h |
-| `ios/PocketPal/AppDelegate.swift` | wire `continueUserActivity` → RCTOpenURLNotification | §4c, §10.1 |
-| `ios/PocketPal/PocketPal.entitlements` | add `applinks:<HOST>` | §10.2, I6 |
-| `src/locales/en.json` | new checkout copy keys | §3 feedback column |
-| tests (per §Testable-contract) | new + updated | §6 |
-| `context/architecture/palshub-checkout.md` | promote (P)→(C) same PR | non-negotiable |
+| `ios/PocketPal/AuthSessionModule.swift` | **add** — ASWebAuthenticationSession wrapper | §10, §4d, D12 |
+| `ios/PocketPal/AuthSessionModule.m` | **add** — `RCT_EXTERN_MODULE` bridge | §10, D12 |
+| `src/specs/NativeAuthSession.ts` | **add** — TurboModule spec (New-Arch JS surface) | §4d |
+| `src/store/CheckoutFlowStore.ts` | **change** — open via module, parse callback; drop InAppBrowser + RETURN_HOST | §1b return, §2, §4a.4-6, I6 |
+| `ios/PocketPal/AppDelegate.swift` | **remove** — revert `continueUserActivity` to `return false` | §10 removed |
+| `ios/PocketPal/PocketPal.entitlements` | **remove** — `applinks:` associated-domains block | §10 removed, D6 |
+| `src/hooks/useDeepLinking.ts` | **remove** — `/app-return/*` branch + `checkoutFlowStore` import | §4c, I6, §10 removed |
+| `package.json`, `yarn.lock`, `ios/Podfile.lock` | **remove** — `react-native-inappbrowser-reborn` | §5c (dropped) |
+| `jest.config.js` | **remove** — inappbrowser moduleNameMapper entry | - |
+| `__mocks__/external/react-native-inappbrowser-reborn.ts` | **remove** | - |
+| *(inline `jest.doMock('../../specs/NativeAuthSession', …)` in the store test)* | **add** — spec mock, mirrors `region.test.ts:7` | §6 |
+| `src/store/__tests__/CheckoutFlowStore.test.ts` | **change** — module mock + openAuth paths; drop RETURN_HOST/InAppBrowser | §6 A/B/C, I5/I6 |
+| `src/hooks/__tests__/useDeepLinking.test.ts` | **remove** — the two UL `it` blocks (`:299-323`) + the `palId` line in the block `beforeEach` (`:296`); KEEP `checkoutFlowStore` import + chat-host regression (`:325-336`) | §4c removed |
+| `context/architecture/palshub-checkout.md` | **change** — promote (P)→(C); already re-targeted to ASWebAuth | non-negotiable |
+
+`src/services/palshub/PalsHubApiService.ts`, `PalDetailSheet.tsx`, `PalsScreen.tsx`, `en.json`,
+and `region.ts` are **untouched** by this revision (landed correctly; KEEP list).
 
 ---
 
 ## Steps
 
-Each step is atomic — one logical change, one commit.
+Each step is atomic — one logical change, one commit. Steps 3–6 are REMOVE steps and may be
+sequenced in any order after Step 2 compiles, but all land in this PR.
 
-### Step 1: Select + New-Arch-verify the system in-app browser dependency (GATE)
+### Step 1 (ADD, GATE): ASWebAuthenticationSession native module + spec
 
-**Implements**: §4d / §5c. The §4d *constraint* (SFSafariViewController-backed, NOT
-`react-native-webview`) is fixed; the *package* is not — §4d requires HOW to confirm exact
-package, version, **and maintenance status**. This step is a gate: nothing downstream may
-rest on an unverified legacy pod.
+**Implements**: §4d, §10 "Added by this flow", D12, I2. Same build-gate discipline as the
+prior Step 1 — nothing downstream rests on an unbuilt native module.
 
-**Files**: `package.json`, `yarn.lock`, `ios/Podfile.lock`
-
-**Maintenance status (recorded, §4d)**: candidate `react-native-inappbrowser-reborn@3.7.1`
-is **stalled/legacy-arch** — `3.7.1` is a thin registry republish (2026-03-16) of real
-release `3.7.0` (2022-07-30); `peerDependencies` is only `react-native: ">=0.56"` with **no
-New-Arch declaration**, so build/run under this worktree's RN 0.82.1 New Architecture
-(`newArchEnabled=true`, `RCT_NEW_ARCH_ENABLED=1`) is **unconfirmed** and must be proven.
+**Files**: `ios/PocketPal/AuthSessionModule.swift` (new), `ios/PocketPal/AuthSessionModule.m`
+(new), `src/specs/NativeAuthSession.ts` (new)
 
 **Approach** (≤5 lines):
-1. `yarn add react-native-inappbrowser-reborn@3.7.1`; `cd ios && RCT_NEW_ARCH_ENABLED=1 pod install`
-   (confirm `RNInAppBrowser` in `Podfile.lock`); add a **throwaway** call site logging
-   `InAppBrowser.isAvailable()`; run a New-Arch `yarn ios --configuration Release`. Build +
-   module-resolution under New Arch is the real check; revert the call site after.
-2. **Decision**: builds AND `isAvailable()` resolves → keep, record "verified under RN 0.82
-   New Arch". Fails to build / module unresolved → drop it, pick a maintained
-   SFSafariVC-backed alternative satisfying §4d, re-run (1):
-   (a) **thin custom SFSafariViewController TurboModule** (preferred) — ~1 Swift file over
-   `RCTPresentedViewController()`, New-Arch-native spec, no 3rd-party runtime;
-   (b) `expo-web-browser` (rejected unless (a) infeasible) — maintained + §4d-compliant, but
-   repo has **zero Expo**, so it drags in `expo-modules-core`/Expo autolinking for one call.
-   Record the rationale for whatever ships; that package feeds Step 4 + Step 11 §5c.
+1. Swift: `@objc(AuthSessionModule) class … : NSObject, RCTBridgeModule` mirroring
+   `StorefrontModule.swift` (moduleName `"AuthSessionModule"`, `requiresMainQueueSetup → true`
+   since it presents UI). Expose `openAuth(_ urlString:, callbackScheme:, resolve:, reject:)`:
+   on the main queue build `ASWebAuthenticationSession(url:, callbackURLScheme: callbackScheme,
+   completionHandler:)`, set `prefersEphemeralWebBrowserSession = true`, set
+   `presentationContextProvider` (an `ASWebAuthenticationPresentationContextProviding` returning
+   the key window), `start()`. Completion: callback URL → `resolve(url.absoluteString)`; error
+   (incl. `.canceledLogin` user-dismiss) → `reject(...)` (store maps reject → silent cancel, I5).
+2. `.m`: `RCT_EXTERN_MODULE(AuthSessionModule, NSObject)` +
+   `RCT_EXTERN_METHOD(openAuth:(NSString *)url callbackScheme:(NSString *)scheme
+   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)` — copy the
+   `StorefrontModule.m` shape exactly.
+3. Spec: `src/specs/NativeAuthSession.ts` — `interface Spec extends TurboModule {
+   openAuth(url: string, callbackScheme: string): Promise<string>; }` then
+   `export default TurboModuleRegistry.get<Spec>('AuthSessionModule')` (mirrors
+   `NativeStorefront.ts`). Hold a strong reference to the session inside the module so ARC does
+   not deallocate it mid-flow (instance property; cleared in the completion handler).
 
-**Verification**: New-Arch `yarn ios --configuration Release` succeeds with the trivial call
-site present (this IS the gate); `git diff ios/Podfile.lock` shows the chosen pod;
-`npx tsc --noEmit`. Record chosen package + maintenance status in the commit message.
+**Decision pinned** (from §4d/D12 — no choice for implementer): custom module, NOT
+`inappbrowser-reborn`; scheme literal `"pocketpal"`; ephemeral `true`. These are fixed by WHAT.
 
----
-
-### Step 2: Add `createCheckoutSession` to PalsHubApiService
-
-**Implements**: §1b (request/response), §3 status mapping table, I3 (Bearer reuse), D2/D7.
-
-**Files**: `src/services/palshub/PalsHubApiService.ts`
-
-**Approach** (≤5 lines): Add `CheckoutSessionRequest`/`CheckoutSession` types matching
-§1b. Add `async createCheckoutSession(palId, {successUrl, cancelUrl, selectedCountryCode?})`:
-POST `/api/mobile/purchases` reusing `getAuthHeaders` (`:142-154`, do **not** mint a
-token — I3). Build body with `selected_country_code` only when `selectedCountryCode?.length === 2`
-(D3 — caller passes it; omit otherwise). Do NOT route through `apiRequest` (it throws on
-!ok and loses status); fetch directly so the **status code** can be mapped: 200→return
-parsed `CheckoutSession`; 400→throw `PalsHubError('already_owned', {status:400})`; 401/404/500
-→throw `PalsHubError` carrying `{status}`; fetch-throw→`PalsHubError` carrying
-`{status:'network'}`. Caller (Step 4) interprets status, per §3.
-
-**Verification**: `yarn test --findRelatedTests src/services/palshub/PalsHubApiService.ts`
-(after Step 10a); `npx tsc --noEmit`.
+**Verification (THE GATE)**: `cd ios && RCT_NEW_ARCH_ENABLED=1 pod install` succeeds and the
+module appears in the generated project; New-Arch `yarn ios --configuration Release` **builds
+green** (this compiles the TurboModule under New Arch — capture the build log per Native
+verification). `npx tsc --noEmit` resolves the spec. The native gate is artifact-backed
+(see Native verification) — do NOT assert it.
 
 ---
 
-### Step 3: Add `CheckoutFlowStore` (app-global state owner)
+### Step 2 (CHANGE): CheckoutFlowStore opens via the module and parses the callback
 
-**Implements**: §1 CheckoutFlowState, §3 state machine, I7 (single in-flight), §1 single-writer.
-
-**Files**: `src/store/CheckoutFlowStore.ts` (new), `src/store/index.ts`
-
-**Approach** (≤5 lines): MobX store mirroring `DeepLinkStore`. Holds `status`, `palId`,
-`purchaseId?`, `errorKind?` (§1 shape). Actions: `begin(palId)` (idle→creating; no-op if
-already creating/finalizing — I7/9g), `setCreating/setBrowserOpen/setOwned/setError(kind)/
-setCancelled/setProcessingDeferred`, and `reset()` (any→idle on dismiss). Add
-`onReturn(palId, kind:'success'|'cancel')`: ignore if `palId !== this.palId` or no active
-flow (I7/9f); success→start reconcile (Step 5); cancel→`setCancelled` (I5). This store is the
-**sole writer** of CheckoutFlowState (§ single-writer); ownership is never written here (I8).
-
-**Verification**: `yarn test --findRelatedTests src/store/CheckoutFlowStore.ts` (after Step 10b);
-`npx tsc --noEmit`.
-
----
-
-### Step 4: Wire create-session + open SFSafariViewController
-
-**Implements**: §2 event flow, §3 (creating→browser_open / 400→owned / errors), §4a.2-4, scenarios A/D/E.
+**Implements**: §1b return path, §2 event flow, §4a.4-6, §4c (`CheckoutFlowStore` row), I5/I6/I7.
 
 **Files**: `src/store/CheckoutFlowStore.ts`
 
-**Approach** (≤5 lines): Add `async start(palId)` on the store: guard I7; `setCreating`;
-compute `successUrl`/`cancelUrl` as `https://${RETURN_HOST}/app-return/{success,cancel}`
-(RETURN_HOST = the one deferred placeholder, see Step 8/D6); read
-`getStorefrontCountryCode()` and pass through (the API method applies the alpha-2 D3 gate).
-Call `palsHubApiService.createCheckoutSession`. On success: `setBrowserOpen`, open
-`checkout_url` via the system-browser open call chosen in Step 1 (SFSafariVC — I2/§4d). On `PalsHubError`: map
-`details.status` → 400 `setOwned` (D2, no browser); 401 `setError('401')`; 404 `setError('404')`;
-500 `setError('500')`; network `setError('network')` (§3, §9).
+**Approach** (≤5 lines):
+1. Replace `import InAppBrowser …` with `import NativeAuthSession from '../specs/NativeAuthSession'`.
+   Delete the `RETURN_HOST` constant + its `TODO(checkout-host)` comment; inline the host as a
+   plain string (D6 — `<HOST>` carries no entitlement coupling now): keep
+   `successUrl`/`cancelUrl` = `https://<HOST>/app-return/{success,cancel}`.
+   `NativeAuthSession` is `TurboModuleRegistry.get<Spec>(...)` → typed `Spec | null`; guard it
+   before calling `.openAuth(...)` exactly like `region.ts:18` (`if (!NativeStorefront) {…}`).
+   On null, map to **silent cancel** (`onReturn(this.palId, 'cancel')`, I5) — the iOS-only branch
+   should never reach a null spec, but no non-null assertion (`!`) is permitted (`tsc --noEmit` gate).
+2. In `start()`, after `setBrowserOpen`, replace `await InAppBrowser.open(checkout_url)` with:
+   `await NativeAuthSession.openAuth(checkout_url, 'pocketpal')` → on resolve, parse the returned
+   URL string: `new URL(callback).pathname` trailing segment (`success`|`cancel`) and
+   `searchParams.get('purchase_id')`; drive the **existing** machine — `success` →
+   `onReturn(this.palId, 'success')` (reconcile); `cancel` → `onReturn(this.palId, 'cancel')`
+   (silent). Wrap in try/catch: a **reject** (user-dismiss / session error) → `onReturn(this.palId,
+   'cancel')` (silent cancel, I5). Guard the whole branch with the I7 epoch/`palId` check the
+   store already enforces inside `onReturn`.
+3. Keep `onReturn`/`reconcile`/`reset`/the epoch token **unchanged** (the WHAT keeps the reconcile
+   machine and I4 semantics verbatim). Update the store doc-comment: it is no longer driven by a
+   Universal-Link return — it now consumes the session callback inline (terse, no internal refs).
 
-**Verification**: covered by store tests Step 10b; `npx tsc --noEmit`.
-
----
-
-### Step 5: Reconcile poll (webhook-latency race)
-
-**Implements**: §4 reconcile lifecycle, I4, D5/D9, I8, scenarios A/B.
-
-**Files**: `src/store/CheckoutFlowStore.ts`
-
-**Approach** (≤5 lines): Add cancellable `private async reconcile(palId)`: `setFinalizing`;
-loop up to 6 attempts with backoff (~15–20s total, e.g. 1,2,3,4,4,4s). Each attempt
-`await palsHubService.checkPalOwnership(palId)` — `owned===true`→`setOwned` and stop (I4
-first-true wins); `owned===false`→continue; thrown `PalsHubError`→swallow→continue (both
-non-terminal, I4). After loop exhausts for any reason→`setProcessingDeferred` (D5, never
-error). Abort if `reset()`/cancel fired mid-flight (I7) via an instance epoch token checked
-each attempt. Never write `is_owned` (I8 — read only via checkPalOwnership/getPal).
-
-**Verification**: store tests Step 10b cover webhook-lag, already-settled, cancel-mid-poll.
+**Verification**: `npx tsc --noEmit`; covered by Step 7 store tests (openAuth resolve-success /
+resolve-cancel / reject paths).
 
 ---
 
-### Step 6: PalDetailSheet — platform branch + state feedback + re-auth affordance
+### Step 3 (REMOVE): revert AppDelegate Universal-Link forwarding
 
-**Implements**: §2, §4a.1-2 (I1 platform gate), §4c render row, §3 feedback, scenarios C/E/F, 9a/9b/9g/9k.
+**Implements**: §10 "Removed by this revision", §4c (AppDelegate reverts to `return false`).
 
-**Files**: `src/components/PalsHub/PalDetailSheet/PalDetailSheet.tsx`
+**Files**: `ios/PocketPal/AppDelegate.swift`
 
-**Re-auth surface (corrected)**: `PalDetailSheet` today has **no** `onSignInPress`/AuthSheet
-(only `pal`/`isVisible`/`onClose`, C `:31-35`); `AuthSheet` is owned by **`PalsScreen`**
-(`showAuth`/`setShowAuth`, C `:61,447-449`), which already passes
-`onSignInPress={() => setShowAuth(true)}` to other children (C `:368,442`). Chosen fix =
-**option (a)**: add an optional `onSignInPress?: () => void` prop to `PalDetailSheet`, passed
-from `PalsScreen`'s existing callback (Step 6b). On 401 the `error` state renders a "Sign in
-again" control → `onSignInPress` (opens PalsScreen's AuthSheet); retry is the existing buy
-button after sign-in (no auto-retry wiring).
+**Approach** (≤5 lines): In `application(_:continue:restorationHandler:)` (`:64-83`) delete the
+`NSUserActivityTypeBrowsingWeb` web-URL forwarding block and its comment; the method body becomes
+just `return false` (its original state). Leave `application(_:open:options:)` (the `pocketpal`
+custom-scheme Shortcuts path, `:45-62`) **untouched** — it is unrelated to checkout.
 
-**Approach (6a — sheet)** (≤5 lines): Add `Platform` to the `react-native` import (today only
-`Linking` is imported, `:2`). Keep buy-button **visibility** gate unchanged
-(`isUSRegion && premium && !is_owned`, `:325-327` — I1 leaves region gate alone). Replace the
-`onPress` (`:331-332`): `Platform.OS !== 'ios'` → keep the existing
-`Linking.openURL(getPalBuyUrl(displayPal.id)).catch(() => {})` **verbatim, including the
-`.catch(() => {})`** (the unchanged Android path must not regress into an unhandled
-rejection — F/9k); else `checkoutFlowStore.start(displayPal.id)`. Component is already
-`observer`; derive button `loading` from `status==='creating'`, disabled while
-`creating|finalizing` (9g). Render non-blocking "Finalizing…" (`finalizing`), "Processing —
-will unlock shortly" (`processing_deferred`); for `error` render the errorKind message and,
-when `errorKind==='401'`, a "Sign in again" button → `onSignInPress?.()` (9a/E); 404 →
-"unavailable" (9b). `owned` needs no extra UI. Call `checkoutFlowStore.reset()` in `onClose`.
-
-**Approach (6b — PalsScreen wiring)** (≤3 lines): On the `<PalDetailSheet>` element
-(`PalsScreen.tsx:452-461`), add `onSignInPress={() => setShowAuth(true)}`, reusing the exact
-callback already wired into `PalsScreen`'s other children. No new state.
-
-**Verification**: `yarn test --findRelatedTests src/components/PalsHub/PalDetailSheet/PalDetailSheet.tsx`;
-`npx tsc --noEmit`; lint.
+**Verification**: compiles in the Step 1 New-Arch build / Native verification iOS build; review
+confirms only the UL block was removed.
 
 ---
 
-### Step 7: useDeepLinking — path-based `/app-return/*` route
+### Step 4 (REMOVE): drop the applinks associated-domains entitlement
 
-**Implements**: §4c routing, D4 (path not host), §9h cold launch, I7.
+**Implements**: §10 "Removed by this revision", D6, I6.
+
+**Files**: `ios/PocketPal/PocketPal.entitlements`
+
+**Approach** (≤3 lines): Delete the `com.apple.developer.associated-domains` key + its
+`<array><string>applinks:…</string></array>` value **and** the explanatory comment above it.
+Leave keychain / Siri / memory-limit / virtual-addressing entitlements intact.
+
+**Verification**: iOS Release build still signs/builds (Native verification); `grep -c applinks
+ios/PocketPal/PocketPal.entitlements` → 0.
+
+---
+
+### Step 5 (REMOVE): drop the `/app-return/*` deep-link route
+
+**Implements**: §4c (deep-link path NOT part of return), I6, §10 removed.
 
 **Files**: `src/hooks/useDeepLinking.ts`
 
-**Approach** (≤5 lines): In `handleDeepLink` (`:68-92`), **before/alongside** the
-`host==='chat'` branch (do not repurpose it — D4), parse `new URL(params.url).pathname`.
-If it starts with `/app-return/`, read the trailing segment: `success`→
-`checkoutFlowStore.onReturn(checkoutFlowStore.palId, 'success')`; `cancel`→`'cancel'` (palId
-comes from the active flow the store already holds — return URL carries no palId; I7 stale-guard
-lives in the store). Keying on **path** is required because the return `host` is `<HOST>`, which
-cannot discriminate (it would collide with any future host route). Cold launch reaches the same
-handler via `DeepLinkService.checkInitialURL` (`:93-110`).
+**Approach** (≤5 lines): In `handleDeepLink` delete the entire `/app-return/` block (`:87-102`:
+the `returnPath` parse, the `startsWith('/app-return/')` branch, and its early `return`). Remove
+`checkoutFlowStore` from the `'../store'` import (`:16`) — it is no longer referenced here. Leave
+the `host === 'chat'` branch and the E2E benchmark routing untouched. The checkout return now
+arrives only through the session promise (Step 2), never this hook (I6).
 
-**Verification**: `yarn test --findRelatedTests src/hooks/useDeepLinking.ts`; `npx tsc --noEmit`.
+**Verification**: `npx tsc --noEmit` (no unused-import error); `grep -c app-return
+src/hooks/useDeepLinking.ts` → 0; Step 7 removes the now-dead tests.
 
 ---
 
-### Step 8: iOS native — entitlement + continueUserActivity wiring
+### Step 6 (REMOVE): drop the `react-native-inappbrowser-reborn` dependency
 
-**Implements**: §10.1/§10.2, §4c iOS rows, I6 (host symmetry), D6 (placeholder host).
+**Implements**: §5c (package dropped), D12. The custom module (Step 1) is the only browser surface.
 
-**Files**: `ios/PocketPal/PocketPal.entitlements`, `ios/PocketPal/AppDelegate.swift`
+**Files**: `package.json`, `yarn.lock`, `ios/Podfile.lock`, `jest.config.js`,
+`__mocks__/external/react-native-inappbrowser-reborn.ts`
 
-**Approach** (≤5 lines): Entitlements — add `com.apple.developer.associated-domains`
-array with `applinks:<HOST>` (the **one deferred string**, D6 — keep a terse code comment
-marking it a placeholder; same `<HOST>` used in Step 4 URLs, I6). AppDelegate
-`continue userActivity` (`:64-71`, today `return false`): when
-`userActivity.activityType == NSUserActivityTypeBrowsingWeb`, grab `userActivity.webpageURL`,
-post `RCTOpenURLNotification` with `["url": url]` (mirror `application(_:open:)` at `:50-58`),
-`return true`. This routes the https return URL through the existing
-`DeepLinkModule`→`onDeepLink` path (§4c) with no DeepLinkModule change. Do not handle other
-activity types (§4c "does NOT").
+**Approach** (≤5 lines): `yarn remove react-native-inappbrowser-reborn` (updates `package.json`
++ `yarn.lock`); `cd ios && RCT_NEW_ARCH_ENABLED=1 pod install` to drop the `RNInAppBrowser` pod
+from `Podfile.lock`. Delete the `'react-native-inappbrowser-reborn'` moduleNameMapper entry in
+`jest.config.js` (`:40-41`) and delete `__mocks__/external/react-native-inappbrowser-reborn.ts`.
+Confirm no `src/` import of it remains (only `CheckoutFlowStore.ts` referenced it; removed in Step 2).
 
-**Verification**: iOS build in native gate; `RETURN_HOST` JS constant (Step 4) and the
-entitlement `applinks:` host are the **same** placeholder symbol (I6) — checked by review, not test.
+**Verification**: `grep -rn inappbrowser src package.json jest.config.js ios/Podfile.lock` → 0;
+`yarn jest --listTests >/dev/null` loads config without the missing-mapper error.
 
 ---
 
-### Step 9: l10n copy keys
+### Step 7 (TESTS): module mock + openAuth paths; remove the two dead UL `it` blocks + RETURN_HOST tests
 
-**Implements**: §3 user-visible feedback column.
-
-**Files**: `src/locales/en.json`
-
-**Approach** (≤5 lines): Under `palsScreen.palDetailSheet`, add keys: `finalizingPurchase`
-("Finalizing your purchase…"), `processingPurchase` ("Processing — will unlock shortly."),
-`checkoutSessionExpired` (401 — message paired with the "Sign in again" button, Step 6a), `signInAgain` ("Sign in again" button label), `palNotAvailable` (404), `checkoutFailed`
-(500/network generic retryable). Edit **only** `en.json` (other locales via Weblate). Keep
-register consistent with existing keys; do not invent UX copy beyond §3's labels.
-
-**Verification**: `node scripts/validate-l10n.js` (if present) or `yarn test --findRelatedTests src/locales`;
-`npx tsc --noEmit` (typed via `typeof en`).
-
----
-
-### Step 10: Tests
-
-**Implements**: §6 scenarios A–F, §9 edges, §3/§4 state machine.
+**Implements**: §6 A/B/C, §9f/9g/9h, I4/I5/I6.
 
 **Files**:
-- (10a) `src/services/palshub/__tests__/PalsHubApiService.test.ts` — `createCheckoutSession`:
-  200 happy (body shape incl. success/cancel URLs, Bearer header reuse), `selected_country_code`
-  present (alpha-2) vs omitted (alpha-3 "USA"/null — D3/9i), and each error branch
-  401/404/400/500/network mapped to `PalsHubError` with correct `details.status` (§3 table).
-- (10b) `src/store/__tests__/CheckoutFlowStore.test.ts` (new) — state machine: 200→browser_open,
-  400→owned (D2/D), reconcile owned-on-attempt-1 (A), webhook-lag false/thrown ×6→processing_deferred
-  (B/9c, I4 — assert **never** error), cancel→cancelled silent (C/I5), double-start no-op while
-  creating/finalizing (I7/9g), stale `onReturn` ignored (9f), reset→idle. Mock
-  `palsHubApiService`, `palsHubService.checkPalOwnership`, `InAppBrowser`, `getStorefrontCountryCode`.
-- (10c) `src/components/PalsHub/PalDetailSheet/__tests__/...` — Platform.OS branch: iOS press →
-  `checkoutFlowStore.start` (not Linking); non-iOS press → `Linking.openURL(getPalBuyUrl)` with the
-  `.catch` preserved (F/9k, I1). Also: `error` + `errorKind:'401'` renders a "Sign in again" control
-  whose press calls the `onSignInPress` prop (9a/E re-auth surface).
-- (10d) `src/hooks/__tests__/useDeepLinking.test.ts` — extend: `/app-return/success` →
-  `onReturn(...,'success')`, `/app-return/cancel` → `'cancel'`, and existing `host:'chat'` route
-  still works (D4 — no regression).
-- (10e) `src/utils/__tests__/palshub-display.test.ts` — keep existing `getPalBuyUrl` tests
-  (retained; assert unchanged behaviour).
+- **add** an inline spec mock in the store test, mirroring `region.test.ts:7`:
+  `jest.doMock('../../specs/NativeAuthSession', () => ({ __esModule: true, default: { openAuth }}))`
+  with a per-test `openAuth = jest.fn()`. No standalone `__mocks__/external/specs/...` file.
+- **change** `src/store/__tests__/CheckoutFlowStore.test.ts`:
+  - Remove the `react-native-inappbrowser-reborn` mock + import + `openBrowser` handle (`:14-27`)
+    and the `openBrowser` assertions (`:69,77`).
+  - Mock `NativeAuthSession.openAuth` instead. New cases: (a) `openAuth` resolves
+    `https://h/app-return/success?purchase_id=pur_1` → status reaches `finalizing`→`owned`
+    (drives reconcile, A); (b) resolves `…/app-return/cancel` → `cancelled` silent (C/I5);
+    (c) `openAuth` **rejects** (user-dismiss) → `cancelled` silent (I5, 9h). Keep the existing
+    create-error matrix, in-flight no-op, reconcile webhook-lag/reset, and "no active flow"
+    tests (they don't depend on the browser surface).
+  - Drop the `successUrl`/`cancelUrl` `stringContaining('/app-return/...')` assertions only if
+    they referenced `RETURN_HOST`; the URL-shape assertion itself may stay (host is now an inline
+    literal). No `RETURN_HOST` symbol remains to import.
+- **edit** `src/hooks/__tests__/useDeepLinking.test.ts` — delete **only** the two dead UL `it`
+  blocks: `routes /app-return/success …` (`:299-310`) and `routes /app-return/cancel …`
+  (`:312-323`). Drop the `(checkoutFlowStore as any).palId = 'pal-active';` line from the routing
+  block's `beforeEach` (`:296`) — it only fed those two tests. **KEEP** the `checkoutFlowStore`
+  import (`:22`): the surviving `does not route checkout for the chat host link (no regression)`
+  test (`:325-336`) asserts `checkoutFlowStore.onReturn` was **not** called (`:334`), so the
+  import stays USED. Keep the `host:'chat'` and benchmark routing tests.
 
-**Approach**: Follow the existing `jest.doMock('@env')` + `require(...)` pattern in
-PalsHubApiService.test.ts; mock the inappbrowser native module (no native mock dir exists today —
-add a `jest.mock('react-native-inappbrowser-reborn', ...)` inline or under `__mocks__/external/`).
-
-**Verification**: `yarn test --findRelatedTests <each file>`; full `yarn test` green.
+**Verification**: `yarn test --findRelatedTests src/store/CheckoutFlowStore.ts
+src/hooks/useDeepLinking.ts`; then full `yarn test` green; `npx tsc --noEmit`.
 
 ---
 
-### Step 11: Promote architecture doc (same PR)
+### Step 8 (arch-doc): confirm flow doc reflects the revised mechanism (same PR)
 
 **Implements**: non-negotiable — flow doc absorbs the WHAT delta in the landing PR.
 
 **Files**: `context/architecture/palshub-checkout.md`
 
-**Approach** (≤5 lines): Flip every `(P)` to `(C)` now that code exists (createCheckoutSession,
-Platform branch, SFSafariVC open via inappbrowser-reborn, path route, AppDelegate
-continueUserActivity, applinks entitlement). Replace the dep candidate wording in §5c with the
-**chosen** package + version + "New-Arch verified" note recorded in Step 1 (the candidate
-`react-native-inappbrowser-reborn` is replaced only if Step 1's gate fails — write whatever
-actually shipped, not the candidate). Update §11 "source of truth in code" to add `src/store/CheckoutFlowStore.ts` (the new
-state owner) and `src/services/DeepLinkService.ts` / `src/hooks/useDeepLinking.ts` — confirm
-the list points at `src/services/DeepLinkService.ts` (NOT under `palshub/`); no prose may
-imply a `palshub/` location for the deep-link service. Leave `<HOST>`/D6 as the single remaining placeholder. Confirm
-**zero `(?)`**. Drop the "drafted from story" banner (`:22-25`). No internal refs (hygiene).
+**Approach** (≤5 lines): The flow doc is **already** re-targeted to `ASWebAuthenticationSession`
+(it was rewritten alongside the WHAT). This step only verifies code-truth: every checkout flow
+element now reads `(C)` (module, store openAuth+parse, reconcile) — promoted from `(P)`; §10
+"Removed by this revision" matches the actual removals in Steps 3–6 (entitlement, AppDelegate UL,
+`/app-return/*` route, RETURN_HOST, cold-launch) and is **expected** to name applinks / RETURN_HOST /
+inappbrowser-reborn as the things it removed; §5c names the custom module and "dropped
+inappbrowser-reborn"; §11 source-of-truth lists `CheckoutFlowStore.ts` + the custom module and does
+**not** imply any `DeepLinkService` involvement in the return. Fold architect-critic SUGGESTION 1 —
+already captured in D11/§10 prose. Optional, low-priority: neutralize the lone `FOU-139` mention
+(`:442`) to generic wording (e.g. "the palshub server change") so the control-plane doc stays clean —
+not required (arch doc is dev-team-repo internal, not a public/GitHub artifact). Confirm **zero
+`(?)`**; `<HOST>` is the one remaining placeholder (D6).
 
-**Verification**: `grep -n '(?)' context/architecture/palshub-checkout.md` returns nothing;
-`grep -nE 'FOU-|TASK-|round [0-9]|§[0-9]' context/architecture/palshub-checkout.md` returns nothing.
+**Verification**:
+- Arch doc invariants (control-plane doc — do NOT scrub applinks/RETURN_HOST/inappbrowser here; §10/§5c
+  removal prose legitimately names them): `grep -n '(?)' context/architecture/palshub-checkout.md` →
+  nothing; and every checkout flow element reads `(C)` (none of the checkout return/module/store/reconcile
+  elements still carries `(P)`) — verify by reading the flow table, not by grepping the removal sections.
+- Non-negotiable hygiene scrub applies to the **changed source/test/config files in the worktree**, not the
+  arch doc: `git diff --name-only origin/main...HEAD -- ':!context/**' ':!workflows/**' | xargs grep -nE
+  'FOU-|TASK-|round [0-9]|linear\.app' 2>/dev/null` → nothing (no internal refs leak into shipped code/tests/config).
 
 ---
 
@@ -342,61 +303,66 @@ imply a `palshub/` location for the deep-link service. Leave `<HOST>`/D6 as the 
 
 | Contract item | Verified by |
 | --- | --- |
-| §6.A happy (settled) | 10b reconcile owned-on-attempt-1; visual scenario "buy-success" |
-| §6.B happy (webhook lag) | 10b false/thrown ×6 → processing_deferred (asserts never error) |
-| §6.C cancel | 10b cancel→cancelled silent (no error UI) |
-| §6.D already owned (400) | 10a 400 branch + 10b 400→owned (no browser) |
-| §6.E session expired (401) | 10a 401 mapping + 10c error('401') renders "Sign in again" → `onSignInPress` (PalsScreen AuthSheet) |
-| §6.F US Android web path | 10c non-iOS → Linking.openURL(getPalBuyUrl); 10e getPalBuyUrl retained |
-| §9b 404 not purchasable | 10a 404 + 10b setError('404') |
-| §9d 500/network | 10a 500/network mapping |
-| §9f stale return ignored | 10b stale onReturn ignored |
-| §9g double-tap | 10b no-op while creating/finalizing |
-| §9h cold launch | 10d path route reached via getInitialURL path; store survives (app-global) |
-| §9i alpha-3 country | 10a country_code omitted for "USA"/null |
-| I1 platform gate | 10c iOS vs non-iOS branch |
-| I4 no false failure | 10b processing_deferred never error |
+| §6.A happy (settled) | Step 7 store: openAuth resolves success URL → finalizing→owned attempt 1 |
+| §6.B happy (webhook lag) | Step 7 store: reconcile false/thrown ×6 → processing_deferred (never error, I4) |
+| §6.C cancel | Step 7 store: openAuth resolves `…/cancel` → cancelled silent |
+| §6.D already owned (400) | KEPT — existing create-error matrix `already_owned → owned` (no openAuth) |
+| §6.E session expired (401) | KEPT — existing `401 → error('401')`; PalDetailSheet re-auth unchanged |
+| §6.F US Android web path | KEPT — PalDetailSheet platform-branch test unchanged (`Linking.openURL(getPalBuyUrl)`) |
+| §6.G app-kill | accepted behaviour — no callback, SyncService backstop; not unit-tested (no path) |
+| 9f stale/idle callback | KEPT — store `return with no active flow is ignored` (`CheckoutFlowStore.test.ts:157`) + stale-pal (`:153`) via `onReturn` epoch guard |
+| 9g double-tap | KEPT — in-flight no-op test |
+| 9h user-dismiss | Step 7 store: openAuth **reject** → cancelled silent (I5) |
+| I5 cancel silent | Step 7 store: cancel-URL resolve AND reject both → cancelled, no error |
+| I6 session-scoped callback | Step 5 removes the `/app-return/*` route; Step 7 deletes the two UL `it` blocks; the `:325-336` chat-host regression test stays |
 
 ---
 
-## Native verification (NATIVE_CHANGES=YES)
+## Native verification (NATIVE_CHANGES=YES) — ARTIFACT-BACKED, must be run
+
+The prior reviewer flagged the iOS Release build claim as not artifact-backed. This revision adds
+a new TurboModule under New Arch; the build MUST actually run and be evidenced (tee logs; record
+the exact "BUILD SUCCEEDED" lines + Podfile.lock diff in the commit/PR, not asserted).
 
 ```bash
 cd ./worktrees/TASK-20260529-2105
-cd ios && pod install && cd ..
-yarn ios --configuration Release        # iOS: new pod + entitlement + AppDelegate compile/run
-yarn android --variant=release          # Android: confirm NO regression (adds no Android feature)
+cd ios && RCT_NEW_ARCH_ENABLED=1 pod install 2>&1 | tee /tmp/pod-install.log && cd ..
+# iOS Release — compiles AuthSessionModule (Swift+.m) under New Arch; this is the Step 1 gate:
+yarn ios --configuration Release 2>&1 | tee /tmp/ios-release-build.log
+# Android Release — return path is UNCHANGED (Linking.openURL only); confirm no regression:
+yarn android --variant=release 2>&1 | tee /tmp/android-release-build.log
 ```
 
-Android build is mandatory even though this slice adds no Android feature — it must
-confirm the unchanged Android web path still builds (no accidental native coupling).
-Skipping any of the three is a blocking review issue.
+Evidence required before "ready": `pod-install.log` shows `RNInAppBrowser` **gone** and the
+new module present; `ios-release-build.log` shows `** BUILD SUCCEEDED **` with the new Swift file
+compiled; `android-release-build.log` shows `BUILD SUCCESSFUL`. Missing or asserted-only native
+verification is a blocking review issue.
 
 ---
 
 ## Visual confirmation (Visual Confirmation=YES)
 
-iOS simulator, US region, a premium unowned PalsHub pal in the detail sheet:
+iOS simulator, US region, a premium unowned PalsHub pal in the detail sheet. The
+`ASWebAuthenticationSession` sheet and a true Stripe round-trip are gated on the palshub prod
+deploy of the `/app-return/*` → `pocketpal://` 302 redirect (§9j, cross-repo); for captures,
+stub `NativeAuthSession.openAuth` to resolve the success/cancel callback URL.
 
 ```json
 [
   {"label": "buy-button-idle", "prompt": "open premium pal detail sheet", "look_for": "Buy on Palshub button enabled"},
-  {"label": "creating-spinner", "prompt": "tap Buy", "look_for": "button shows loading spinner before browser opens"},
-  {"label": "finalizing", "prompt": "return via /app-return/success", "look_for": "non-blocking 'Finalizing your purchase…' indicator"},
-  {"label": "cancel-silent", "prompt": "return via /app-return/cancel", "look_for": "no error message, button back to normal"}
+  {"label": "creating-spinner", "prompt": "tap Buy", "look_for": "button shows loading spinner before the auth session opens"},
+  {"label": "finalizing", "prompt": "resolve openAuth with /app-return/success", "look_for": "non-blocking 'Finalizing your purchase…' indicator"},
+  {"label": "cancel-silent", "prompt": "reject openAuth (user dismiss)", "look_for": "no error message, button back to idle"}
 ]
 ```
-
-Note: a true end-to-end Stripe round trip is gated on the palshub prod deploy of the
-`<HOST>` association file (§9j, cross-repo); simulate the return URL for the finalizing/cancel
-captures.
 
 ---
 
 ## Deferred items
 
-- `<HOST>` placeholder string — the only deferred value (D6); confirmed apex-vs-www before E2E.
-- Android/EU native checkout + return leg — separate ticket (§5 deferred #1; no Android config here).
+- `<HOST>` placeholder string — the only deferred value (D6); confirm apex-vs-www before E2E.
+- Android/EU native checkout + return leg — separate ticket (§5 deferred #1; Android keeps the
+  unchanged web path here).
 - Dedicated `GET /api/purchases/{purchase_id}` reconcile source — deferred (§5 deferred #2, D9).
 - Local-currency / price presentment — out of scope (Stripe Adaptive Pricing).
 
@@ -406,8 +372,27 @@ captures.
 
 | Round | Finding | Severity | Resolution |
 | --- | --- | --- | --- |
-| 1 | C1: native dep compatibility unverified — Step 1 picked legacy `inappbrowser-reborn@^3.7.1` as "latest" without confirming build/run under RN 0.82 New Arch (§4d requires maintenance status) | CONCERN | FIXED — Step 1 is now a verification GATE: pick + New-Arch `pod install` + New-Arch iOS build of a trivial call site BEFORE the plan depends on it; recorded maintenance status (3.7.1 is a thin republish of 2022 `3.7.0`, peerDeps only `RN>=0.56`, no New-Arch declaration); if the gate fails, fallback to a thin custom SFSafariViewController TurboModule (preferred) or `expo-web-browser` (rejected unless infeasible — repo has zero Expo). Step 4/§5c made package-agnostic. |
-| 1 | C2: 401 re-auth surface doesn't exist — `PalDetailSheet` has no `onSignInPress`/AuthSheet; AuthSheet is owned by `PalsScreen` (`:447-449`) | CONCERN | FIXED — chose option (a): added `onSignInPress?` prop to `PalDetailSheet` (Step 6a) wired from `PalsScreen`'s existing `() => setShowAuth(true)` (Step 6b, `:452-461`); 401 `error` renders a "Sign in again" control → `onSignInPress` (opens PalsScreen AuthSheet), retry via existing buy button. Corrected the false "existing onSignInPress/AuthSheet path" wording. |
-| 1 | S3: preserve `.catch(() => {})` on non-iOS `Linking.openURL` (`:332`) | SUGGESTION | FIXED — Step 6a keeps the Android branch verbatim including `.catch(() => {})`; 10c asserts it. |
-| 1 | S4: arch-doc promote must list `src/services/DeepLinkService.ts` (not under `palshub/`) | SUGGESTION | FIXED — Step 11 §11 update explicitly confirms `src/services/DeepLinkService.ts` and forbids any `palshub/` implication; adds `CheckoutFlowStore.ts` to source-of-truth. |
-| 1 | Add implied `Platform` import to PalDetailSheet | SUGGESTION | FIXED — Step 6a adds `Platform` to the `react-native` import (today only `Linking`, `:2`). |
+| 1 | C1: native dep compatibility unverified — Step 1 picked legacy `inappbrowser-reborn` without confirming build under RN 0.82 New Arch | CONCERN | SUPERSEDED — WHAT D11/D12 dropped the Universal-Link return and the dep entirely; this revision builds a custom ASWebAuthenticationSession TurboModule (Step 1 GATE) and removes inappbrowser-reborn (Step 6). |
+| 1 | C2: 401 re-auth surface (`onSignInPress` on PalDetailSheet wired from PalsScreen) | CONCERN | UNCHANGED — landed correctly; KEEP list. No HOW action this revision. |
+| 1 | S3 / Platform import / S4 (`DeepLinkService.ts` location) | SUGGESTION | UNCHANGED — landed; the deep-link route is now removed (Step 5), so the S4 path-location concern is moot. |
+| 1 | iOS Release build claim not artifact-backed | CONCERN | FIXED — Native verification is now an explicit tee-logged GATE (pod-install / ios-release / android-release logs); Step 1 cannot complete on assertion. |
+| 2 | B1: useDeepLinking test-removal plan had wrong line refs — `:296` is a shared `beforeEach`, `:325-336` is a KEEP chat-host regression test, and the `checkoutFlowStore` import (`:22`) is load-bearing for `:334` | BLOCKER | FIXED — re-scoped Steps 5/7 + affected-files/summary to delete ONLY the two UL `it` blocks (`:299-323`), drop just the `palId` line from the block `beforeEach` (`:296`), KEEP the import + the chat-host test; dropped the nonexistent "no active flow ignored" UL reference. |
+| 2 | C1: Step 2 omitted the nullable-spec guard its own `tsc --noEmit` gate requires (`NativeAuthSession` is `Spec | null`) | CONCERN | FIXED — Step 2 now pins a `if (!NativeAuthSession)` guard mirroring `region.ts:18`, mapping null → silent cancel (I5); no non-null assertion permitted. |
+| 2 | S1: speculative `__mocks__/external/specs/NativeAuthSession.ts` option | SUGGESTION | FIXED — standardized on the inline `jest.doMock('../../specs/NativeAuthSession', …)` pattern (`region.test.ts:7`); dropped the standalone-file option from the affected-files table and Step 7. |
+| — | Design change: Universal-Link return doesn't fire (iOS suppresses ULs into own SFSafariVC) | DESIGN-CHANGE | RE-EMITTED — return switched to ASWebAuthenticationSession callback; HOW now ADDs the native module + store openAuth/parse and REMOVEs the applinks entitlement, AppDelegate UL forwarding, `/app-return/*` deep-link route, RETURN_HOST, and the inappbrowser dep. Architect-critic SUGGESTION 1 already folded into WHAT/flow-doc D11 — no HOW action. |
+
+## Implementation Notes (deviations)
+
+- **Spec mock pattern**: Step 7 prescribed an inline `jest.doMock(...)` mirroring
+  `region.test.ts:7`. That file pairs `doMock` with `jest.resetModules()` + an
+  in-function `require()` because it re-imports `region` per case. The store test
+  imports the `checkoutFlowStore` **singleton** at top level, where a non-hoisted
+  `doMock` lands after the hoisted ES `import`, so the store binds the real
+  (null-in-jest) spec and the guard short-circuits. Used hoisted
+  `jest.mock('../../specs/NativeAuthSession', …)` instead — the same equivalent the
+  prior test used for the inappbrowser mock, and the dominant codebase pattern for a
+  top-level singleton import. Same effect (spec.openAuth is a jest.fn); no behaviour
+  change. All §6 A/C/I5 paths covered.
+- **No non-null assertion**: the nullable-spec guard captures `NativeAuthSession`
+  into a local and passes the narrowed `NonNullable<…>` into `openAuthAndHandle`,
+  so neither `start()` nor the helper uses `!` (tsc --noEmit gate honoured).
