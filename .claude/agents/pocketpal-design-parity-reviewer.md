@@ -74,6 +74,19 @@ For each asset under `src/assets/onboarding/` (or task-specific dir):
 
 - Is the Figma source vector? Then the asset must be an `.svg`. A `.png` for a vector source → BLOCKER (causes the "low-quality image" failure mode).
 - Is it iconify-named in the Figma design context? Then it must come from `react-native-vector-icons`, not a separate exported asset → CONCERN if a duplicate asset exists.
+- Is it an icon from the Figma DS library (`746:26281`)? Then it must be an exported `src/assets/icons/<name>-{sm,md,lg}.svg`, not a hand-coded component. A hand-coded approximation when the export exists → CONCERN; a hand-coded approximation where the rendered dimensions don't match the Figma callsite → BLOCKER.
+- For every committed `src/assets/icons/*.svg`, grep for `var(--` — Figma-exported SVGs that still contain CSS variables will render transparent in RN → BLOCKER.
+
+### 4b. Per-component spec tables
+
+The implementer is required (by `figma-implement` Step 3.5) to include a per-component Figma→code mapping table in the story doc for every component built or modified. For each in-scope component, confirm:
+
+- The table exists in `workflows/stories/${TASK_ID}/` (typically inline in `how.md` or `what.md`).
+- Every visual property listed (size, bg, border, radius, asset, asset dimensions) has a Figma value AND a code value AND a status.
+- `✓` entries actually match (spot-check a few against `theme.colors.<token>` and the source SVG's viewBox).
+- `≈` or `✗` entries have justification.
+
+Missing table → BLOCKER for the component. Table present but unverified (✓ on a token that doesn't resolve to the claimed hex) → BLOCKER per row.
 
 ### 5. Side-by-side visual parity
 
