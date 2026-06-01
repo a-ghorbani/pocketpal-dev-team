@@ -88,8 +88,7 @@ headers:  Authorization: Bearer <access_token>     // (C) reuse PalsHubApiServic
 body:     {
             pal_id:               string,           // required
             success_url:          string,           // https://<HOST>/app-return/checkout/success
-            cancel_url:           string,           // https://<HOST>/app-return/checkout/cancel
-            selected_country_code?: string          // 2-letter only; omitted otherwise (§4a.3)
+            cancel_url:           string            // https://<HOST>/app-return/checkout/cancel
           }
 ```
 
@@ -191,11 +190,10 @@ bumps the epoch and aborts in-flight attempts (I7).
      is **retained** — it is the Android leg's only caller.
    - `Platform.OS === 'ios'` → call `createCheckoutSession` and drive
      CheckoutFlowState. This branch never reaches `Linking.openURL`.
-3. `selected_country_code` is sent **only** when `getStorefrontCountryCode()`
-   returns a value with `length === 2` (alpha-2). Alpha-3 ("USA", iOS 15) and
-   `null` → field omitted; server IP fallback handles it (C region helper,
-   `region.ts:12`; D3). This is a tax hint only — currency presentment is out of
-   scope (Stripe Adaptive Pricing).
+3. The app sends **no** country hint (D3). Stripe `automatic_tax` derives the tax
+   location from the billing address collected at checkout — authoritative for VAT,
+   and the source of truth on this external (non-IAP) rail. Currency presentment is
+   out of scope (Stripe Adaptive Pricing).
 4. `checkout_url` is opened via **`ASWebAuthenticationSession`** with
    `callbackURLScheme:"pocketpal"` and `prefersEphemeralWebBrowserSession:true`,
    never an embedded WebView (I2, §4d). The session captures the custom-scheme
@@ -391,8 +389,8 @@ ownership; live getPal().is_owned reflects truth (I8). No error shown.
 | --- | --- | --- |
 | D1 | New flow doc `palshub-checkout.md`, not a delta on `pals-and-talents.md` | Purchase is a distinct flow from PACT/config |
 | D2 | 400 "already own" → success, not error | User already owns it; opening Stripe is wrong |
-| D3 | Send `selected_country_code` only when alpha-2 | Alpha-3/null → server IP fallback; avoids bad hint |
-| D6 | `<HOST>` is a plain string in success/cancel URLs; no entitlement coupling | ASWebAuthenticationSession needs no host symmetry |
+| D3 | App sends no country hint; server derives tax from the checkout billing address | Billing address is authoritative for VAT on the external rail; storefront is alpha-3 on iOS and overridden anyway — avoids the conversion bug surface |
+| D6 | `<HOST>` = `PALSHUB_API_BASE_URL` in success/cancel URLs; no entitlement coupling | Same env as the API, so any host works; ASWebAuthenticationSession needs no host symmetry |
 | D7 | Ignore `session_url`/`session_id` for opening | `checkout_url` is the only URL the session opens |
 | D8 | Confirm ownership via server, no local write | Single source of truth is PalsHub (I8) |
 | D9 | Reconcile via `checkPalOwnership` only; parse purchase_id from callback | Endpoint exists today; status route deferred |
@@ -414,7 +412,6 @@ ownership; live getPal().is_owned reflects truth (I8). No error shown.
 | 9f | Callback arrives for a `reset()`/idle flow | ignored (I6, I7) |
 | 9g | Double-tap Buy | second press is no-op while `creating`/`finalizing` (I7) |
 | 9h | User dismisses the ASWebAuthenticationSession sheet | session rejects → silent `cancelled` (I5); indistinguishable from checkout/cancel |
-| 9i | iOS 15 alpha-3 country code | field omitted; server IP fallback (D3) |
 | 9j | palshub `/app-return/checkout/*` page not yet deployed / not redirecting to scheme | session never resolves; user dismiss → silent cancel; gated on palshub prod (cross-repo) |
 | 9k | US Android taps Buy | unchanged web path via `getPalBuyUrl` (I1, scenario F) |
 

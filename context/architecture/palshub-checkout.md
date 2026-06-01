@@ -103,8 +103,7 @@ Content-Type:  application/json
 {
   pal_id:                 string,
   success_url:            "https://<HOST>/app-return/checkout/success",
-  cancel_url:             "https://<HOST>/app-return/checkout/cancel",
-  selected_country_code?: string          // 2-letter only (§5 rule 3)
+  cancel_url:             "https://<HOST>/app-return/checkout/cancel"
 }
 ```
 
@@ -211,8 +210,8 @@ Buy-press rules (order matters):
 2. On press, branch on `Platform.OS` (I1): non-iOS → existing
    `Linking.openURL(getPalBuyUrl)` web path (`getPalBuyUrl` retained); iOS →
    `createCheckoutSession` + CheckoutFlowState.
-3. `selected_country_code` sent only when `getStorefrontCountryCode()` returns an
-   alpha-2 (`length === 2`); alpha-3 / null omitted (D3). Tax hint only.
+3. The app sends no country hint (D3); Stripe `automatic_tax` derives the tax
+   location from the billing address collected at checkout (authoritative for VAT).
 4. `checkout_url` opens via `ASWebAuthenticationSession`
    (`callbackURLScheme:"pocketpal"`, `prefersEphemeralWebBrowserSession:true`),
    never an embedded WebView (I2, §5c).
@@ -352,10 +351,14 @@ no error shown
   a distinct concern from PACT/config; mixing them would couple two lifecycles.
 - **D2** — `400 "already own"` is treated as success (`owned`), not error. The
   user already owns the pal; opening Stripe would be wrong.
-- **D3** — `selected_country_code` sent only when alpha-2. Alpha-3 ("USA", iOS 15)
-  and `null` are omitted; server IP fallback handles them. It is a tax hint only.
-- **D6** — `<HOST>` is the canonical PalsHub apex `palshub.ai`, a plain string
-  inside `success_url`/`cancel_url`; no entitlement or host-symmetry coupling (the
+- **D3** — the app sends **no** country hint. Tax location is derived server-side
+  from the billing address Stripe collects at checkout (authoritative for VAT). The
+  storefront country is the Apple-ID region (not the buyer's tax location), iOS
+  returns it as alpha-3 needing conversion, and the billing address overrides any
+  hint anyway — not worth the bug surface.
+- **D6** — `<HOST>` is `PALSHUB_API_BASE_URL` (e.g. `palshub.ai`): `success_url`/
+  `cancel_url` derive from the same env value as the API, so pointing the app at any
+  host just works. No entitlement or host-symmetry coupling (the
   callback scheme is `"pocketpal"`, the callback host is the feature `checkout`).
 - **D7** — `session_url` / `session_id` are not used to open the browser;
   `checkout_url` is the only URL the session opens.
@@ -390,7 +393,6 @@ no error shown
 | 9f | Callback for a reset()/idle flow | ignored (I6, I7) |
 | 9g | Double-tap Buy (iOS) | no-op while creating/finalizing (I7) |
 | 9h | User dismisses the session sheet | session rejects → silent `cancelled` (I5); indistinguishable from checkout/cancel |
-| 9i | iOS 15 alpha-3 country | field omitted (D3) |
 | 9j | palshub `/app-return/checkout/*` not deployed / not redirecting to scheme | session never resolves; user dismiss → silent cancel; gated on palshub prod deploy |
 | 9k | US Android taps Buy | unchanged web path via `getPalBuyUrl` (I1) |
 
