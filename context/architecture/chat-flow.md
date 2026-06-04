@@ -429,10 +429,10 @@ the latest turn — see D4.
 | `metadata.truncationLikely`              | `updateMessage` from the catch path, only when the tool-args JSON parse error fires |
 | `metadata.hitMaxTurns`                   | `updateMessage` from `run_finished`, only when `result.hitMaxTurns === true` (absent otherwise) |
 | `chatSessionStore.lastCompletionResult`  | `useChatSession` at `run_finished` AND abort-with-partial-content (same write that updates `metadata.completionResult`); `setActiveSession` hydrates from disk; `resetActiveSession` clears |
-| `chatSessionStore.dismissedBannerVariants` | `ChatView` `BannerRow` on user dismiss (`setBannerDismissed`); cleared per-session by the `run_finished` writer and on `deleteSession` |
+| `chatSessionStore.dismissedBannerVariants` | `ChatView` `BannerRow` on user dismiss (`setBannerDismissed`); cleared per-session by the `run_finished` writer, on `deleteSession`, and per-id on `bulkDeleteSessions` |
 | `chatSessionStore.consecutiveFullFailures` | `useChatSession` at `run_finished` / abort-with-partial-content: increment on `snap.contextFull`, reset otherwise |
-| `chatSessionStore.sessionContextOverrides[sessionId]` | `useContextBanner.handleConfirmIncrease` (session branch — when `activeSessionId !== null`); `createNewSession` consuming a pending value into the new id; cleared on `deleteSession`. |
-| `chatSessionStore.pendingContextOverride` | `useContextBanner.handleConfirmIncrease` (no-session branch — when `activeSessionId === null`); consumed and cleared by `createNewSession`; cleared by `resetActiveSession`. |
+| `chatSessionStore.sessionContextOverrides[sessionId]` | `useContextBanner.handleConfirmIncrease` (session branch — when `activeSessionId !== null`); `createNewSession` consuming a pending value into the new id; cleared on `deleteSession` and per-id on `bulkDeleteSessions`. |
+| `chatSessionStore.pendingContextOverride` | `useContextBanner.handleConfirmIncrease` (no-session branch — when `activeSessionId === null`); consumed and cleared by `createNewSession`; cleared by `resetActiveSession` and `setActiveSession` (drawer-switch leak guard). |
 | `chatSessionStore.palLoadHintSeen` | `usePalLoadHint` at emit time (`markPalLoadHintSeen`); cleared on `resetActiveSession` |
 | `agentUiState` (full bag)                | `agentStateReducer` only (canonical state source)   |
 | `chatSessionStore.isStopping`            | `useChatSession.handleStopPress` (set), `handleSendPress` cleanup paths (clear) |

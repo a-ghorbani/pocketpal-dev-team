@@ -280,7 +280,8 @@ Additions/replacements to chat-flow.md §5. The existing line 415 (`metadata.tim
 | `lastCompletionResult` (`ChatSessionStore`) | `useChatSession` at `run_finished` + abort-catch (same action that writes `metadata.completionResult`). Also `setActiveSession` (seed from disk) and `resetActiveSession` (clear to `null`) | on `resetActiveSession` |
 | `dismissedBannerVariants` (`ChatSessionStore`) | `ChatView` banner shell on user dismiss | on `run_finished` (same action as `lastCompletionResult`) |
 | `consecutiveFullFailures` (`ChatSessionStore`) | same writer as `lastCompletionResult`; increment/reset per §4d | resets to 0 on any non-full turn |
-| `sessionContextOverrides[sessionId]` (`ChatSessionStore`) | `IncreaseContextSheet` confirm action only | on `deleteSession` |
+| `sessionContextOverrides[sessionId]` (`ChatSessionStore`) | `IncreaseContextSheet` confirm action only | on `deleteSession`; on `bulkDeleteSessions` (per-id) |
+| `pendingContextOverride` (`ChatSessionStore`, A3.1) | `IncreaseContextSheet` confirm action (no-session branch, `activeSessionId === null`) | on `createNewSession` (after copy into `sessionContextOverrides.set(newSessionId, pendingContextOverride)`); on `resetActiveSession`; on `setActiveSession` (drawer-switch leak guard); on `IncreaseContextSheet` confirm failure (no-session branch) |
 | `palLoadHintSeen` (`ChatSessionStore`, α) | §4i pal-load hint trigger (one site, gate-before-write) | on `resetActiveSession` |
 
 Cross-store read direction (new, single direction): `ModelStore.getEffectiveContextInitParams` performs ONE read of `chatSessionStore.activeSessionId` and ONE read of `chatSessionStore.sessionContextOverrides.get(activeSessionId)` to compute effective n_ctx (I5). `ChatSessionStore` does not read `ModelStore`. The resolver's `effectiveNCtx(sessionId)` helper performs the same two reads and is the single co-located helper that BOTH the resolver AND `getEffectiveContextInitParams` consult — precedence rule lives in one place. The override does NOT mutate `modelStore.contextInitParams` (D10).
@@ -356,6 +357,175 @@ Cleanup absorbed by implementer on chat-flow.md update:
 | D14 | First-time `render_html` on a fresh chat warns **reactively**. | Model fires the tool, result inflates context, banner appears after `run_finished`. Accepted trade-off vs rejected talent-aware-predictive design. |
 | D15 | (α+β) `TalentEngine.recommendedContextTokens` is declarative, not predictive. Two pure read sites: §4i pal-load hint trigger and §4d heavy-talent sub-copy lookup. | No per-turn talent inspection drives banner state; §4a / §4b / §4c resolver path unchanged. 3-round deliberation rejected predictive thresholds (complexity, false-positive risk); this amendment adds zero per-turn branching and zero new banner variants. |
 | D16 | (β) Heavy-talent post-fail UX is a **sub-copy of `context-full`**, not a new variant. | Same banner shell, same dismissibility, same CTA actions. Resolver returns the same `'context-full'` value; only the copy key changes. Preserves I4, avoids inflating §4c, keeps dismiss/recovery semantics in one place. New variant would multiply (variant × dismiss × CTA-target × auto-clear) matrix without giving user a materially different action — they still need to increase context or start a new chat. |
+
+---
+
+## Amendment 3 — Post-implementation iOS bug-bash (4 BLOCKERs, 2 CONCERNs)
+
+Critic re-review against shipped code surfaced four real bugs observed on iOS. Amendments are additive contract tightenings — no resolver redesign, no new variants, no new banner surface. Implementer diff is small (sheet-confirm no-session branch; resolver freshness arithmetic; snackbar surface scoping; cross-snackbar dismiss).
+
+Each BLOCKER lists the architectural option chosen and a one-line rationale. Decisions added: D17–D20. Hard invariants added: I9 (snackbar single-surface). Three existing invariants (I3, I5, I8) are tightened in place.
+
+### A3.1 — No-session confirm path (BLOCKER 1, §1c + §4h + I5 + Scenario Q)
+
+**Bug**: §4i pal-load hint can fire pre-first-turn with `activeSessionId === null`. User taps "Increase context" on the snackbar → confirm sheet → `sessionContextOverrides.set(null, target)` no-ops (Map key is `null`), resolver reads `effectiveNCtx` and sees the original `baseNCtx`. Silent no-op on the reactive-first-tool path the brief explicitly accepts.
+
+**Decision**: pending-override slot consumed at session creation. Picked over (b) materialise-first because creating a session as a side-effect of "I tapped Increase context" couples chat-session lifecycle to a UX affordance that explicitly fires BEFORE the user starts chatting; picked over (c) global `modelStore.contextInitParams` mutation because D10 forbids it and the override must remain session-scoped to honour §7d (pal-switch in same session preserves override) and Scenario K (failure reverts only the session's override, not the global default).
+
+**§1c amendment** — pending slot added alongside the session-keyed Map:
+
+```ts
+ChatSessionStore.sessionContextOverrides: Map<sessionId, number>
+ChatSessionStore.pendingContextOverride: number | undefined   // NEW (A3)
+```
+
+`pendingContextOverride` holds an override consented to by the user BEFORE any session exists (no-session pal-load-hint path). Cleared on `createNewSession` (after being copied into `sessionContextOverrides` at the new session's id) and on `resetActiveSession`. Not persisted (D2 unchanged).
+
+**§4h amendment** — confirm sequence branches on `activeSessionId`:
+
+| `activeSessionId` at confirm | Sequence |
+|---|---|
+| non-null (existing behaviour) | `sessionContextOverrides.set(activeSessionId, target)` → `releaseContext` → `initContext(activeModel)` |
+| `null` (no session yet) | `pendingContextOverride = target` → `releaseContext` → `initContext(activeModel)` → on next `createNewSession(id)`: `sessionContextOverrides.set(id, pendingContextOverride)` and clear the slot |
+
+Reload feedback (reload snackbar, success/failure copy) identical. Failure path on the no-session branch clears `pendingContextOverride` (not `sessionContextOverrides`, which has no entry to revert).
+
+**§4f I5 amendment** — `getEffectiveContextInitParams` consults `sessionContextOverrides.get(activeSessionId)` when `activeSessionId !== null`; otherwise consults `pendingContextOverride`. Resolver's `effectiveNCtx(sessionId)` helper applies the same precedence. Both reads agree by construction (single helper).
+
+```ts
+// resolver/ModelStore co-located helper
+effectiveNCtx(overrides, activeSessionId, baseNCtx, pendingOverride) =
+  activeSessionId && overrides.has(activeSessionId)
+    ? overrides.get(activeSessionId)
+    : (pendingOverride ?? baseNCtx)
+```
+
+**Scenario Q (NEW)**: No-session confirm.
+
+| Step | State | Observation |
+|---|---|---|
+| 1 | `activeSessionId=null`, activePal declares `render_html`, `baseNCtx=2048`, `pendingContextOverride=undefined` | §4i fires snackbar (Scenario N) |
+| 2 | User taps "Increase context", confirms 4096 | `pendingContextOverride=4096`; `releaseContext` + `initContext(activeModel)`; `effectiveNCtx(*,null,2048,4096)=4096` |
+| 3 | User sends first message → `createNewSession('s1')` | `sessionContextOverrides.set('s1', 4096)`; `pendingContextOverride=undefined`; resolver reads `effectiveNCtx(map,'s1',2048,undefined)=4096` ✓ |
+| 4 | First inference runs at `n_ctx=4096` | Pal's `render_html` tool fits; no context-full banner |
+
+### A3.2 — Reader-side freshness for `snap.contextFull` (BLOCKER 2, §4c + I3 + §4d + Scenario Q′)
+
+**Bug**: I3 auto-clear is writer-side only (clears `contextFull` on next `run_finished` that satisfies §4b). External n_ctx changes (Settings → Context Size, model reload from another surface, app restart with persisted `snap.contextFull=true`) leave the sticky full banner up indefinitely even though `used << newNCtx − AUTOCLEAR_RUNWAY`.
+
+**Decision**: resolver-side freshness check. Picked over (b) writer-side invalidation subscribed to n_ctx changes because no single seam emits "n_ctx changed" — Settings writes `contextInitParams.n_ctx` directly, `releaseContext+initContext` from other surfaces touches the same field, app boot loads it from disk. Subscribing in N writers is fragile. Resolver-side downgrade is a one-line arithmetic check, idempotent, runs every render, and matches the existing "resolver is a pure function of state" architecture (§4c).
+
+**§4c amendment** — precedence table row 1 gains a freshness gate:
+
+| Order | Variant | Match condition |
+|---|---|---|
+| 1 | `context-full` | `snap.contextFull === true` AND `used >= effectiveNCtx(sessionId) - AUTOCLEAR_RUNWAY` (NEW gate, A3) |
+| 2..5 | unchanged | — |
+
+When the gate fails (n_ctx changed externally OR override raised it above the stuck snapshot's `used`), resolver falls through to the warning/none path on the same render — no writer involvement.
+
+**§4f I3 amendment** — restated for clarity:
+
+> **I3 (auto-clear, two paths)**: (writer-side, unchanged) when a turn completes with `used < nCtx - AUTOCLEAR_RUNWAY` AND none of §4a holds, the new snapshot is written with `contextFull = false`. (reader-side, NEW) when the resolver evaluates a snapshot whose `contextFull === true` but `used < effectiveNCtx(sessionId) - AUTOCLEAR_RUNWAY` at read time, it downgrades the variant from `context-full` to the next applicable in §4c (typically `none`, or `context-warning` if §4b ratio threshold holds against the new n_ctx). The snapshot itself is NOT rewritten — next `run_finished` writer will refresh it through the normal path. Two paths agree by construction: both consult the same `(used, effectiveNCtx, AUTOCLEAR_RUNWAY)` triple.
+
+**§4d amendment** — sticky semantics for `context-full` now mean "sticky across renders within the same n_ctx envelope." If n_ctx grows past the snapshot's `used + AUTOCLEAR_RUNWAY`, the banner clears at read time (no new render is needed beyond the next MobX-triggered one — the `effectiveNCtx` change IS a MobX dependency through `sessionContextOverrides` or `contextInitParams.n_ctx`).
+
+**Scenario Q′ (NEW)**: External n_ctx change downgrades stale sticky full.
+
+| Step | State | Observation |
+|---|---|---|
+| 1 | `nCtx=2048`, `snap.contextFull=true`, `used=2020` (Scenario C aftermath) | resolver returns `context-full`, sticky banner visible |
+| 2 | User opens Settings → Context Size = 8192; reload completes | `contextInitParams.n_ctx=8192`; `effectiveNCtx=8192`; `used=2020 < 8192 - 32 = 8160` ✓ |
+| 3 | Next render (same `snap`, no `run_finished` yet) | resolver freshness gate fails; downgrade to `context-warning` (ratio=0.25 < 0.80) → `none`. Banner clears. |
+| 4 | Next user message + `run_finished` | normal writer-side path (I3 writer branch); snapshot refreshed. |
+
+**Scenarios L, M updated**: both now assert freshness post-restore. Scenario L: on returning to session A with disk-restored `contextFull=true`, if user has since raised `contextInitParams.n_ctx` via Settings such that `used < newNCtx - AUTOCLEAR_RUNWAY`, banner does NOT render. Scenario M (cold launch): same rule — `contextFull=true` recovered from disk is downgraded at read time if current `effectiveNCtx` provides headroom.
+
+### A3.3 — Snackbar surface scoping (BLOCKER 3, I8 + §4i + Scenarios R/S)
+
+**Bug**: Both snackbars (reload status + pal-load hint) render in RNP `<Portal>` which hoists above the navigator. Chat-screen snackbars appear over Settings, Models, Pals screens. I8 says snackbars "live on different surface" but doesn't pin which surface or lifecycle. Cross-screen visual bleed.
+
+**Decision**: snackbars scoped to chat screen; predicate evaluation and snackbar render both gated on chat-screen focus. Picked over "always-render but suppress when blurred" because the `usePalLoadHint` effect would still fire (and mark `palLoadHintSeen`) while the user is on Settings — burning the one-shot opportunity off-screen.
+
+**I8 amendment** — codify the surface and lifecycle:
+
+> **I8 (snackbar surface scoping)**: Both context-related snackbars (reload status, pal-load hint) render inside the chat screen's React tree only. While chat screen is not focused (`useIsFocused()` from `@react-navigation/native` returns false), (a) snackbar renders are suppressed (no JSX emits) and (b) `usePalLoadHint` predicate evaluation is paused (effect early-returns; the suppressor key is NOT marked). On refocus, the effect re-runs against the current signature and fires the snackbar if conditions still hold. I4 (one banner) is independent of this rule.
+>
+> Snackbar visibility state lives on `useContextBanner`'s `useState` and persists across the conditional render — gating suppresses JSX only, not state. If the RNP auto-dismiss timer fires while the snackbar's JSX is gated out (chat unfocused), the `onDismiss` callback still sets `visible=false`; on refocus the snackbar stays hidden because its `visible` is now `false`. If the timer has NOT yet fired when the user returns, the snackbar reappears with whatever time RNP has remaining on its internal timer — PocketPal does not pause or resume the duration timer; the underlying RNP `Snackbar` owns it. Lightest possible semantics: re-entry behaviour is whatever `visible` says at the moment chat refocuses.
+
+**§4i amendment** — lifecycle step 0 prepended:
+
+> 0. (NEW, A3) Predicate evaluation is gated on `useIsFocused()`. While chat screen is not focused, the effect early-returns before the predicate is checked — no marker, no snackbar, no signature update. Refocus triggers a normal evaluation against the current signature.
+
+**Scenario R (NEW)**: Pal-load hint suppressed off-chat-screen.
+
+| Step | State | Observation |
+|---|---|---|
+| 1 | User opens Settings; activePal change happens via deep-link / programmatic | `usePalLoadHint` effect fires but `isFocused=false` → early return; `palLoadHintSeen` unchanged; no snackbar |
+| 2 | User navigates back to chat | `useIsFocused()` → true; effect re-runs; predicate still holds; snackbar emits exactly once |
+
+**Scenario S (NEW)**: Reload snackbar does not bleed across screens.
+
+| Step | State | Observation |
+|---|---|---|
+| 1 | User taps "Increase context" on banner; `reloadSnackbar.phase='reloading'`, `isFocused=true` | snackbar visible on chat |
+| 2 | User navigates to Settings mid-reload | `isFocused=false`; reload snackbar JSX gated out; reload itself continues (lives on `useContextBanner` state, not on the JSX) |
+| 3 | Reload completes (`phase='success'`); user navigates back | `isFocused=true`; snackbar JSX gates back in; success message visible (state survives navigation; only render is gated) |
+
+### A3.4 — Snackbar single-surface invariant + dismiss-on-action (BLOCKER 4, new I9 + §4i + §4h + Scenario T)
+
+**Bug 1**: Pal-load hint snackbar (8s duration) survives the sheet/reload flow it advertised. User taps "Increase context" on the hint → sheet opens → confirm → reload snackbar appears → pal-load hint snackbar is STILL visible behind/above the reload snackbar until its 8s timer runs out. Stale UX, contradicts I4's spirit.
+
+**Bug 2**: Tapping the snackbar action label dismisses asynchronously via `setState` round-trip while the action callback (open sheet, reset session) fires; UI looks laggy.
+
+**Decision**: I9 (new) — at most ONE snackbar visible at any time across the chat-snackbar set (reload status + pal-load hint). Reload status takes precedence over pal-load hint (it's user-initiated, currently in progress, and confirms an explicit recent intent). Pal-load hint is preempted (dismissed synchronously) when the reload snackbar appears. Plus: tapping a snackbar action label dismisses synchronously regardless of remaining duration.
+
+**§4f I9 (NEW)**:
+
+> **I9 (chat-snackbar single-surface)**: At most ONE snackbar from the chat-snackbar set (`reloadSnackbar` from §4h, pal-load hint from §4i) is visible at any time. Precedence: reload status > pal-load hint. When a higher-precedence snackbar enters the visible state, the same event handler that sets the higher-precedence snackbar visible MUST also set any currently-visible lower-precedence snackbar in the set to `visible=false` — both `useState` setters fire in the one handler, React 18 batches them into a single commit, and no intermediate frame is rendered with both visible. Tapping a snackbar action label follows the same rule: the action-label handler sets that snackbar's `visible=false` AND invokes the action callback in the one handler; React 18 batches the state updates from both into one commit, so the action callback never paints a frame where the snackbar is still visible. `flushSync` is NOT required and MUST NOT be used. I4 (banner singleton) is independent.
+
+**§4h amendment** — confirm step prepends a pal-load-hint dismiss:
+
+> When the user confirms the sheet AND the pal-load hint snackbar is currently visible (the same UX flow that opened the sheet from the hint), the same confirm handler MUST call both setters: pal-load hint `visible=false` AND `reloadSnackbar` → `reloading` phase. React 18 batches the two `useState` updates from the one handler into a single commit; one render shows the hide-and-show together. No explicit cross-commit ordering is required and `flushSync` MUST NOT be used.
+
+**§4i lifecycle amendment** — step 3 (snackbar action handler):
+
+> 3. (TIGHTENED, A3) The snackbar action handler runs both effects in one handler call: sets `visible=false` on the hint's local `useState` AND invokes the action callback (open sheet for `increase`; `resetActiveSession` for `newChat`). React 18 batches the state updates triggered by both into a single commit, so the action's downstream UI is never rendered alongside a still-visible hint snackbar. No `flushSync`, no explicit ordering between commits. Suppressor key (`palLoadHintSeen`) is inserted at emit time per §4i.2, so the dismiss does not affect one-shot semantics.
+
+**Scenario T (NEW)**: Hint → sheet → reload — single-surface invariant.
+
+| Step | State | Observation |
+|---|---|---|
+| 1 | Pal-load hint snackbar visible (Scenario N) | one snackbar visible (hint) |
+| 2 | User taps "Increase context" action label | hint snackbar dismissed synchronously (I9 dismiss-on-action); sheet opens; still one (or zero) visible |
+| 3 | User confirms sheet | (defensive, §4h amendment) hint already dismissed in step 2; reload snackbar enters `reloading` phase; still one visible (reload) |
+| 4 | Reload completes | reload snackbar transitions to `success` phase (existing remount-on-`key` flow); still one visible |
+| 5 | Reload snackbar 4s timer expires OR user taps dismiss | no snackbars visible |
+
+### A3.5 — `palLoadHintSeen` clear-trigger audit (CONCERN 1, §1f / §5)
+
+`palLoadHintSeen` is currently cleared on `resetActiveSession` only (verified at `ChatSessionStore.ts:431` and `:478`). Post-A3.1 (no-session confirm), the suppressor key still uses `(palId, effectiveNCtxForSession)`. When the no-session confirm completes and a session is later created at the lifted n_ctx, the new key `${palId}:${liftedNCtx}` is different from the previously-marked `${palId}:${baseNCtx}` — no extra clear needed. The Set is bounded by |loaded pals| × |tier table|, unchanged.
+
+**§5 amendment** — clear-trigger column for `palLoadHintSeen` row stays as `on resetActiveSession`; no addition required. CONCERN 1 closed without contract change. Audit recorded here for traceability.
+
+### A3.6 — Scenarios L, M freshness assertions (CONCERN 2)
+
+Folded into A3.2 above. Both scenarios now assert resolver-side freshness post-restore/post-launch when current `effectiveNCtx` provides headroom.
+
+### A3.7 — Decisions added
+
+| ID | Decision | Rationale |
+|---|---|---|
+| D17 | (A3.1) No-session override uses a single-slot `pendingContextOverride` consumed at `createNewSession`, not premature session materialization or global-default mutation. | Keeps D10 invariant (no `modelStore.contextInitParams` mutation), keeps override session-scoped (honours §7d / Scenario K), avoids coupling chat-session lifecycle to a pre-chat UX affordance. |
+| D18 | (A3.2) Auto-clear has TWO paths: writer-side at `run_finished` (existing) and reader-side at resolve time (new). Both consult the same `(used, effectiveNCtx, AUTOCLEAR_RUNWAY)` triple. | Reader-side handles external n_ctx changes (Settings, app restart with persisted full + higher current n_ctx) that no single writer seam catches. Idempotent, runs every render, no new subscribers. |
+| D19 | (A3.3) Snackbars render inside chat-screen React tree only; `usePalLoadHint` predicate paused while chat unfocused. | RNP `<Portal>` hoists above the navigator → cross-screen visual bleed without the focus gate. Pausing predicate evaluation (not just suppressing render) preserves the one-shot opportunity for when the user returns. Re-entry to chat does NOT re-emit a snackbar whose RNP duration elapsed off-screen: `visible` was already set to `false` by `onDismiss` before refocus. No pause/resume of the duration timer; lightest possible semantics. |
+| D20 | (A3.4) Chat snackbars form a single-surface set with reload > pal-load-hint precedence; tap-action dismisses synchronously. | Two snackbars on screen at once contradicts I4's spirit. Synchronous dismiss-on-action removes a perceived-lag bug that surfaced on iOS. |
+
+### A3.8 — Out of scope (defer)
+
+- Persisting `pendingContextOverride` across app restarts. Same rationale as D2 — silent survival is the kind default within app lifetime; restart is a deliberate boundary.
+- Cross-screen snackbar relocation (e.g. showing reload-status on Settings when user navigates away mid-reload). State survives navigation; only render is gated. If telemetry shows users routinely navigating away mid-reload and missing the success confirmation, revisit in a follow-up.
+- Predicting external n_ctx changes from Settings UI (e.g. closing the banner instantly on slider release). Reader-side freshness already handles it at the next render, which fires immediately when `contextInitParams.n_ctx` mutates (MobX dependency).
 
 ---
 

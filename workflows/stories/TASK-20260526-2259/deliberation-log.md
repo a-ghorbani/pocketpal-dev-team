@@ -174,3 +174,100 @@ Hard checks before close:
 - Body 496 lines (target 400–500). No prose duplication of WHAT contract surface.
 
 No design content invented; no new contracts. WHAT remains the single design source.
+
+---
+
+## Post-LGTM amendment 3 — post-implementation iOS bug-bash (architect-critic round, 4 BLOCKERs + 2 CONCERNs)
+
+Re-review after implementation landed. Critic ran the shipped code on iOS and surfaced four real bugs that the prior WHAT did not constrain against. Amendments are additive contract tightenings on the existing surface (no new variants, no resolver redesign). Implementer diff is small: sheet-confirm no-session branch, resolver freshness arithmetic, snackbar surface scoping, cross-snackbar dismiss.
+
+### BLOCKER 1 — no-session sheet-confirm path — FIXED (A3.1)
+
+- Bug: §4i pal-load hint snackbar can fire when `activeSessionId === null` (pre-first-turn). User taps "Increase context", sheet confirms, `sessionContextOverrides.set(null, target)` no-ops because the Map key is `null`; reactive-first-tool inference still runs at the old `baseNCtx`.
+- Decision: **option (a)** — single-slot `pendingContextOverride: number | undefined` on `ChatSessionStore`, consumed at `createNewSession`. Rejected (b) materialise-first because creating a session as a side-effect of a pre-chat snackbar tap couples chat-session lifecycle to a UX affordance that fires before chatting; rejected (c) global `modelStore.contextInitParams` mutation because D10 forbids it and the override must remain session-scoped (Scenario K failure-revert, §7d pal-switch).
+- Contract additions: §1c gains `pendingContextOverride`; §4h confirm sequence branches on `activeSessionId` (set Map vs set pending slot); I5 + `effectiveNCtx` helper signature extended to consult pending slot when `activeSessionId === null`; new Scenario Q traces the full path.
+
+### BLOCKER 2 — reader-side staleness for `snap.contextFull` — FIXED (A3.2)
+
+- Bug: I3 auto-clear is writer-side only. External n_ctx changes (Settings, app restart with persisted full + later-raised n_ctx) leave the sticky banner up indefinitely.
+- Decision: **option (a)** — resolver-side freshness gate. Rejected (b) writer-side n_ctx subscription because no single writer seam emits "n_ctx changed" (Settings, releaseContext+initContext from other surfaces, app boot all touch `contextInitParams.n_ctx` directly); hooking N writers is fragile. Resolver-side is a one-line arithmetic check, idempotent, matches the existing pure-resolver pattern.
+- Contract additions: §4c row 1 gains a freshness gate (`snap.contextFull && used >= effectiveNCtx - AUTOCLEAR_RUNWAY`); I3 restated as two-path (writer + reader, same triple); §4d sticky semantics clarified to "within current n_ctx envelope"; new Scenario Q' (Settings raise downgrades stale full); Scenarios L and M updated to assert freshness post-restore / post-launch.
+
+### BLOCKER 3 — snackbar surface scoping — FIXED (A3.3)
+
+- Bug: RNP `<Portal>` hoists both snackbars (reload status + pal-load hint) above the navigator. Chat snackbars bleed onto Settings, Models, Pals screens.
+- Decision: chat-screen-scoped render + paused predicate evaluation off-focus. Rejected "always render but suppress when blurred" because the `usePalLoadHint` effect would still fire and consume the one-shot `palLoadHintSeen` key while the user is on Settings.
+- Contract additions: I8 codifies surface (chat screen only) and lifecycle (predicate paused via `useIsFocused()`); §4i lifecycle gains step 0 (focus gate before predicate); new Scenarios R (hint suppressed off-chat) and S (reload state survives navigation but render is gated).
+
+### BLOCKER 4 — snackbar single-surface + dismiss-on-action — FIXED (A3.4)
+
+- Bugs: (1) pal-load hint snackbar (8s duration) survives the sheet/reload flow it advertised — zombies behind the reload snackbar. (2) Tapping snackbar action dismisses asynchronously, looks laggy on iOS.
+- Decision: new I9 — at most ONE snackbar from the chat-snackbar set; reload > pal-load-hint precedence; tap-action dismisses synchronously in the same React event tick before the action callback runs.
+- Contract additions: new I9 in §4f; §4h confirm sequence prepends pal-load-hint dismiss; §4i step 3 tightened (synchronous dismiss-before-callback); new Scenario T traces hint → sheet → reload as single-surface invariant.
+
+### CONCERN 1 — `palLoadHintSeen` clear-trigger audit post-A3.1 — FIXED (A3.5)
+
+- After A3.1, the no-session confirm raises n_ctx and a later `createNewSession` writes to `sessionContextOverrides`. The suppressor key uses `(palId, effectiveNCtxForSession)`, so the new key after the lift is naturally distinct from the marked key at the old base. No extra clear required. §5 trigger column unchanged; audit recorded in A3.5.
+
+### CONCERN 2 — Scenarios L, M freshness updates — FIXED (A3.6)
+
+- Folded into A3.2. Both scenarios now explicitly assert the resolver-side freshness gate downgrades a disk-restored or cold-launched `contextFull=true` when current `effectiveNCtx` provides headroom.
+
+### Decisions added
+
+- D17 — no-session override uses single-slot `pendingContextOverride`, consumed at session creation (preserves D10, keeps override session-scoped).
+- D18 — auto-clear has two paths (writer + reader); reader-side handles external n_ctx changes no writer seam catches.
+- D19 — snackbars chat-screen-scoped; predicate paused off-focus to preserve one-shot opportunity.
+- D20 — chat-snackbar single-surface set with reload > pal-load-hint precedence; tap-action dismisses synchronously.
+
+### What didn't change
+
+- §4a fullness predicate, §4b warning/auto-clear math (`used = cached + evaluated + predicted`, threshold 0.80, runway 32), §4e remote heuristic, §4d dismiss/recovery for warning + remote-hedged + html-soft-cap variants. Single-writer table additions (`pendingContextOverride` not added because it has the same writer cluster as `sessionContextOverrides` and the same clear-triggers — covered by the existing §5 row's writer column being scoped to "sheet confirm action"). D1–D16 untouched. Banner variants still five.
+
+### Drift on architecture library
+
+- `context/architecture/chat-flow.md`: no fresh drift introduced. The A3 surface (pendingContextOverride slot, resolver freshness gate, snackbar focus gating, single-surface set) lands entirely inside the same flow the original delta is amending. Implementer's same-PR doc-absorption step picks up A3 alongside the original absorption.
+
+### Planner follow-up
+
+Small mechanical surface for the planner:
+- Step adding `pendingContextOverride` to `ChatSessionStore` (declare, clear on `resetActiveSession`, clear in `createNewSession` after copying into `sessionContextOverrides`, update `effectiveNCtx` helper signature in `bannerVariantResolver.ts` and `ModelStore.getEffectiveContextInitParams`).
+- Step adding the freshness gate in `resolveBannerVariant` (one extra arithmetic check on the row-1 short-circuit).
+- Step wiring `useIsFocused()` into `usePalLoadHint` (early-return) and into the two `<Portal>` blocks in `ChatView.tsx:1213-1249` (conditional render).
+- Step adding I9 enforcement: when `reloadSnackbar` enters visible state, dismiss `palLoadHint.state.visible` in the same render commit; tap-action handler for the hint sets `visible=false` synchronously before resolving the action.
+- Test additions: Scenarios Q, Q', R, S, T in `useContextBanner.test.ts` + `usePalLoadHint.test.ts` + `bannerVariantResolver.test.ts` (freshness gate). E2E coverage optional — bugs are unit-testable.
+
+
+---
+
+## Round 3 (post-A3) — architect-critic — HAS_CONCERNS — tightening pass
+
+R2 critic of Amendment 3 resolved all 4 BLOCKERs but flagged 2 CONCERNs + 1 SUGGESTION. Wording-precision pass only — no architectural change, no new scenarios, no new invariants.
+
+- CONCERN 1 — Synchronous "dismiss-before-callback" wording could be read as `flushSync` — FIXED. §4f I9, §4h confirm amendment, and §4i lifecycle step 3 all rewritten to pin the mechanism as "same event handler → both `useState` setters → React 18 batches into one commit." Explicit "no `flushSync`" note added at each site. Single-render-no-intermediate-frame guarantee is now phrased as the consequence of batched updates from one handler, not as an event-tick ordering rule.
+- CONCERN 2 — Focus-gate re-entry semantics for in-flight snackbar duration — FIXED. I8 (in A3.3) gets a closing paragraph: snackbar `visible` state persists across the conditional render (lives on `useState`); RNP\x27s internal duration timer is unowned by PocketPal. If the timer fires off-screen, `onDismiss` sets `visible=false`, and refocus does not re-emit; if it has NOT yet fired, refocus shows the snackbar with whatever RNP\x27s internal timer has left. No pause/resume of duration. D19 rationale gets a matching one-liner.
+- SUGGESTION 1 — §5 missing `pendingContextOverride` row — FIXED. Added as a new row after `sessionContextOverrides[sessionId]`: writer = "IncreaseContextSheet confirm action (no-session branch, `activeSessionId === null`)"; clear-triggers = `createNewSession` (after copy), `resetActiveSession`, and confirm failure on the no-session branch.
+
+No new contract. No new variants. No new scenarios. WHAT is now frozen for the planner handoff.
+
+
+---
+
+## Planner — Amendment 3 HOW absorption
+
+Absorbed WHAT Amendment 3 (D17–D20, I9 new, I3/I5/I8 tightened) into `how.md` as a trailing "Amendment 3 — HOW for D17–D20" block. Existing §A/§B kept verbatim — base impl is shipped under it. Four worklist steps:
+
+- **A3-1 (D17)** — `pendingContextOverride` field on `ChatSessionStore`, consumed at `createNewSession`, cleared on `resetActiveSession`. Touches `ChatSessionStore.ts` (~lines 174, 419, 588), `bannerVariantResolver.effectiveNCtx` signature (4th arg), `ModelStore.ts:426-428` call-site, `useContextBanner.handleConfirmIncrease` (no-session branch added).
+- **A3-2 (D18)** — reader-side freshness gate on resolver row 1; one-line arithmetic check (`used < effectiveNCtx − AUTOCLEAR_RUNWAY`) before returning `context-full`. Touches only `bannerVariantResolver.ts:159-168`.
+- **A3-3 (D19)** — `useIsFocused()` gate in `usePalLoadHint` effect (early-return before signature update) and on the two `<Portal>` blocks at `ChatView.tsx:1213-1249`. State persists across the gate; RNP timer unowned.
+- **A3-4 (D20)** — I9 single-surface enforced via React 18 auto-batching (no `flushSync`). `handleConfirmIncrease` adds a defensive `palLoadHint.dismiss()` at the top of both branches. `usePalLoadHint.onAction()` already dismisses synchronously — annotate with I9 comment.
+
+Step ordering: A3-1 + A3-2 + A3-3 are independent; A3-4 follows because Scenario T's reload step reuses the existing reload path. Tests fold into existing test files (`bannerVariantResolver.test.ts`, `useContextBanner.test.ts`, `usePalLoadHint.test.ts`, `ChatSessionStore.test.ts`) — no new test infrastructure. Architecture-doc absorption (Step 11) is revised in the same PR.
+
+Implementer diff target: ~150 LOC across 6 files. Visual captures: 4 new entries appended to the §A.4 JSON list.
+
+---
+
+## Planner — Amendment 3 HOW R3 tightening
+
+Plan-critic R3 raised 2 CONCERNs + 2 SUGGESTIONs against Amendment 3. No architectural change — surgical wording revisions only. CONCERN 1 (fourth `effectiveNCtx` callsite at `useChatSession.ts:61` missed) FIXED by adding sub-bullet (g) to A3-1 Approach, threading `pendingContextOverride` explicitly so I5 "both reads agree" stays load-bearing across all four sites (writer path is safe today via default-undefined since `sessionId` is non-null at run_finished, but symmetry matters). CONCERN 2 (inline precedence at `usePalLoadHint.ts:52-55` bypasses shared helper) FIXED by inserting sub-bullet (h) instructing the implementer to swap the inline `overrides.get(activeSessionId)!` expression for the shared `effectiveNCtx(...)` helper — without it, no-session confirm path would drift between hint predicate (baseNCtx) and resolver (pending override), and `palLoadHintSeen` marker suppression would be accidental rather than by construction. Original (g) `handleConfirmIncrease` shifted to (i). A3-1 Risk (ii) bumped from "3 sites" to "4 sites" (plus the inline-to-helper swap). A3-1 Affected-files table gains `useChatSession.ts` and `usePalLoadHint.ts` rows; A3-1 Files cell gains both paths. CONCERN 3 (A3-4 batching unit assertion is brittle) FIXED by softening the test description to assert FINAL committed state after `act()` resolves and documenting that the "no intermediate frame" invariant is verified by the `single-surface-hint-to-reload` VISUAL_CAPTURE, not by a jest+RTL timing assertion. SUGGESTION 1 (VideoPalScreen also embeds ChatView) FIXED as A3-3 Risk (iii) — implementer must include VideoPalScreen in manual VISUAL_CAPTURE verification of Scenarios R/S. SUGGESTION 2 (step-ordering claim about A3-2 preceding A3-4 was wrong) FIXED — replaced with accurate dependency: only A3-1 must precede the `no-session-confirm-from-hint` VISUAL_CAPTURE in A3-4; A3-2 and A3-3 are independent of all others. No new contract, no new scenarios, no new invariants. HOW is now frozen for the implementer handoff.

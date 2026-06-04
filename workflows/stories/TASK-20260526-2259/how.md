@@ -494,3 +494,129 @@ Anything WHAT defers stays deferred:
 ## Review history
 
 See `./deliberation-log.md` for R1 plan-critic CONCERNS (resolved), R2 plan-critic LGTM, R3 amendment absorption (α + β + tokens_cached correction).
+
+---
+
+# Amendment 3 — HOW for D17–D20 (post-impl iOS bug-bash)
+
+Lays four small-diff changes on top of the landed base implementation. No new files, no new test infrastructure. Anchors: WHAT §A3.1–§A3.4, D17–D20, I9 (new), I3/I5/I8 (tightened). Implementer diff target: ~150 lines across 6 files.
+
+## Step ordering
+
+A3-1 (D17 pending-override slot) must precede the `no-session-confirm-from-hint` VISUAL_CAPTURE in A3-4 (D20 single-surface). A3-2 (D18 reader-side freshness) and A3-3 (D19 focus-gate) are independent of all others. Tests for each step land in the same commit as the step (A3-test rows merge into Step 10's deferred tester pass).
+
+## Affected files (delta against base impl)
+
+| Path | Change kind | WHAT anchor |
+|---|---|---|
+| `src/store/ChatSessionStore.ts` | edit | §1c amend, §5 new row, A3.1 |
+| `src/utils/bannerVariantResolver.ts` | edit | §4c row-1 gate, §4f I3, A3.2; `effectiveNCtx` signature |
+| `src/store/ModelStore.ts` | edit (one-line call-site) | §4f I5, A3.1 |
+| `src/hooks/useContextBanner.ts` | edit | §4h A3.1 confirm branch, §4f I9 cross-snackbar dismiss, A3.4 |
+| `src/hooks/usePalLoadHint.ts` | edit | §4i lifecycle step 0, A3.3; §4i step 3 sync dismiss-on-action, A3.4 |
+| `src/components/ChatView/ChatView.tsx` | edit (~lines 1213-1249) | I8 surface scoping, A3.3 |
+| `src/hooks/useChatSession.ts` | edit (one-line call-site, ~line 61) | §4f I5 symmetry, A3.1 |
+| `src/hooks/usePalLoadHint.ts` (additional to row above) | edit (~lines 52-55, swap inline precedence for shared helper) | §4f I5 symmetry, A3.1 |
+
+No new files; no new tests files; existing test files cover the new scenarios.
+
+## Step A3-1 — `pendingContextOverride` slot + no-session confirm branch
+
+| Field | Value |
+|---|---|
+| Implements | WHAT §1c amend, §4h amend, §4f I5 amend, §5 new row, D17, Scenario Q |
+| Files | `src/store/ChatSessionStore.ts`, `src/utils/bannerVariantResolver.ts`, `src/store/ModelStore.ts` (~line 426-428), `src/hooks/useContextBanner.ts` (~line 141-201), `src/hooks/useChatSession.ts` (~line 61), `src/hooks/usePalLoadHint.ts` (~lines 52-55) |
+| Approach | (a) `ChatSessionStore`: add `@observable pendingContextOverride: number \| undefined = undefined` next to `sessionContextOverrides` (~line 174). Add setters: `setPendingContextOverride(n: number)`, `clearPendingContextOverride()`. (b) `resetActiveSession()` (~line 419-432): add `this.pendingContextOverride = undefined` inside the existing `runInAction`. (c) `createNewSession()` (~line 588): immediately after `chatSessionRepository.createSession(...)` returns `newSession.id` and BEFORE the metaData assembly, in a `runInAction`: if `this.pendingContextOverride !== undefined` → `this.sessionContextOverrides.set(newSession.id, this.pendingContextOverride)` then `this.pendingContextOverride = undefined`. (d) `bannerVariantResolver.ts`: extend `effectiveNCtx(overrides, activeSessionId, baseNCtx, pendingOverride?)` signature (~line 266-275). Precedence inside helper: `activeSessionId && overrides.has(activeSessionId)` → session override; else if `pendingOverride !== undefined` → pendingOverride; else baseNCtx. JSDoc clarifies "session override > pending > base." (e) `ModelStore.ts:426-428`: extend the existing `effectiveNCtx(...)` call with `chatSessionStore.pendingContextOverride` as fourth arg. (f) `useContextBanner.ts`: in the resolver invocation context (~line 57-61), thread `chatSessionStore.pendingContextOverride` into the `effectiveNCtx` call. (g) `src/hooks/useChatSession.ts:61` — extend the existing `effectiveNCtx(overrides, sessionId, baseNCtx)` call inside `applyStickyFull` with `chatSessionStore.pendingContextOverride` as the fourth argument. `sessionId` is non-null at this callsite (writer path; `run_finished` only fires with an active session) so default-undefined would also be safe today, but explicit threading keeps the I5 "both reads agree" invariant load-bearing across all four sites. (h) `src/hooks/usePalLoadHint.ts` (~lines 52-55) — the hook currently computes the effective n_ctx inline (`activeSessionId && overrides.has(activeSessionId) ? overrides.get(activeSessionId)! : baseNCtx`), bypassing the shared helper. Swap the inline expression for a call to the shared helper: `const effectiveNCtxForSession = effectiveNCtx(overrides, activeSessionId, baseNCtx, chatSessionStore.pendingContextOverride);` (import `effectiveNCtx` from `bannerVariantResolver` if not already in scope). Without this, after A3-1 lands a user who takes the no-session confirm path would see the hint predicate evaluate against `baseNCtx` while the resolver / `useContextBanner` / `getEffectiveContextInitParams` see the pending override — the existing `palLoadHintSeen` marker suppresses the re-fire only by happy accident, not by construction. (i) `handleConfirmIncrease` (~line 141): branch on `activeSessionId`. Non-null branch unchanged. Null branch: capture `priorPending = chatSessionStore.pendingContextOverride`; `chatSessionStore.setPendingContextOverride(target)`; reload-snackbar visible same as existing; `await modelStore.releaseContext()`, `await modelStore.initContext(activeModel)`; on success — success snackbar identical; on failure — restore prior (`setPendingContextOverride(priorPending)` if defined else `clearPendingContextOverride()`), failure snackbar identical. |
+| Risk | (i) Two writers to override state — `setSessionContextOverride` (non-null) and `setPendingContextOverride` (null) — but they target DIFFERENT fields, so single-writer table reads correctly (one row per field). (ii) `effectiveNCtx` is now called from 4 sites (`bannerVariantResolver.ts` self-tests, `ModelStore.ts:426-428`, `useContextBanner.ts` ~57-61, `useChatSession.ts:61`) plus the inline-to-helper swap at `usePalLoadHint.ts:52-55` — make sure all four callsites pass the same `chatSessionStore.pendingContextOverride` source. |
+| Scenarios | Q (no-session confirm); folds into J/K (existing variants) via the non-null branch unchanged |
+| Tests | `src/store/__tests__/ChatSessionStore.test.ts`: "pendingContextOverride survives until createNewSession then transfers to sessionContextOverrides[newId]"; "resetActiveSession clears pendingContextOverride"; "createNewSession with no pending leaves sessionContextOverrides untouched". `src/utils/__tests__/bannerVariantResolver.test.ts`: "effectiveNCtx precedence: session override > pending > base"; "null activeSessionId + pendingOverride=4096 → returns 4096". `src/hooks/__tests__/useContextBanner.test.ts`: "handleConfirmIncrease no-session branch writes pendingContextOverride, not sessionContextOverrides"; "no-session branch failure clears pendingContextOverride". |
+| Verification | `yarn typecheck`; `yarn test --findRelatedTests src/store/ChatSessionStore.ts src/utils/bannerVariantResolver.ts src/hooks/useContextBanner.ts` green |
+
+## Step A3-2 — Reader-side freshness gate on row 1
+
+| Field | Value |
+|---|---|
+| Implements | WHAT §4c row-1 amend, §4f I3 amend, §4d sticky-semantics amend, D18, Scenario Q′, Scenarios L/M freshness assertions |
+| Files | `src/utils/bannerVariantResolver.ts` (~line 159-168 — the existing `if (snap !== null && snap.contextFull)` short-circuit) |
+| Approach | (a) Inside the row-1 short-circuit block, before returning the `context-full` variant, compute `const isStale = used < ctx.effectiveNCtx - AUTOCLEAR_RUNWAY` (existing `used` and `AUTOCLEAR_RUNWAY` already in scope). (b) When `isStale` is true, do NOT return — fall through to the next precedence rules (warning predicate, remote hedge, html-soft-cap, none). The same render thus downgrades. (c) The snapshot is NOT rewritten; writer-side I3 path (next `run_finished`) refreshes it through the normal channel. (d) Add a single inline comment naming "reader-side I3 (freshness)" so future readers can find it. |
+| Risk | (i) Care: `effectiveNCtx > 0` already guarded by the `ratio` computation above; the freshness arithmetic `used < ctx.effectiveNCtx - AUTOCLEAR_RUNWAY` is safe for any positive `effectiveNCtx`. (ii) Heavy-talent sub-copy scan is inside the row-1 return — by falling through on stale, we correctly skip the sub-copy (a stale snapshot should not advertise heavy-talent copy against a context that now has headroom). |
+| Scenarios | Q′ (external n_ctx grew → stale full downgrades), L (session-switch hydration assertion: if current `effectiveNCtx` provides headroom, banner does NOT render), M (cold launch assertion: same rule) |
+| Tests | `src/utils/__tests__/bannerVariantResolver.test.ts`: "snap.contextFull=true + used < effectiveNCtx − 32 → freshness gate fails → variant downgrades (none if ratio<0.80; warning if ratio≥0.80)"; "snap.contextFull=true + used ≥ effectiveNCtx − 32 → row-1 wins (sticky behaviour preserved)"; "freshness downgrade does NOT emit heavyTalent payload"; existing Scenario E test fixtures updated to assert `tokensCached` threading still works post-freshness. |
+| Verification | `yarn test --findRelatedTests src/utils/bannerVariantResolver.ts` green; Scenario C / E baseline tests still pass (sticky preserved when used ≥ nCtx − 32) |
+
+## Step A3-3 — Snackbar focus-gating (`useIsFocused`)
+
+| Field | Value |
+|---|---|
+| Implements | WHAT §4f I8 amend, §4i lifecycle step 0, D19, Scenarios R + S |
+| Files | `src/components/ChatView/ChatView.tsx` (~lines 1213-1249), `src/hooks/usePalLoadHint.ts` (~line 68 — predicate effect) |
+| Approach | (a) `ChatView.tsx`: import `useIsFocused` from `@react-navigation/native`. Inside the component body (top, before render), `const isFocused = useIsFocused();`. (b) Both `<Portal>` blocks (reload snackbar at ~1213-1233, pal-load hint snackbar at ~1235-1249) wrap their existing conditional with `&& isFocused`. The `reloadSnackbar !== null && isFocused ? (...)` and `palLoadHint.state !== null && isFocused ? (...)` pattern. State (`reloadSnackbar`, `palLoadHint.state`) lives on hook `useState` and persists across unmount of the conditional JSX — pure render-gating. (c) `usePalLoadHint.ts`: import `useIsFocused`; inside the hook body, `const isFocused = useIsFocused();`. Inside the `useEffect` (~line 68), as the FIRST statement after the early-return on signature stability, add `if (!isFocused) return;`. Push `isFocused` into the effect's dep array. Predicate evaluation is now paused while chat unfocused; signature still updates only when `isFocused` is true (because the early-return runs before `lastSignatureRef.current = signature`); on refocus the effect re-runs against the current signature and fires the snackbar if conditions still hold. (d) DO NOT touch RNP `<Snackbar>` `duration` — the timer is RNP-owned per I8 tightening. |
+| Risk | (i) Edge: signature ref is updated AFTER the focus-gate early-return — must be ordered so that the marker is set only when the predicate is actually evaluated. (ii) Reload snackbar state survives navigation (lives on `useContextBanner` `useState`) — confirmed by Scenario S step 3; render-gating alone is enough. (iii) `ChatView` is mounted from TWO navigator screens — `src/screens/ChatScreen/ChatScreen.tsx:214` and `src/screens/ChatScreen/VideoPalScreen.tsx:266`. `useIsFocused()` works in both (each is a navigator screen), but the implementer must include VideoPalScreen in manual VISUAL_CAPTURE verification of Scenarios R/S. |
+| Scenarios | R (off-screen pal change → no snackbar, no marker; refocus → snackbar fires), S (mid-reload navigation → JSX gated, state survives, refocus shows current phase) |
+| Tests | `src/hooks/__tests__/usePalLoadHint.test.ts`: "isFocused=false → effect early-returns; lastSignatureRef unchanged; palLoadHintSeen unchanged"; "refocus (isFocused flips true) → effect re-runs; if predicate still holds, snackbar fires once and marker is set". Snackbar JSX gating is covered by existing render-test paths in `useContextBanner.test.ts` if present; otherwise mock `useIsFocused` in a new minimal RTL render and assert `queryByTestId('pal-load-hint-snackbar')` is null when `isFocused=false`. |
+| Verification | `yarn test --findRelatedTests src/hooks/usePalLoadHint.ts src/components/ChatView/ChatView.tsx` green; manual VISUAL_CAPTURE on iOS — load pal off chat-screen (e.g. Pals screen), navigate to chat, snackbar appears |
+
+## Step A3-4 — Single-surface invariant + sync dismiss-on-action (I9)
+
+| Field | Value |
+|---|---|
+| Implements | WHAT §4f I9 (new), §4h confirm amend, §4i lifecycle step 3 amend, D20, Scenario T |
+| Files | `src/hooks/useContextBanner.ts` (~line 141 `handleConfirmIncrease`, ~line 222 `handlePalLoadHintAction`), `src/hooks/usePalLoadHint.ts` (~line 161 `onAction`) |
+| Approach | (a) `usePalLoadHint.onAction()` already calls `dismiss()` before returning the action — keep this; this is the synchronous-dismiss-on-action behaviour for the hint (both `setState` calls — `visible=false` AND any downstream caller's state change — fire from the one handler chain; React 18 batches into one commit). Add a one-line code comment naming "I9 sync dismiss-on-action; React 18 batches both setState calls into one commit; no flushSync." (b) `useContextBanner.handlePalLoadHintAction` (~line 222): unchanged shape, but add the same one-line comment naming I9. The current call sequence — `await palLoadHint.onAction()` (which dismisses) then `setIncreaseSheetVisible(true)` or `resetActiveSession()` — already exhibits the right batching property because both setters run inside the one async-handler microtask. (c) `useContextBanner.handleConfirmIncrease` (~line 141, both branches — non-null and the new null branch from A3-1): as the FIRST statement after the existing `if (!Number.isFinite(target)) return;` guard, add a defensive dismiss of the pal-load hint if visible: `if (palLoadHint.state?.visible) palLoadHint.dismiss();`. Then proceed with the existing `setReloadSnackbar({phase:'reloading', visible:true, ...})`. The same React 18 batching applies — both setters in one handler → single commit, no intermediate frame with both snackbars visible. (d) Pass `palLoadHint` (the existing hook return) into `handleConfirmIncrease`'s closure deps. Currently the dep array on line 200 is `[activeSessionId, activeModel, activePal, sessionOverrides, l10n]` — add `palLoadHint`. (e) DO NOT use `flushSync`. DO NOT add explicit cross-commit ordering. |
+| Risk | (i) Closure dep on `palLoadHint` — the hook returns a new object each render; ensure that doesn't churn the callback identity in a way that breaks downstream `useEffect` deps. If it does, narrow to `palLoadHint.state?.visible` + `palLoadHint.dismiss` as separate deps; the dismiss function identity is stable across renders since it's defined inline in `usePalLoadHint`. (ii) Reload snackbar precedence over hint is now enforced TWICE — once by step 2 (tap-action dismiss) and once by step 3 defensive dismiss in confirm. Belt-and-braces; either alone covers the bug but both together close the race window (Scenario T step 2 vs step 3). |
+| Scenarios | T (hint → tap action → sheet → confirm → reload → success; at every step at most one snackbar visible) |
+| Tests | `src/hooks/__tests__/useContextBanner.test.ts`: "handleConfirmIncrease dismisses visible pal-load hint as part of the same render commit as setting reload-snackbar visible"; "after `act()` resolves, the final committed state is pal-load hint `visible=false` AND reload snackbar `visible=true`" (the "no intermediate frame with both snackbars visible" invariant is verified by the `single-surface-hint-to-reload` VISUAL_CAPTURE, not by a jest+RTL assertion of commit timing — React 18 batching across `await` boundaries inside `handlePalLoadHintAction` is hard to assert reliably as a unit test). `src/hooks/__tests__/usePalLoadHint.test.ts`: "onAction() calls dismiss synchronously before returning the action enum"; "after onAction(), state.visible is false (next render reads it as false)". |
+| Verification | `yarn test --findRelatedTests src/hooks/useContextBanner.ts src/hooks/usePalLoadHint.ts` green; manual VISUAL_CAPTURE on iOS — open a heavy-talent pal at 2048, tap "Increase context" on the hint, confirm sheet, observe ONE snackbar at each point (no double-visible) |
+
+## Updated test matrix (A3 additions only)
+
+| Scenario | Test file | Test case |
+|---|---|---|
+| Q (no-session confirm) | `src/store/__tests__/ChatSessionStore.test.ts` + `src/hooks/__tests__/useContextBanner.test.ts` | pendingContextOverride transfer to sessionContextOverrides at createNewSession; no-session confirm branch in handleConfirmIncrease |
+| Q′ (external n_ctx grew) | `src/utils/__tests__/bannerVariantResolver.test.ts` | row-1 freshness gate fails when used < effectiveNCtx − 32; sticky preserved otherwise |
+| L (updated) | `src/utils/__tests__/bannerVariantResolver.test.ts` + `src/store/__tests__/ChatSessionStore.test.ts` | session-switch with hydrated contextFull=true + current effectiveNCtx with headroom → freshness gate downgrades |
+| M (updated) | `src/utils/__tests__/bannerVariantResolver.test.ts` | cold launch hydration + current effectiveNCtx with headroom → freshness gate downgrades |
+| R (off-screen pal change) | `src/hooks/__tests__/usePalLoadHint.test.ts` | effect early-returns when isFocused=false; marker unchanged; refocus re-runs and fires |
+| S (mid-reload navigation) | `src/hooks/__tests__/useContextBanner.test.ts` | reloadSnackbar state persists across `isFocused=false` → `isFocused=true` cycle |
+| T (single-surface) | `src/hooks/__tests__/useContextBanner.test.ts` + `src/hooks/__tests__/usePalLoadHint.test.ts` | hint dismiss-on-action synchronous; confirm handler batches hint-dismiss + reload-show in one commit |
+
+## Visual confirmation additions (A3)
+
+Append to the existing `VISUAL_CAPTURES` array in §A.4:
+
+```json
+[
+  {
+    "label": "no-session-confirm-from-hint",
+    "prompt": "(fresh app, no chats yet; load a render_html pal; pal-load hint fires; tap 'Increase context'; confirm 4096)",
+    "look_for": "Reload completes; first message sends; first inference runs at n_ctx=4096; no context-full banner; new chat shows 4096 active."
+  },
+  {
+    "label": "freshness-downgrade",
+    "prompt": "(reach context-full at n_ctx=2048; then go to Settings → Context Size → 8192; wait for reload; return to chat)",
+    "look_for": "Sticky 'context-full' banner is gone on first render after the n_ctx change; no run_finished needed."
+  },
+  {
+    "label": "snackbar-off-chat-suppressed",
+    "prompt": "(navigate to Settings; trigger active-pal change via Pals screen; navigate back to chat)",
+    "look_for": "No pal-load hint snackbar on Settings or Pals screens; hint fires once on chat refocus if predicate still holds."
+  },
+  {
+    "label": "single-surface-hint-to-reload",
+    "prompt": "(hint visible; tap 'Increase context' action label; confirm sheet)",
+    "look_for": "Hint snackbar disappears the instant the action is tapped (no 8s wait); sheet opens; confirm → reload snackbar appears; at most ONE snackbar visible at every step."
+  }
+]
+```
+
+## Progress tracking (A3 rows)
+
+| Step | Status | Commit | Notes |
+|---|---|---|---|
+| A3-1 — pendingContextOverride + no-session confirm | TODO | - | §1c amend, §4h, D17 |
+| A3-2 — reader-side freshness gate | TODO | - | §4c row-1, I3 reader-side, D18 |
+| A3-3 — snackbar focus-gating | TODO | - | I8 amend, §4i step 0, D19 |
+| A3-4 — single-surface + sync dismiss-on-action | TODO | - | I9 (new), D20 |
+| A3 — architecture-doc absorption (chat-flow.md) | TODO | - | converts new I9 (P)→(C), tightens I3/I5/I8, adds A3 decisions |
+
+Architecture-doc absorption note: the chat-flow.md update from the base impl (Step 11) is REVISED in the same PR as A3 — `pendingContextOverride` row added to §5 table; I9 (new) appended to §4f; I3, I5, I8 paragraphs tightened per A3.2/A3.1/A3.3. Decision matrix gains D17–D20 rows. `pals-and-talents.md` unchanged by A3.
