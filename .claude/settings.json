@@ -18,8 +18,6 @@
     ],
     "deny": [
       "Bash(rm -rf:*)",
-      "Bash(curl:*)",
-      "Bash(wget:*)",
       "Bash(git push -f:*)",
       "Bash(git push --force:*)",
       "Bash(git push origin main:*)",
