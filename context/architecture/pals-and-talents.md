@@ -268,8 +268,13 @@ shutdown). Aborted runs therefore land in `done`, not a dedicated status.
   heavy-talent post-fail sub-copy lookup in the banner-variant
   resolver. It never drives per-turn behaviour; engines without the
   field continue to work unchanged. `RenderHtmlEngine` declares
-  `4096`; `CalculateEngine` and `DatetimeEngine` omit. See
-  `chat-flow.md` §§ 4a–4i for the full banner / snackbar contract.
+  `4096`; `CalculateEngine` and `DatetimeEngine` omit. The pal-load
+  hint predicate is itself focus-gated via `useIsFocused()` so it only
+  evaluates while the chat surface is mounted and visible — the
+  per-signature suppressor marker is set only after the predicate
+  actually ran, so the hint can re-fire on the next focus event with
+  the same `(palId, n_ctx, talents)` signature. See `chat-flow.md`
+  §§ 4a–4i for the full banner / snackbar contract.
 
 ### 5b. What each component does
 

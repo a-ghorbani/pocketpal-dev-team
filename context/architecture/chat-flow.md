@@ -431,7 +431,8 @@ the latest turn — see D4.
 | `chatSessionStore.lastCompletionResult`  | `useChatSession` at `run_finished` AND abort-with-partial-content (same write that updates `metadata.completionResult`); `setActiveSession` hydrates from disk; `resetActiveSession` clears |
 | `chatSessionStore.dismissedBannerVariants` | `ChatView` `BannerRow` on user dismiss (`setBannerDismissed`); cleared per-session by the `run_finished` writer and on `deleteSession` |
 | `chatSessionStore.consecutiveFullFailures` | `useChatSession` at `run_finished` / abort-with-partial-content: increment on `snap.contextFull`, reset otherwise |
-| `chatSessionStore.sessionContextOverrides[sessionId]` | `ChatView` confirm handler on the "Increase context" CTA; cleared on `deleteSession` |
+| `chatSessionStore.sessionContextOverrides[sessionId]` | `useContextBanner.handleConfirmIncrease` (session branch — when `activeSessionId !== null`); `createNewSession` consuming a pending value into the new id; cleared on `deleteSession`. |
+| `chatSessionStore.pendingContextOverride` | `useContextBanner.handleConfirmIncrease` (no-session branch — when `activeSessionId === null`); consumed and cleared by `createNewSession`; cleared by `resetActiveSession`. |
 | `chatSessionStore.palLoadHintSeen` | `usePalLoadHint` at emit time (`markPalLoadHintSeen`); cleared on `resetActiveSession` |
 | `agentUiState` (full bag)                | `agentStateReducer` only (canonical state source)   |
 | `chatSessionStore.isStopping`            | `useChatSession.handleStopPress` (set), `handleSendPress` cleanup paths (clear) |
@@ -445,13 +446,17 @@ Reading is unrestricted.
 
 **Cross-store read (banner / increase-context CTA)**: a single one-way
 read direction `ModelStore → ChatSessionStore` is permitted.
-`ModelStore.getEffectiveContextInitParams` consults
-`chatSessionStore.sessionContextOverrides.get(activeSessionId)` to pick
-the effective n_ctx (override wins over `contextInitParams.n_ctx`). The
-same precedence rule is encoded once in the resolver helper
-`effectiveNCtx(overrides, activeSessionId, baseNCtx)` in
-`src/utils/bannerVariantResolver.ts`, so the banner resolver and the
-context init path can never disagree. `ChatSessionStore` does NOT read
+`ModelStore.getEffectiveContextInitParams` consults both
+`chatSessionStore.sessionContextOverrides.get(activeSessionId)` and
+`chatSessionStore.pendingContextOverride` to pick the effective n_ctx.
+Precedence: session-keyed override > pending (no-session) override >
+`contextInitParams.n_ctx`. The same precedence is encoded once in the
+resolver helper
+`effectiveNCtx(overrides, activeSessionId, baseNCtx, pendingOverride)`
+in `src/utils/bannerVariantResolver.ts`, called from
+`ModelStore.getEffectiveContextInitParams`, `useContextBanner`,
+`useChatSession.applyStickyFull`, and `usePalLoadHint`, so all read
+sites agree by construction. `ChatSessionStore` does NOT read
 `ModelStore`; no cycle.
 
 **Cleanup-LANDED (id reconciliation, was cleanup #1)**: `step.toolCalls` is
@@ -976,10 +981,36 @@ Hard invariants:
 - The pal-load hint (`usePalLoadHint`) is a snackbar, not a banner.
   Snackbar lives on a separate surface and cannot displace a banner
   variant.
+- **Reader-side freshness gate**: the resolver only returns the sticky
+  `context-full` variant when the snapshot's `contextFull` flag is
+  corroborated by current fullness — `used >= effectiveNCtx - AUTOCLEAR_RUNWAY`.
+  When the user lifts n_ctx via the in-banner confirm, the new
+  `effectiveNCtx` makes the still-persisted snapshot stale on the
+  read-side and the banner falls through to warning/none without
+  requiring a new inference to overwrite the snapshot.
+- **Snackbar focus gate**: both the reload snackbar (driven by
+  `useContextBanner`) and the pal-load hint (driven by `usePalLoadHint`)
+  are gated by `useIsFocused()` in `ChatView`. State persists across
+  navigation but the surface is suppressed when the chat screen is
+  off-screen, so the snackbars never appear over drawers, settings, or
+  model pickers. `usePalLoadHint` also gates its predicate evaluation
+  by focus — it sets the per-signature suppressor marker only after the
+  predicate ran, so a re-focus with the same signature can still raise
+  the hint.
+- **Single-surface dismiss**: when the reload snackbar fires, the
+  pal-load hint snackbar is dismissed synchronously in the same React
+  event handler. Both setters land in one auto-batched commit (React
+  18), so no frame shows two snackbars at once. Pal-load
+  `onAction()` follows the same pattern: it dismisses itself before
+  returning to the caller.
 
-The "Increase context" CTA opens `IncreaseContextSheet`. Confirm writes
-`sessionContextOverrides[sessionId]=target`, runs
-`releaseContext → initContext`, and shows an indefinite reload snackbar
+The "Increase context" CTA opens `IncreaseContextSheet`. Confirm flow
+branches by `activeSessionId`: when a session is active, write
+`sessionContextOverrides[sessionId]=target`; when no session is active
+(user is on the new-chat scratch surface), write
+`pendingContextOverride=target` and let `createNewSession` copy it
+onto the session-keyed Map at session birth. Both branches then run
+`releaseContext → initContext` and show an indefinite reload snackbar
 that flips to success / failure on completion. Failure reverts the
 override; chat history is preserved (messages live in
 `ChatSessionStore`, not in `LlamaContext`).
