@@ -12,6 +12,50 @@ Convention used in this doc:
 
 ---
 
+## Invariants
+
+Load-bearing rules. If a change breaks one of these, the reviewer should
+ask "is this an architecture change?" before approving.
+
+- **Runtime vs configured n_ctx.** Banner, sticky-full normaliser, and
+  pal-load hint read `modelStore.runtimeNCtx` — the n_ctx the running
+  LlamaContext was actually initialised with. `contextInitParams.n_ctx`
+  is the *next-init intent* and must never appear in a banner-side
+  read. If a future field exposes "the n_ctx for X", it must say which
+  copy of state it represents. Two named helpers enforce the split:
+  `runtimeNCtxFor` for readers (caps at runtime), `nextInitNCtxFor`
+  for the loader (no cap).
+- **Snapshot truth.** The `lastCompletionResult` stored on the session
+  store and the matching `metadata.completionResult` persisted on the
+  newest assistant message is normalised at the moment of writing
+  (`deriveSnapshotFromResult` → `applyStickyFull`). Readers
+  (`resolveBannerVariant`) do not redo the arithmetic; their freshness
+  gate mirrors the same `>= n_ctx - AUTOCLEAR_RUNWAY` boundary by
+  construction.
+- **One advisory surface at a time.** The chat screen renders at most
+  one snackbar per frame. Confirm flows that raise the reload snackbar
+  must synchronously dismiss the pal-load hint (React 18 auto-batched
+  setState commits the pair atomically).
+- **One banner variant per render.** `resolveBannerVariant` is pure
+  and returns exactly one of context-full / context-warning /
+  context-remote-hedged / html-soft-cap / none. The context-* variants
+  are suppressed when no LlamaContext is loaded (the snapshot may be
+  hydrated and inactionable); html-soft-cap is independent of model
+  state.
+- **Override map outlives the LlamaContext, capped at runtime.**
+  `sessionContextOverrides` survives release/init cycles within a
+  process so a confirmed override applies on the next initContext via
+  `nextInitNCtxFor`. When the runtime can't honour the stored value
+  (silent reload-to-default after an OS evict), `runtimeNCtxFor` caps
+  it at runtime and a one-shot advisory snackbar surfaces.
+- **Settings drift is observable, not just internal.**
+  `modelStore.pendingReloadRequired` is the derived getter every
+  Settings-affecting surface reads — Settings screen today, future
+  header chip / chat banner if needed. Adding a comparison to ad-hoc
+  `contextInitParams.x === runtimeContextSettings.x` is a smell.
+
+---
+
 ## 1. Data model
 
 ```
@@ -434,6 +478,8 @@ the latest turn — see D4.
 | `chatSessionStore.sessionContextOverrides[sessionId]` | `useContextBanner.handleConfirmIncrease` (session branch — when `activeSessionId !== null`); `createNewSession` consuming a pending value into the new id; cleared on `deleteSession` and per-id on `bulkDeleteSessions`. |
 | `chatSessionStore.pendingContextOverride` | `useContextBanner.handleConfirmIncrease` (no-session branch — when `activeSessionId === null`); consumed and cleared by `createNewSession`; cleared by `resetActiveSession` and `setActiveSession` (drawer-switch leak guard). |
 | `chatSessionStore.palLoadHintSeen` | `usePalLoadHint` at emit time (`markPalLoadHintSeen`); cleared on `resetActiveSession` |
+| `chatSessionStore.silentRevertAcknowledged` | `useContextBanner` advisory effect (`markSilentRevertAcknowledged`) when a stored override exceeds the current runtime n_ctx; never cleared (one-shot per `${sessionId}:${runtimeNCtx}`, process-lifetime). |
+| `modelStore.runtimeContextSettings` | `ModelStore.initContext` on success; cleared in `_releaseContextInternal`. Set only by these two writers. |
 | `agentUiState` (full bag)                | `agentStateReducer` only (canonical state source)   |
 | `chatSessionStore.isStopping`            | `useChatSession.handleStopPress` (set), `handleSendPress` cleanup paths (clear) |
 | `modelStore.inferencing` / `isStreaming` | `useChatSession` at run boundaries (legacy; see Cleanup-DEFERRED below) |
@@ -448,16 +494,29 @@ Reading is unrestricted.
 read direction `ModelStore → ChatSessionStore` is permitted.
 `ModelStore.getEffectiveContextInitParams` consults both
 `chatSessionStore.sessionContextOverrides.get(activeSessionId)` and
-`chatSessionStore.pendingContextOverride` to pick the effective n_ctx.
-Precedence: session-keyed override > pending (no-session) override >
-`contextInitParams.n_ctx`. The same precedence is encoded once in the
-resolver helper
-`effectiveNCtx(overrides, activeSessionId, baseNCtx, pendingOverride)`
-in `src/utils/bannerVariantResolver.ts`, called from
-`ModelStore.getEffectiveContextInitParams`, `useContextBanner`,
-`useChatSession.applyStickyFull`, and `usePalLoadHint`, so all read
-sites agree by construction. `ChatSessionStore` does NOT read
-`ModelStore`; no cycle.
+`chatSessionStore.pendingContextOverride` to pick the n_ctx for the
+next initContext. Two named helpers in `src/utils/bannerVariantResolver.ts`
+encode the precedence:
+
+- `nextInitNCtxFor(overrides, activeSessionId, configuredNCtx, pending?)`
+  — called by `ModelStore.getEffectiveContextInitParams`. Returns the
+  consented override verbatim (no cap); the loader honours user intent.
+- `runtimeNCtxFor(overrides, activeSessionId, runtimeNCtx, pending?)`
+  — called by `useContextBanner`, `useChatSession` (sticky-full
+  branch), and `usePalLoadHint`. Caps intrinsically at `runtimeNCtx`
+  so a stored override that no longer fits the running LlamaContext
+  (silent reload-to-default after an OS evict) doesn't under-warn.
+
+Both helpers use the same precedence (`session override > pending >
+base`) — they differ only in what "base" means and whether they cap.
+`ChatSessionStore` does NOT read `ModelStore`; no cycle.
+
+`modelStore.runtimeNCtx` is the canonical observable for "the n_ctx
+the running context was loaded with" (derived from
+`runtimeContextSettings?.n_ctx`).
+`modelStore.pendingReloadRequired` / `pendingReloadDiff` are derived
+getters surfacing the configured-vs-running gap across the whole
+`contextInitParams` struct; Settings reads these directly.
 
 **Cleanup-LANDED (id reconciliation, was cleanup #1)**: `step.toolCalls` is
 appended **once** after `step_finished` via `appendToolCall`, with normalized
