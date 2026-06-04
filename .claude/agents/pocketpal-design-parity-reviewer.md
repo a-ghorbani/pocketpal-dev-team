@@ -170,6 +170,6 @@ If you find a non-parity issue (architecture leak, missing test, wrong store wri
 
 ## Re-routing rules
 
-- `APPROVED` → caller (orchestrator / pipeline reviewer) advances to final pipeline review.
+- `APPROVED` → caller advances to final pipeline review.
 - `NEEDS_FIXES` → back to implementer with the findings; max 2 parity rounds before escalating to human.
 - `NEEDS_INPUT` → return to caller with the unanswered questions.

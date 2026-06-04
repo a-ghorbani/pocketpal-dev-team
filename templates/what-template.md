@@ -12,6 +12,26 @@ One line: `no drift` | `minor drift in <area>, repaired in this delta` | `STOP �
 
 ---
 
+## Design exploration
+
+Required for complex stories; optional for standard stories when `Design Exploration=YES`.
+
+Candidate artifacts, if used:
+- `workflows/stories/<TASK-ID>/design-candidate-A.md`
+- `workflows/stories/<TASK-ID>/design-candidate-B.md`
+- `workflows/stories/<TASK-ID>/design-candidate-C.md`
+
+This WHAT is the synthesized contract. Do not paste full candidate docs here.
+
+### Alternatives considered
+
+Max 3 bullets total. Each bullet ≤ 12 words. Omit if no real alternative.
+
+- selected: <approach> — <why>
+- rejected: <approach> — <why>
+
+---
+
 ## 1. Data model
 
 Only fields changing or at risk.

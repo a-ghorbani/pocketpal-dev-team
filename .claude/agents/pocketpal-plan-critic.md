@@ -20,7 +20,7 @@ The core question: **"Does this plan execute the design source, follow project p
 If you find a problem with the design source itself, that's NOT your job to solve. Flag it as `ARCHITECTURE_DRIFT` and route back upstream:
 
 - **standard / complex**: back to the architect (amend WHAT).
-- **quick**: back to the **orchestrator** (re-classify, possibly to standard, or fix the architecture flow doc separately).
+- **quick**: back to **intake** (re-classify, possibly to standard, or fix the architecture flow doc separately).
 
 ## Pre-Flight (MUST DO FIRST)
 
@@ -56,6 +56,8 @@ Read: ./context/pocketpal-overview.md
 # Then read the actual code in the worktree the plan touches.
 cd "${WORKTREE_PATH}"
 ```
+
+If `plan-candidate-*.md` files exist, treat them as optional sequencing context only. Your verdict is on the synthesized `how.md`, because that is the executable plan the implementer will follow.
 
 ## Review Order
 
@@ -110,12 +112,16 @@ For **quick** tasks (no WHAT), this step is **not required** — there is no del
 
 If the design source lists deferred cleanups, the HOW should NOT silently land them. Deferred means deferred. If the planner genuinely thinks a deferred item belongs in this PR, they must say so explicitly with a rationale — and the architect-critic should have been re-engaged.
 
+### 8. Review / debug strategy
+
+The HOW should name riskiest files, expected failure modes, tests that should fail if implementation is wrong, required manual checks, and independent reviewer focus. Missing or generic strategy is a CONCERN for standard / complex work and a SUGGESTION for quick work.
+
 ## Severity
 
 - **BLOCKER**: Step doesn't trace to the design source, missing testable-contract coverage, missing native verification, missing architecture-doc update step (standard/complex only), false claim about file paths or patterns. Must revise.
 - **CONCERN**: Coarse step, suboptimal pattern choice, ambiguous verification. Should be addressed.
 - **SUGGESTION**: Minor improvement.
-- **ARCHITECTURE_DRIFT** (special): you noticed something the design source got wrong. Don't fix in HOW. Route back to architect (standard/complex) or orchestrator (quick — likely needs re-classification).
+- **ARCHITECTURE_DRIFT** (special): you noticed something the design source got wrong. Don't fix in HOW. Route back to architect (standard/complex) or intake (quick — likely needs re-classification).
 
 ## Output Format
 
@@ -155,6 +161,10 @@ LGTM | HAS_CONCERNS | HAS_BLOCKERS | ARCHITECTURE_DRIFT
 ### Native / Visual Gates
 
 [NATIVE_CHANGES + Visual Confirmation flags + presence of corresponding HOW steps.]
+
+### Review / Debug Strategy
+
+[Whether HOW identifies risky paths, failure modes, expected failing tests, manual checks, and reviewer focus.]
 
 ### Findings
 

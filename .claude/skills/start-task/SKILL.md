@@ -1,13 +1,13 @@
 ---
 name: start-task
-description: Start a new development task for PocketPal AI from a GitHub issue or description. Creates worktree, analyzes requirements, routes to planner.
+description: Start a new PocketPal delivery task from a GitHub issue or description. Runs the delivery loop through implementation, draft PR, independent review, and review-fix rounds when needed.
 user-invocable: true
 argument-hint: "[#issue-number or description]"
 ---
 
 # Start Task Workflow
 
-You are starting a new development task for PocketPal AI.
+You are the top-level delivery controller for a new PocketPal AI task. This skill owns the orchestration and invokes stage agents directly from the current session.
 
 ## Input
 
@@ -28,10 +28,10 @@ First, fetch the issue details:
 gh issue view [number] --repo pocketpal-ai/pocketpal-ai --json title,body,labels,assignees
 ```
 
-Then use the `pocketpal-orchestrator` agent with a self-contained brief built from the issue context:
+Then invoke `pocketpal-intake` with a self-contained brief built from the issue context:
 
 ```
-Use pocketpal-orchestrator: [title from gh]
+Use pocketpal-intake: [title from gh]
 
 Request:
 [paste the issue body verbatim so the brief stands alone]
@@ -45,30 +45,40 @@ Repository: ./repos/pocketpal-ai
 
 ## For Description
 
-Use the `pocketpal-orchestrator` agent directly:
+Invoke `pocketpal-intake` directly:
 
 ```
-Use pocketpal-orchestrator: $ARGUMENTS
+Use pocketpal-intake: $ARGUMENTS
 
 Repository: ./repos/pocketpal-ai
 ```
 
 ## What Happens Next
 
-The orchestrator will:
+As the top-level session, continue the workflow after each stage returns:
 
-1. Generate a task ID (TASK-YYYYMMDD-HHMM)
-2. Create a worktree at `worktrees/TASK-xxx` using the repo helper scripts
-3. Create a feature branch
-4. Sync the allowlisted gitignored config/env files into the worktree
-5. Stop with `NEEDS_INPUT` if required information is missing
-6. Classify complexity
-7. Route with worktree context when the brief is approved
+1. Invoke `pocketpal-intake`.
+2. Let the implementation pipeline run through the selected path:
+   - trivial: Intent → Implementer
+   - quick: Intent → Planner → Plan-Critic → Implementer
+   - standard / complex: Intent → optional design exploration → WHAT → Architect-Critic → optional plan exploration → HOW → Plan-Critic → Implementer
+3. Run tester and `pocketpal-pipeline-reviewer`.
+4. Open or locate the draft PR when the pipeline approves.
+5. Invoke the independent review pipeline with `/review-pr <PR>`.
+6. Read `workflows/reviews/PR-<N>/round-<R>/final.md`.
+7. If review returns `REQUEST_CHANGES`, create `workflows/stories/<TASK-ID>/review-feedback-round-<R>.md` from `templates/review-feedback-template.md`.
+8. Route mandatory `BLOCKER` and `CONCERN` findings through the PR-fix pipeline by invoking `pocketpal-intake` with the feedback artifact.
+9. Repeat independent review after fixes, max 2 external review/fix rounds.
 
-After the planner creates a story file, the story critic reviews it automatically. Implementation proceeds if the critic approves (LGTM). Human is involved when blockers persist after revision or when the orchestrator returns `NEEDS_INPUT`.
+Human involvement is required when `NEEDS_INPUT`, `ESCALATE`, incomplete required review artifacts, failed mandatory verification, or persistent blockers/concerns after the allowed rounds occur.
 
 ## Workflow
 
 ```
-/start-task → orchestrator → planner → critic (review-revise) → implementer → tester → reviewer → PR
+/start-task
+  → implementation pipeline
+  → draft PR
+  → independent review pipeline
+  → feedback intake + PR-fix loop if needed
+  → APPROVE / ESCALATE
 ```

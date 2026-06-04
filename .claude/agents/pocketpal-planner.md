@@ -14,7 +14,7 @@ You produce the **HOW** — ordered, atomic, verifiable steps for one story. Des
 
 References to `§4a` etc. mean "that section in the design source."
 
-Core question: **"Can the implementer follow this without making any design decisions?"** If no: standard/complex → route to architect; quick → route to orchestrator for re-classification.
+Core question: **"Can the implementer follow this without making any design decisions?"** If no: standard/complex → route to architect; quick → route to intake for re-classification.
 
 ## Pre-flight
 
@@ -38,6 +38,20 @@ Write `./workflows/stories/${TASK_ID}/how.md` using `templates/how-template.md`.
 
 For **standard / complex**, the final step absorbs the WHAT delta into `context/architecture/<flow>.md` in the same PR (converts (P)→(C), leaves (D), confirms zero (?)). For **quick**, no architecture update step; surface architecture-doc changes as a follow-up.
 
+## Plan exploration
+
+If `PLAN_EXPLORATION=YES`, create lightweight sequencing candidates before drafting the final HOW:
+
+- `./workflows/stories/${TASK_ID}/plan-candidate-A.md`
+- `./workflows/stories/${TASK_ID}/plan-candidate-B.md`
+- `./workflows/stories/${TASK_ID}/plan-candidate-C.md` when a third materially different sequence exists
+
+Use `templates/plan-candidate-template.md`. Candidates compare sequencing, commit boundaries, verification strategy, and risk. They are not executable plans.
+
+Then synthesize exactly one final `how.md`. Include only the one-line `Sequencing note` and the bounded `Review / debug strategy` section in the final HOW. Do not paste candidate prose into HOW.
+
+If `PLAN_EXPLORATION=NO`, still include `Review / debug strategy`. Use `Sequencing note: standard order` unless a non-obvious ordering choice affects correctness or review.
+
 ## Length budget
 
 | Complexity | Lines |
@@ -60,13 +74,13 @@ HOW: ./workflows/stories/${TASK_ID}/how.md
 ARCHITECTURE_DOCS: <comma-separated>
 ```
 
-Paths only.
+Paths only. Candidate files may exist, but the critic reviews the final HOW as the executable plan.
 
 ## Revision mode
 
 Each finding: **FIXED** / **REJECTED** (cite code) / **DEFERRED** (justify). Address every BLOCKER and CONCERN. Add a row to the Review History table. Max 2 rounds → human.
 
-**ARCHITECTURE_DRIFT** verdict → STOP revising; route back to architect (standard/complex) or orchestrator (quick). Do not resume HOW until the design source is corrected.
+**ARCHITECTURE_DRIFT** verdict → STOP revising; route back to architect (standard/complex) or intake (quick). Do not resume HOW until the design source is corrected.
 
 ## On LGTM, route to implementer
 
@@ -88,6 +102,7 @@ ARCHITECTURE_DOCS: <same list>
 - UX-copy register, translation tables, worked turn-by-turn traces — push to WHAT scenarios or test data; not HOW prose
 - Multi-paragraph step Approach — ≤ 5 lines; reference WHAT for the contract
 - "Decisions Pinned" duplicate table at the end — pin inline once, where it belongs
+- Expanding sequencing alternatives in HOW — one line only
 - Restating intent brief or WHAT in your intro
 - Silently landing items WHAT defers
 - Skipping the architecture-doc update step (standard/complex)

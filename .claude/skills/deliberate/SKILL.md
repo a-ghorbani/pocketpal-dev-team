@@ -282,7 +282,7 @@ Output the full deliberation record. Offer:
 ```
 User: /deliberate "Should we use SQLite or MMKV for model metadata storage?"
 
-You (orchestrator):
+You (coordinator):
   → Call pocketpal-proposer with topic
   ← Receive proposal (recommends SQLite, lists alternatives)
 

@@ -36,6 +36,23 @@ Executable worklist for the design source (`what.md` for standard/complex, `cont
 
 ---
 
+## Plan exploration
+
+Required for complex stories; optional for standard stories when execution sequencing is risky.
+
+Candidate artifacts, if used:
+- `workflows/stories/<TASK-ID>/plan-candidate-A.md`
+- `workflows/stories/<TASK-ID>/plan-candidate-B.md`
+- `workflows/stories/<TASK-ID>/plan-candidate-C.md`
+
+This HOW is the synthesized executable plan. Do not paste full candidate docs here.
+
+### Sequencing note
+
+One line only. Explain the chosen order only if non-obvious; otherwise write `standard order`.
+
+---
+
 ## Steps
 
 Each step is atomic — one logical change, one commit.
@@ -59,6 +76,18 @@ Standard/complex: one row per WHAT §6 scenario. Quick: enumerate user-visible o
 | Contract item | Verified by |
 | --- | --- |
 | §6.A | `<test file or manual scenario>` |
+
+---
+
+## Review / debug strategy
+
+Use this to make downstream debugging and independent review deterministic.
+
+- **Riskiest files**: `<path>` — <why>; max 3
+- **Expected failure modes**: <max 3 short phrases>
+- **Tests that should fail if wrong**: `<test file or command>`; max 3
+- **Manual verification required**: <scenario or N/A>
+- **Independent reviewer focus**: <max 2 code paths, invariants, or evidence checks>
 
 ---
 

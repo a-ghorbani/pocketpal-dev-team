@@ -19,7 +19,7 @@ You are implementing a Figma design into PocketPal RN. Figma is the source of tr
 - Editing inside Figma → the `figma-use` skill.
 - Generating a new Figma design from code/intent → `figma-generate-design`.
 - Mapping a code component to a Figma component (Code Connect) → `figma-code-connect`.
-- A non-design implementation task → the normal pipeline (`start-task` / `pocketpal-orchestrator`).
+- A non-design implementation task → the normal pipeline (`start-task` / `pocketpal-intake`).
 
 ## Pre-flight
 

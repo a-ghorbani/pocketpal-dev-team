@@ -10,12 +10,16 @@ This repo is the workflow control plane for PocketPal AI. The target app code is
 - Never remove worktrees with raw `git worktree remove`, `git worktree prune`, `rm -r`, or `rmdir`. Use `./tools/remove-worktree.sh <name> --yes` only when the user explicitly asks for cleanup.
 - Never bulk-copy secrets or config. Use only the allowlisted sync in `./tools/sync-worktree-config.sh` or `./tools/create-worktree.sh`.
 - Never implement without the artefacts the complexity level requires (see Workflow).
-- Keep the four-stage pipeline intact: **Intent → WHAT → HOW → Implementation**.
+- Keep the four-stage pipeline intact: **Intent → WHAT → HOW → Implementation**. The delivery loop may wrap it, but must not collapse implementation and independent review into the same role.
 - `NATIVE_CHANGES=YES` requires `pod install` + iOS build + Android build before the work can be called ready.
 - Every PR that changes behaviour described in `context/architecture/*.md` must update the relevant doc **in the same PR**. Drift is forbidden.
 - **Run the pipeline autonomously.** After each stage returns, the calling session immediately invokes the next agent in the chain. Do NOT use `AskUserQuestion` or any other interactive prompt between stages. There is no human approval gate between stages. Stop ONLY for:
-  - `NEEDS_INPUT` from the orchestrator (unanswered clarifications in the brief)
+  - `NEEDS_INPUT` from intake (unanswered clarifications in the brief)
   - `HAS_BLOCKERS` persisting after round 2 of either critic loop
+  - `ESCALATE` from any review stage
+  - incomplete required independent review artifacts
+  - failed mandatory verification
+  - `BLOCKER` or `CONCERN` findings persisting after round 2 of the independent review/fix loop
 - **Public artifacts hygiene.** In GitHub artifacts (PR title/body/comment, issue, commit message) and in `repos/pocketpal-ai/` source/tests/configs, reference only public things — public GitHub issues/PRs, file paths, library names. No Linear (`FOU-*`, `linear.app`), no internal task IDs, no story-doc anchors (`I_DSn`, `Dn`, `§4x`, `Scenario X`, `WHAT/HOW`, `round N`). Source comments stay terse — current state, not the story.
 
 ## Workflow
@@ -26,7 +30,7 @@ Pipeline (each arrow is "produces and hands off to"):
 Issue
   │
   ▼
-orchestrator ── intent-brief.md  (builds a self-contained brief; emits `NEEDS_INPUT` and stops if required answers are missing; classifies)
+intake ── intent-brief.md  (builds a self-contained brief; emits `NEEDS_INPUT` and stops if required answers are missing; classifies)
   │
   ├── trivial ───────────────────────────────────────────────────────┐
   │                                                                  │
@@ -59,14 +63,23 @@ orchestrator ── intent-brief.md  (builds a self-contained brief; emits `NEED
                        pipeline-reviewer ── draft PR | REQUEST_CHANGES
                               │
                               ▼
-                       HUMAN REVIEW & MERGE
+                       independent review ── final.md
+                              │
+                ┌─────────────┴─────────────┐
+                ▼                           ▼
+          review feedback              HUMAN REVIEW & MERGE
+          intake + PR-fix
+                │
+                └────────────── back to implementation pipeline
 ```
+
+The delivery loop is coordinated by the top-level `/start-task` session. It starts the implementation pipeline, invokes the independent review pipeline after a draft PR exists, normalizes `REQUEST_CHANGES` into a review-feedback artifact, and routes fixes through the PR-fix pipeline. The independent reviewer remains separate from the implementation agents.
 
 ### Stage outputs
 
 | Stage | Agent | Output |
 | --- | --- | --- |
-| Intent | `pocketpal-orchestrator` | `workflows/stories/<TASK-ID>/intent-brief.md` or a `NEEDS_INPUT` stop with explicit unanswered questions |
+| Intent | `pocketpal-intake` | `workflows/stories/<TASK-ID>/intent-brief.md` or a `NEEDS_INPUT` stop with explicit unanswered questions |
 | WHAT | `pocketpal-architect` | `workflows/stories/<TASK-ID>/what.md` (delta on `context/architecture/<flow>.md`) |
 | WHAT review | `pocketpal-architect-critic` | LGTM / HAS_CONCERNS / HAS_BLOCKERS |
 | HOW | `pocketpal-planner` | `workflows/stories/<TASK-ID>/how.md` |
@@ -74,11 +87,13 @@ orchestrator ── intent-brief.md  (builds a self-contained brief; emits `NEED
 | Implementation | `pocketpal-implementer` | code + commits + architecture-doc update |
 | Test | `pocketpal-tester` | tests + coverage + durable command/results notes |
 | Final review | `pocketpal-pipeline-reviewer` | draft PR or REQUEST_CHANGES, with artifact-backed verification evidence |
+| Independent review | `review-pr` skill / `pocketpal-code-reviewer` + role reviewers | `workflows/reviews/<TARGET-ID>/round-<N>/final.md` |
+| Review feedback intake | `/start-task` top-level session | `workflows/stories/<TASK-ID>/review-feedback-round-<N>.md` |
 
 ### Headless invocation contract
 
-- Every orchestrator invocation must be a self-contained brief. Include the full request text, acceptance criteria, constraints, and any known baseline/version context in the prompt itself.
-- If information is missing, the orchestrator must stop with `NEEDS_INPUT:` and list the exact unanswered questions. It must not guess, classify, or route downstream until a new invocation supplies those answers.
+- Every intake invocation must be a self-contained brief. Include the full request text, acceptance criteria, constraints, and any known baseline/version context in the prompt itself.
+- If information is missing, intake must stop with `NEEDS_INPUT:` and list the exact unanswered questions. It must not guess, classify, or route downstream until a new invocation supplies those answers.
 
 ### Complexity matrix
 
@@ -89,7 +104,17 @@ orchestrator ── intent-brief.md  (builds a self-contained brief; emits `NEED
 | **standard** | Touches a contract (data model, single-writer, rendering, persistence, wire format). Multi-file. Existing flow doc may need a delta. | Full pipeline. |
 | **complex** | Cross-flow, new flow, architecture-changing. Likely creates a new flow doc. | Full pipeline; expect both critic loops to use the full 2-round budget. |
 
-The orchestrator picks the level once the brief is written. If `Status: approved` (no clarifications needed) it classifies and routes immediately; if `Status: needs-input` it emits `NEEDS_INPUT` and stops. When in doubt, classify up.
+Intake picks the level once the brief is written. If `Status: approved` (no clarifications needed) it classifies and emits the first handoff; if `Status: needs-input` it emits `NEEDS_INPUT` and stops. When in doubt, classify up.
+
+### Exploration policy
+
+Design and plan exploration are lightweight candidate passes before the final contract artifacts:
+
+- **Design exploration** is required for complex tasks and optional for standard tasks with competing architecture shapes, persistence/migration risk, native/model execution changes, security/trust-boundary changes, or cross-store ownership uncertainty.
+- **Plan exploration** is required for complex tasks and optional for standard tasks with risky sequencing, broad verification uncertainty, native build changes, migrations, feature-flag rollout, or cross-flow commit boundaries.
+- Candidate artifacts live beside the story as `design-candidate-*.md` or `plan-candidate-*.md`.
+- Critics review only the synthesized `what.md` or `how.md`, not every candidate.
+- Final WHAT/HOW stay concise: WHAT may include bounded alternatives bullets; HOW uses a one-line sequencing note.
 
 ### Critic loop semantics
 
@@ -100,6 +125,28 @@ Both critic loops follow the same shape:
 - **ARCHITECTURE_DRIFT** (plan-critic only) → back to the **architect**, not the planner. A bug in WHAT is fixed in WHAT.
 - **Max 2 critic rounds.** If round 2 still has BLOCKERs, escalate to human.
 - The critic is invoked with **paths only** — never the producer's reasoning. It forms its own view from the codebase.
+
+### Independent review loop
+
+After `pocketpal-pipeline-reviewer` opens a draft PR, the top-level `/start-task` session invokes the independent review pipeline:
+
+```text
+review-pr <PR number>
+```
+
+Review output is durable:
+
+```text
+workflows/reviews/PR-<n>/round-<N>/final.md
+```
+
+If the verdict is `REQUEST_CHANGES`, the top-level `/start-task` session creates:
+
+```text
+workflows/stories/<TASK-ID>/review-feedback-round-<N>.md
+```
+
+Only `BLOCKER` and `CONCERN` findings are mandatory fix scope. `SUGGESTION` findings are out of scope unless required by a mandatory fix. The PR-fix pipeline consumes the feedback artifact and the independent review repeats. Max 2 external review/fix rounds, then escalate if blockers or concerns persist.
 
 ## Operating Rules
 
@@ -193,7 +240,7 @@ how.md             # quick / standard / complex (not trivial)
 
 ## Key references
 
-- Templates: `templates/{intent,what,how}-template.md`
+- Templates: `templates/{intent,what,how}-template.md`, `templates/{design-candidate,plan-candidate,review-feedback}-template.md`
 - Architecture library: `context/architecture/README.md`
 - Project context: `context/patterns.md`, `context/pocketpal-overview.md`
 - Standards: `docs/standards/code-review.md`, `docs/workflows/visual-capture.md`
@@ -208,5 +255,4 @@ how.md             # quick / standard / complex (not trivial)
 | `pocketpal-plan-critic` | After HOW drafted | `how.md` (plan) |
 | `pocketpal-pipeline-reviewer` | After impl + tests | Everything; gates draft PR |
 | `pocketpal-code-reviewer` | Standalone | Branch or PR, independent of pipeline state |
-
 Pipeline progression: **architect → architect-critic → planner → plan-critic → implementer → tester → pipeline-reviewer**.

@@ -41,6 +41,8 @@ Read: ./context/pocketpal-overview.md
 cd "${WORKTREE_PATH}"
 ```
 
+If `design-candidate-*.md` files exist, treat them as optional exploration context only. Your verdict is on the synthesized `what.md`, because that is the contract the implementer will build.
+
 ## Review Order
 
 Do these in order. If the **architecture itself is wrong**, stop and write the critique — there's no point grading invariants on a flawed design.
@@ -56,16 +58,16 @@ A WHAT that solves a different problem than the request describes is a `BLOCKER`
 
 ### 2. Architecture challenge
 
-Don't accept the proposed architecture as the only one. Force yourself to enumerate alternatives:
+Don't accept the proposed architecture as the only one. Check for plausible alternatives:
 
-- **Name plausible alternative architectures**, grounded in this codebase (existing patterns, libraries already in use, framework features). At least 2 for non-trivial work. One-line trade-off each.
+- **Name plausible alternative architectures**, grounded in this codebase (existing patterns, libraries already in use, framework features). Up to 2 when they materially exist; otherwise state no material alternative.
 - For each alternative, ask: **why isn't this better?** If the WHAT didn't consider it, that's a gap.
 - Does the **library/framework already handle** what's being designed? Reading docs of existing deps beats inventing.
 - Does the codebase **already have a pattern** for this kind of contract? (look in `src/store/`, `src/utils/`, `src/components/`, `src/services/`)
 - Does the chosen architecture **fight the framework**? (mutating MobX stores from components, bypassing repositories, custom abstractions over established ones)
 - Is the architecture **cheap to revert** if we learn we're wrong? Locks deserve more scrutiny.
 
-A WHAT that proposes an architecture without showing it considered and rejected alternatives is automatically `CONCERN`.
+A WHAT with a meaningful architecture choice should include bounded alternatives bullets. Missing alternatives are a `CONCERN` only when a plausible competing architecture exists.
 
 ### 3. Invariants & single-writer rule
 
@@ -117,7 +119,7 @@ LGTM | HAS_CONCERNS | HAS_BLOCKERS
 
 ### Architecture Evaluation
 
-[The chosen architecture in one sentence. Then 2+ plausible alternatives with one-line trade-offs (or an explicit "no real alternatives because X"). Then: why the chosen architecture wins, or why it doesn't.]
+[The chosen architecture in one sentence. Then up to 2 plausible alternatives with one-line trade-offs, or "no material alternative" with a short reason. Then: why the chosen architecture wins, or why it doesn't.]
 
 ### Invariant / Single-Writer Audit
 
@@ -155,7 +157,7 @@ Max 2 rounds. If the second round still has BLOCKERs, escalate to human.
 - Never modify the WHAT file.
 - Never rubber-stamp — read the actual code referenced.
 - If the architecture is sound, say LGTM. Don't manufacture concerns.
-- A WHAT that fails to defend the architecture against alternatives is at least `CONCERN`, even if it's well-detailed. Detail without justified architecture is a trap.
+- A WHAT that fails to defend a meaningful architecture choice against plausible alternatives is at least `CONCERN`. Do not manufacture alternatives when none materially exist.
 - Don't propose alternatives unless they're grounded in this codebase / stack / existing dependencies. Hand-wavy alternatives are worse than none.
 - Treat unresolved `(?)` markers as automatic BLOCKERs — open questions don't ship.
 - Treat false `(C)` claims as automatic BLOCKERs — designing on top of stale truth produces ping-pong.

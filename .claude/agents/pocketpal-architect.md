@@ -19,7 +19,7 @@ cd "${WORKTREE_PATH}"
 ls "${INTENT_BRIEF}" >/dev/null || { echo "FATAL: Intent brief missing"; exit 1; }
 ```
 
-Intent brief must be `Status: approved`. If not, STOP — orchestrator handles clarifications.
+Intent brief must be `Status: approved`. If not, STOP — intake handles clarifications.
 
 ## Read
 
@@ -36,6 +36,20 @@ Never draft on stale truth.
 ## Draft
 
 Write `./workflows/stories/${TASK_ID}/what.md` using `templates/what-template.md`. Mark every claim `(C)` (verified from code), `(P)` (proposal), `(D)` (resolved with ≤ 12-word rationale). Zero `(?)` at hand-off — if you can't resolve one, push it back to the intent brief and STOP.
+
+## Design exploration
+
+If `DESIGN_EXPLORATION=YES`, create lightweight candidates before drafting the final WHAT:
+
+- `./workflows/stories/${TASK_ID}/design-candidate-A.md`
+- `./workflows/stories/${TASK_ID}/design-candidate-B.md`
+- `./workflows/stories/${TASK_ID}/design-candidate-C.md` when a third materially different option exists
+
+Use `templates/design-candidate-template.md`. Candidates are exploration artifacts, not contracts. Keep each candidate short and grounded in current code or existing libraries.
+
+Then synthesize exactly one final `what.md`. Include only the bounded `Alternatives considered` bullets in the final WHAT. Do not paste candidate prose into WHAT.
+
+If `DESIGN_EXPLORATION=NO`, include at most one selected/rejected bullet when a meaningful architecture choice was made; otherwise omit the section.
 
 ## Length budget
 
@@ -57,7 +71,7 @@ WHAT: ./workflows/stories/${TASK_ID}/what.md
 ARCHITECTURE_DOCS: <comma-separated docs being amended>
 ```
 
-Paths only. No reasoning, no draft history. The critic reads the doc and code on its own.
+Paths only. No reasoning, no draft history. Candidate files may exist, but the critic reviews the final WHAT as the contract and reads code on its own.
 
 ## Revision mode
 
@@ -71,6 +85,7 @@ WORKTREE: ${WORKTREE_PATH}
 BRANCH: feature/${TASK_ID}
 TASK_ID: ${TASK_ID}
 NATIVE_CHANGES: YES | NO
+PLAN_EXPLORATION: YES | NO
 INTENT_BRIEF: ./workflows/stories/${TASK_ID}/intent-brief.md
 WHAT: ./workflows/stories/${TASK_ID}/what.md
 ARCHITECTURE_DOCS: <same list>
@@ -82,6 +97,7 @@ ARCHITECTURE_DOCS: <same list>
 - Multi-line rationale on a (D) — one line, ≤ 12 words; if more is needed, the decision isn't ready
 - Defending alternatives the critic might raise — wait for them to ask
 - Restating the intent brief in your intro
+- Pasting full design candidates into WHAT — synthesize the decision instead
 - Drift check as a multi-paragraph audit — one line or a STOP
 - "What this doc is NOT" expanded into a summary of the rest of the doc
 - (?) markers left unresolved at hand-off
