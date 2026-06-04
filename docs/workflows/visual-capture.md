@@ -1,6 +1,8 @@
 # Visual Capture Workflow
 
-When a story has `Visual Confirmation: YES`, the reviewer runs this procedure to capture screenshots.
+When a story has `Visual Evidence Required: YES`, the pipeline creates or verifies durable visual evidence before approval.
+
+Visual evidence is an artifact requirement, not a request for the user to inspect the UI. Do not ask the user to inspect UI manually unless the required capture infrastructure, device, simulator, or design source is unavailable after documented attempts.
 
 There are **three flavours**, picked by what the change touches:
 
@@ -18,7 +20,7 @@ Decision rule:
 
 ## Flavour A — Parametrized (chat output)
 
-1. Read the `Visual Confirmation` section in the story for the `VISUAL_CAPTURES` JSON.
+1. Read the `Visual evidence` section in the story for the `VISUAL_CAPTURES` JSON.
 2. Run from the task worktree:
 
 ```bash
@@ -29,7 +31,7 @@ VISUAL_CAPTURES='[the JSON from the story]' yarn e2e:ios --spec visual-capture -
 ```
 
 3. Screenshots land in `e2e/debug-output/screenshots/visual-captures/`.
-4. Attach to the PR as a comment, or note the local screenshot path for human verification.
+4. Attach to the PR as a comment, or record the local screenshot path as review evidence.
 
 ## Flavour B — Per-task one-shot (ad-hoc UI surfaces)
 
@@ -107,6 +109,6 @@ For FOU-112 phase slices that touch an existing screen (e.g. theming a previousl
 
 ## Failure handling
 
-If a capture fails due to model download timeout, inference error, simulator instability, or missing network state, do **not** block the PR by default. Record the failure in the review report and ask the human to run the capture manually if visual proof is still needed.
+If a capture fails due to model download timeout, inference error, simulator instability, or missing network state, do **not** block the PR by default. Record the failure in the review report and escalate only if visual evidence is still required and no acceptable substitute evidence exists.
 
 For Surface-style mechanical-parity changes (Phase 2 design-system rebuilds), a unit test asserting the relevant style invariant (e.g. `elevation` default matching Paper) is acceptable evidence in lieu of screenshots when the capture infrastructure can't be exercised. State this explicitly in the PR body.

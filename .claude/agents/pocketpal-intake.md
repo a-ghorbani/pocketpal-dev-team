@@ -243,9 +243,9 @@ If the task involves any of:
 
 flag as `NATIVE_CHANGES=YES` in the intent brief metadata.
 
-## Visual Confirmation Detection
+## Visual Evidence Detection
 
-If the task changes visible UI (layout, styling, rendering, theme, markdown/HTML), flag as `Visual Confirmation=YES`. The planner will include VISUAL_CAPTURES JSON in HOW.
+If the task changes visible UI (layout, styling, rendering, theme, markdown/HTML), flag as `Visual Evidence Required=YES`. This means the pipeline must create or verify durable visual evidence before approval; do not ask the user to inspect UI manually unless capture infrastructure or required devices are unavailable after documented attempts. The planner will include VISUAL_CAPTURES JSON or an equivalent capture plan in HOW.
 
 ## Routing Protocol
 
@@ -334,7 +334,7 @@ After emitting the correct handoff block, stop. The top-level delivery workflow 
 - **Complexity**: trivial | quick | standard | complex
 - **Type**: bug | feature | enhancement | refactor | docs
 - **Native Changes**: YES | NO
-- **Visual Confirmation**: YES | NO
+- **Visual Evidence Required**: YES | NO
 - **Design Exploration**: YES | NO
 - **Plan Exploration**: YES | NO
 - **Architecture flows touched**: chat-flow | model-loading | persistence | (new flow) | (n/a)

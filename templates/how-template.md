@@ -10,7 +10,7 @@ Executable worklist for the design source (`what.md` for standard/complex, `cont
 - **Worktree**: `./worktrees/TASK-YYYYMMDD-HHMM`
 - **Branch**: `feature/TASK-YYYYMMDD-HHMM`
 - **Native Changes**: YES | NO
-- **Visual Confirmation**: YES | NO
+- **Visual Evidence Required**: YES | NO
 - **Intent Brief**: `./workflows/stories/<TASK-ID>/intent-brief.md`
 - **WHAT**: `./workflows/stories/<TASK-ID>/what.md` (omit for quick)
 - **Architecture doc(s)**: `./context/architecture/<flow>.md`
@@ -104,7 +104,7 @@ Skipping is a blocking review issue.
 
 ---
 
-## Visual confirmation (if Visual Confirmation=YES)
+## Visual evidence (if Visual Evidence Required=YES)
 
 ```json
 [

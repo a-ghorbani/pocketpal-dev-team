@@ -18,7 +18,7 @@ If the request is already unambiguous, save the brief with no Clarifications and
 - **Branch**: `feature/TASK-YYYYMMDD-HHMM`
 - **Complexity**: trivial | quick | standard | complex
 - **Native Changes**: YES | NO
-- **Visual Confirmation**: YES | NO
+- **Visual Evidence Required**: YES | NO
 - **Created**: YYYY-MM-DD
 - **Status**: draft | needs-input | answered | approved
 

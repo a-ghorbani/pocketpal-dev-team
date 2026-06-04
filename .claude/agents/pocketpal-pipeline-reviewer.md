@@ -52,7 +52,7 @@ Beyond the standard lens review, you also:
 - run lint, typecheck, tests, and report results
 - run platform builds when `NATIVE_CHANGES=YES`
 - verify coverage meets the 60% threshold
-- verify visual confirmation when the story flags it
+- verify visual evidence when the story flags it
 - verify every claim of testing/build/verification is backed by command output, logs, screenshots, or another durable artifact
 - on approve, create the draft PR and report the PR number for the top-level delivery workflow
 
@@ -77,9 +77,9 @@ yarn ios --configuration Release     # must succeed
 yarn android --variant=release       # must succeed
 ```
 
-## Visual Confirmation
+## Visual Evidence
 
-If the story has `Visual Confirmation: YES`, follow `docs/workflows/visual-capture.md` and check screenshots in `e2e/debug-output/screenshots/visual-captures/`.
+If the story has `Visual Evidence Required: YES`, follow `docs/workflows/visual-capture.md` and check screenshots or approved substitute evidence in the paths specified by HOW. Do not ask the user to inspect UI manually unless the capture infrastructure, required device, simulator, or design source is unavailable after documented attempts.
 
 ## Output Additions
 

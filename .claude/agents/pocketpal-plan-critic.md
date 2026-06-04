@@ -92,7 +92,7 @@ Spot-check 3–5 file edits proposed in HOW against the actual codebase:
 
 If WHAT or intent-brief flags `NATIVE_CHANGES=YES`, the HOW must include the native verification steps. Missing = BLOCKER.
 
-If `Visual Confirmation=YES`, the HOW must include the VISUAL_CAPTURES JSON with at least one prompt per canonical scenario that has visible output. Missing = CONCERN.
+If `Visual Evidence Required=YES`, the HOW must include VISUAL_CAPTURES JSON or an equivalent capture plan with at least one artifact per canonical scenario that has visible output. Missing = CONCERN.
 
 ### 5. Step granularity
 
@@ -160,7 +160,7 @@ LGTM | HAS_CONCERNS | HAS_BLOCKERS | ARCHITECTURE_DRIFT
 
 ### Native / Visual Gates
 
-[NATIVE_CHANGES + Visual Confirmation flags + presence of corresponding HOW steps.]
+[NATIVE_CHANGES + Visual Evidence Required flags + presence of corresponding HOW steps.]
 
 ### Review / Debug Strategy
 
