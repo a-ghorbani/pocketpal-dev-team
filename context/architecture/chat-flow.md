@@ -17,42 +17,38 @@ Convention used in this doc:
 Load-bearing rules. If a change breaks one of these, the reviewer should
 ask "is this an architecture change?" before approving.
 
-- **Single global n_ctx, two named views.** Banner, sticky-full
-  normaliser, pal-load hint, and the active model card read
-  `modelStore.runtimeNCtx` — the n_ctx the running LlamaContext was
-  actually initialised with. `modelStore.contextInitParams.n_ctx` is
-  the *next-init intent* (writable from Settings slider and from the
-  banner "Increase context" CTA). Both views read from the same
-  global — there is no per-session or pending override layer. If a
-  future field exposes "the n_ctx for X", it must say which copy of
-  state it represents.
-- **Snapshot truth.** The `lastCompletionResult` stored on the session
-  store and the matching `metadata.completionResult` persisted on the
-  newest assistant message is normalised at the moment of writing
-  (`deriveSnapshotFromResult` → `applyStickyFull`). Readers
-  (`resolveBannerVariant`) do not redo the arithmetic; their freshness
-  gate mirrors the same `>= n_ctx - AUTOCLEAR_RUNWAY` boundary by
-  construction.
-- **One advisory surface at a time.** The chat screen renders at most
-  one snackbar per frame. Confirm flows that raise the reload snackbar
-  must synchronously dismiss the pal-load hint (React 18 auto-batched
-  setState commits the pair atomically).
-- **One banner variant per render.** `resolveBannerVariant` is pure
-  and returns exactly one of context-full / context-warning /
+- **Single global n_ctx, two named views.** The banner resolver and the
+  pal-load hint read `modelStore.activeContextSettings?.n_ctx` — the
+  n_ctx the running `LlamaContext` was actually initialised with.
+  `modelStore.contextInitParams.n_ctx` is the *next-init intent*
+  (writable from the Settings n_ctx input via `setNContext` and from the
+  banner "Increase context" CTA, which also calls `setNContext`). Both
+  views read from the same global — there is no per-session or pending
+  override layer. If a future field exposes "the n_ctx for X", it must
+  say which copy of state it represents.
+- **Snapshot truth.** The `lastCompletionResult` on `ChatSessionStore`
+  and the matching `metadata.completionResult` persisted on the newest
+  assistant message are normalised at the moment of writing
+  (`deriveSnapshotFromResult` in `useChatSession`). Readers
+  (`resolveBannerVariant`) do not redo the arithmetic; the resolver's
+  freshness gate mirrors the same `used >= effectiveNCtx -
+  AUTOCLEAR_RUNWAY` boundary.
+- **One advisory surface at a time.** `ChatView` renders at most one
+  snackbar per frame. When the increase-context confirm raises the
+  reload snackbar it synchronously dismisses the pal-load hint in the
+  same handler (React 18 auto-batched setState commits the pair
+  atomically); the pal-load snackbar is also gated on `!reloadSnackbar`.
+- **One banner variant per render.** `resolveBannerVariant` is pure and
+  returns exactly one of context-full / context-warning /
   context-remote-hedged / html-soft-cap / none. The context-* variants
-  are suppressed when no LlamaContext is loaded (the snapshot may be
-  hydrated and inactionable); html-soft-cap is independent of model
-  state.
-- **Settings drift is observable, not just internal.**
-  `modelStore.pendingReloadRequired` is the derived getter every
-  Settings-affecting surface reads — Settings screen today, future
-  header chip / chat banner if needed. Adding a comparison to ad-hoc
-  `contextInitParams.x === runtimeContextSettings.x` is a smell.
-- **Loaded n_ctx is the user's only runtime signal.** The active model
-  card surfaces `Loaded: N` whenever a context is alive. There is no
-  hidden state shadowing Settings — every reload path (Settings,
-  banner, Models screen, auto-load) honors `contextInitParams.n_ctx`
-  by construction.
+  are suppressed when no `LlamaContext` is loaded
+  (`activeModelId === undefined` or `activeContextSettings` absent — the
+  snapshot may be hydrated and inactionable); html-soft-cap is
+  independent of model state.
+- **Loaded n_ctx is the user's only runtime signal.** Every reload path
+  (Settings, the banner CTA, Models screen, auto-load) honors
+  `contextInitParams.n_ctx` by construction; there is no hidden state
+  shadowing it.
 
 ---
 
@@ -66,10 +62,12 @@ Session
         metadata                            // turn-level chrome + run flags
             timings?         : { predicted_per_second, predicted_per_token_ms,
                                  time_to_first_token_ms, ... }   // llama.rn shape
-            completionResult?: { content, reasoning_content?,
-                                 tokensCached, tokensEvaluated,
-                                 tokensPredicted, contextFull,
-                                 finishReason }                  // turn snapshot
+            completionResult?: CompletionResultSnapshot           // turn snapshot
+                                            //   { content?, reasoning_content?,
+                                            //     used, contextFull, tokensPredicted?,
+                                            //     finishReason?, isRemote }
+                                            //   used = tokens_evaluated + tokens_predicted
+                                            //   (tokens_cached unavailable at the boundary)
             copyable?        : boolean      // turn has user-visible content worth copying
             interrupted?     : boolean      // run failed/aborted with partial content
             truncationLikely?: true         // set ONLY when the tool-args JSON
@@ -437,10 +435,10 @@ bubble (a UX regression we don't want).
 | `AssistantTurnFooter`             | timing, copy                                                                          | text, talent, sender name  |
 | `PendingIndicator`                | subtle dot-row indicator + optional label / token-count / "Stopping…" overlay         | text, chrome               |
 | `ChatView`                        | message list + pending indicator (visibility-gated by `status` + `isStopping`)        | per-turn structure         |
-| `BannerRow` (inline in `ChatView`) | ONE of five variants resolved by `bannerVariantResolver` (`context-full` / `context-warning` / `context-remote-hedged` / `html-soft-cap` / none) | per-variant logic (lives in the resolver) |
-| `IncreaseContextSheet`            | confirm sheet for the banner CTA + reload feedback snackbar                          | tier selection (resolver / `pickNextTier`) |
-| `bannerVariantResolver` (pure)    | resolved variant + payload (next tier tokens, heavy-talent name)                     | JSX, MobX writes, async    |
-| `usePalLoadHint` (pure hook)      | one-shot snackbar trigger when a heavy-talent pal loads at insufficient n_ctx        | banner state (I8 — snackbar layer is separate) |
+| `BannerRow` (`ChatView/BannerRow.tsx`, in the input slot) | ONE of five variants from `resolveBannerVariant` (`context-full` / `context-warning` / `context-remote-hedged` / `html-soft-cap` / none) | per-variant logic (lives in the resolver) |
+| `IncreaseContextSheet`            | confirm sheet for the banner CTA + reloads the model; reports result to `ChatView`'s reload snackbar | computing the target (resolver supplies the memory-gated next-fit n_ctx) |
+| `resolveBannerVariant` (pure, `utils/bannerVariantResolver.ts`) | resolved variant + payload (memory-gated next-fit n_ctx via `computeNextFitNCtx`, heavy-talent name) | JSX, MobX writes, async |
+| `usePalLoadHint` (pure hook)      | one-shot snackbar trigger when a heavy-talent pal loads below its recommended n_ctx  | banner state (I8 — snackbar layer is separate) |
 
 **Footer-ownership decision (D9)**: Message owns chrome **universally** for all
 assistant rows, not only for `assistant_turn` rows. `Bubble` is a pure shape
@@ -467,17 +465,17 @@ the latest turn — see D4.
 | `step.partial`                           | `pushAgentStep` (true), `finalizeActiveStep` (false; `ChatSessionStore.ts`) |
 | New step                                 | `pushAgentStep` (`ChatSessionStore.ts`)             |
 | `metadata.timings`                       | `updateMessage` at `run_finished` (`useChatSession.ts`) |
-| `metadata.completionResult` (snapshot shape) | `updateMessage` at `run_finished` AND the catch path on abort with partial content (`useChatSession.ts`). Same write also seeds `chatSessionStore.lastCompletionResult`. |
+| `metadata.completionResult` (`CompletionResultSnapshot`) | `updateMessage` at `run_finished` AND the catch path on abort with partial content (`useChatSession.ts`, via `deriveSnapshotFromResult`). The same site then calls `chatSessionStore.recordCompletionSnapshot`, which seeds `lastCompletionResult` and `consecutiveFullFailures` in one action. |
 | `metadata.copyable`                      | `updateMessage` from EITHER `run_finished` OR the catch path on abort (`useChatSession.ts`). Sequential, not racing. |
 | `metadata.interrupted`                   | `updateMessage` from the catch path (abort with partial content) |
 | `metadata.truncationLikely`              | `updateMessage` from the catch path, only when the tool-args JSON parse error fires |
 | `metadata.hitMaxTurns`                   | `updateMessage` from `run_finished`, only when `result.hitMaxTurns === true` (absent otherwise) |
-| `chatSessionStore.lastCompletionResult`  | `useChatSession` at `run_finished` AND abort-with-partial-content (same write that updates `metadata.completionResult`); `setActiveSession` hydrates from disk; `resetActiveSession` clears |
-| `chatSessionStore.dismissedBannerVariants` | `ChatView` `BannerRow` on user dismiss (`setBannerDismissed`); cleared per-session by the `run_finished` writer, on `deleteSession`, and per-id on `bulkDeleteSessions` |
-| `chatSessionStore.consecutiveFullFailures` | `useChatSession` at `run_finished` / abort-with-partial-content: increment on `snap.contextFull`, reset otherwise |
-| `modelStore.contextInitParams.n_ctx` | Settings slider/input (`ModelStore.setNContext`) AND `useContextBanner.handleConfirmIncrease` (which calls `setNContext(target)` then `releaseContext` + `initContext`; on failure, restores the prior value with a second `setNContext` call). Single global — no per-session or pending override. |
+| `chatSessionStore.lastCompletionResult`  | `recordCompletionSnapshot`, called by `useChatSession` at `run_finished` AND abort-with-partial-content (same site that writes `metadata.completionResult`); `setActiveSession` hydrates from the newest turn on disk; `resetActiveSession` clears |
+| `chatSessionStore.dismissedBannerVariants` | `BannerRow` on user dismiss (`setBannerDismissed`); cleared per-draft by `recordCompletionSnapshot`, on `deleteSession(id)`, as a whole-op clear in `bulkDeleteSessions()`, and on `resetActiveSession` / `setActiveSession` |
+| `chatSessionStore.consecutiveFullFailures` | `recordCompletionSnapshot` (called from `useChatSession` at `run_finished` / abort-with-partial-content): increment on `snapshot.contextFull`, reset otherwise; cleared on `resetActiveSession` / `setActiveSession` |
+| `modelStore.contextInitParams.n_ctx` | Settings n_ctx input (`ModelStore.setNContext`) AND `IncreaseContextSheet` confirm (calls `setNContext(target)` then `releaseContext` + `initContext`; on failure restores the prior value with a second `setNContext`). Single global — no per-session or pending override. |
 | `chatSessionStore.palLoadHintSeen` | `usePalLoadHint` at emit time (`markPalLoadHintSeen`); cleared on `resetActiveSession` |
-| `modelStore.runtimeContextSettings` | `ModelStore.initContext` on success; cleared in `_releaseContextInternal`. Set only by these two writers. |
+| `modelStore.activeContextSettings` | `ModelStore.initContext` on success; cleared on release. Set only by those two writers. |
 | `agentUiState` (full bag)                | `agentStateReducer` only (canonical state source)   |
 | `chatSessionStore.isStopping`            | `useChatSession.handleStopPress` (set), `handleSendPress` cleanup paths (clear) |
 | `modelStore.inferencing` / `isStreaming` | `useChatSession` at run boundaries (legacy; see Cleanup-DEFERRED below) |
@@ -488,22 +486,12 @@ the latest turn — see D4.
 
 Reading is unrestricted.
 
-**n_ctx resolution is trivial after the override layer was removed:**
-`ModelStore.getEffectiveContextInitParams` reads
-`this.contextInitParams.n_ctx` directly — no override consult, no
-session-keyed lookup, no precedence chain. Banner-side readers
-(`useContextBanner`, `useChatSession` sticky-full branch,
-`usePalLoadHint`, ModelCard) read `modelStore.runtimeNCtx` for "what
-is actually loaded" and `modelStore.contextInitParams.n_ctx` for
-"what would the next reload use". `ChatSessionStore` does NOT read
-`ModelStore`; no cycle.
-
-`modelStore.runtimeNCtx` is the canonical observable for "the n_ctx
-the running context was loaded with" (derived from
-`runtimeContextSettings?.n_ctx`).
-`modelStore.pendingReloadRequired` / `pendingReloadDiff` are derived
-getters surfacing the configured-vs-running gap across the whole
-`contextInitParams` struct; Settings reads these directly.
+**n_ctx resolution.** There is no override layer. Banner-side readers
+(`BannerRow` / `resolveBannerVariant`, `usePalLoadHint`) read
+`modelStore.activeContextSettings?.n_ctx` for "what is actually loaded"
+and `modelStore.contextInitParams.n_ctx` for "what the next reload would
+use". `ChatSessionStore` does NOT read `ModelStore` — `BannerRow` and
+`usePalLoadHint` perform the cross-store reads, so there is no cycle.
 
 **Cleanup-LANDED (id reconciliation, was cleanup #1)**: `step.toolCalls` is
 appended **once** after `step_finished` via `appendToolCall`, with normalized
@@ -1008,9 +996,9 @@ returns exactly one of five variants in this precedence order:
    not `contextFull`. Per-draft dismiss, reappears next turn if still
    triggered.
 3. `context-remote-hedged` — remote session, weak-signal heuristic
-   (all four conditions: not `finishReason==='length'`,
-   `tokensPredicted >= 500`, text doesn't end on terminal punctuation).
-   Per-draft dismiss; re-derives every render.
+   (all of: `finishReason !== 'length'`, `tokensPredicted >= 500`,
+   `content` doesn't end on terminal punctuation). Per-draft dismiss;
+   re-derives every render.
 4. `html-soft-cap` — `htmlPreviewCount >= 4`. Existing rule preserved;
    context variants take precedence so the visible bug (truncated
    replies) wins over the preventative hint.
@@ -1034,15 +1022,15 @@ Hard invariants:
   `effectiveNCtx` makes the still-persisted snapshot stale on the
   read-side and the banner falls through to warning/none without
   requiring a new inference to overwrite the snapshot.
-- **Snackbar focus gate**: both the reload snackbar (driven by
-  `useContextBanner`) and the pal-load hint (driven by `usePalLoadHint`)
-  are gated by `useIsFocused()` in `ChatView`. State persists across
-  navigation but the surface is suppressed when the chat screen is
-  off-screen, so the snackbars never appear over drawers, settings, or
-  model pickers. `usePalLoadHint` also gates its predicate evaluation
-  by focus — it sets the per-signature suppressor marker only after the
-  predicate ran, so a re-focus with the same signature can still raise
-  the hint.
+- **Snackbar focus gate**: both the reload snackbar (raised by the
+  `IncreaseContextSheet` confirm callbacks, hosted in `ChatView`) and
+  the pal-load hint (`usePalLoadHint`) are gated by `useIsFocused()` in
+  `ChatView`. State persists across navigation but the surface is
+  suppressed when the chat screen is off-screen, so the snackbars never
+  appear over drawers, settings, or model pickers. `usePalLoadHint` also
+  gates its predicate evaluation by focus — it sets the per-signature
+  suppressor marker only after the predicate ran, so a re-focus with the
+  same signature can still raise the hint.
 - **Single-surface dismiss**: when the reload snackbar fires, the
   pal-load hint snackbar is dismissed synchronously in the same React
   event handler. Both setters land in one auto-batched commit (React
@@ -1050,14 +1038,18 @@ Hard invariants:
   `onAction()` follows the same pattern: it dismisses itself before
   returning to the caller.
 
-The "Increase context" CTA opens `IncreaseContextSheet`. Confirm flow
-calls `modelStore.setNContext(target)` (writes the global Settings
-value) then `releaseContext → initContext`, and shows an indefinite
-reload snackbar that flips to success / failure on completion. The
-gesture is identical from chat and from Settings — both write the
-same global. On failure the hook restores the prior `n_ctx` value
-with a second `setNContext` call; chat history is preserved (messages
-live in `ChatSessionStore`, not in `LlamaContext`).
+The "Increase context" CTA opens `IncreaseContextSheet` with the
+resolver-supplied target n_ctx. The target is the next-fit n_ctx from
+`computeNextFitNCtx` — the next doubling step whose
+`getModelMemoryRequirement(...)` is `<= modelStore.availableMemoryCeiling`.
+There is no n_ctx slider, so the device memory ceiling is the sole upper
+bound; when nothing larger fits, `nextNCtx` is `undefined` and the banner
+hides the increase CTA, offering only [New chat]. Confirm calls
+`modelStore.setNContext(target)` (the same global Settings value) then
+`releaseContext → initContext`, while `ChatView` shows an indefinite
+reload snackbar that flips to success / failure. On failure the sheet
+restores the prior `n_ctx` with a second `setNContext` call; chat history
+is preserved (messages live in `ChatSessionStore`, not in `LlamaContext`).
 
 See `pals-and-talents.md` §5a I8 for the `recommendedContextTokens`
 declarative hint that powers (a) the pal-load snackbar trigger and

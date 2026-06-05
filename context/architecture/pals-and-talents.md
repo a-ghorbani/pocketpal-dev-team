@@ -263,18 +263,19 @@ shutdown). Aborted runs therefore land in `done`, not a dedicated status.
   not shadow built-ins by accident. There is no diagnostic for collisions —
   treat unique names as an authoring contract.
 - **I8 (recommendedContextTokens is declarative)**: the optional
-  `TalentEngine.recommendedContextTokens` is read at exactly two pure
-  sites — the pal-load hint trigger (`usePalLoadHint`) and the
-  heavy-talent post-fail sub-copy lookup in the banner-variant
-  resolver. It never drives per-turn behaviour; engines without the
-  field continue to work unchanged. `RenderHtmlEngine` declares
-  `4096`; `CalculateEngine` and `DatetimeEngine` omit. The pal-load
-  hint predicate is itself focus-gated via `useIsFocused()` so it only
-  evaluates while the chat surface is mounted and visible — the
-  per-signature suppressor marker is set only after the predicate
-  actually ran, so the hint can re-fire on the next focus event with
-  the same `(palId, n_ctx, talents)` signature. See `chat-flow.md`
-  §§ 4a–4i for the full banner / snackbar contract.
+  `TalentEngine.recommendedContextTokens` is read at exactly two sites —
+  the pal-load hint trigger (`usePalLoadHint`) and the heavy-talent
+  sub-copy lookup on the `context-full` banner
+  (`BannerRow.deriveHeavyTalentName`, whose result is passed through the
+  pure `resolveBannerVariant`). It never drives per-turn behaviour or the
+  banner trigger threshold; engines without the field work unchanged.
+  `RenderHtmlEngine` declares `4096`; `CalculateEngine` and
+  `DatetimeEngine` omit. The pal-load hint predicate is focus-gated via
+  `useIsFocused()` so it only evaluates while the chat surface is mounted
+  and visible — the per-signature suppressor marker is set only after the
+  predicate ran, so the hint can re-fire on the next focus event with the
+  same `(palId, n_ctx, talents)` signature. See `chat-flow.md` §4a, §4c,
+  and §9f for the full banner / snackbar contract.
 
 ### 5b. What each component does
 
