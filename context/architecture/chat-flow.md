@@ -42,9 +42,11 @@ ask "is this an architecture change?" before approving.
   returns exactly one of context-full / context-warning /
   context-remote-hedged / html-soft-cap / none. The context-* variants
   are suppressed when no `LlamaContext` is loaded
-  (`activeModelId === undefined` or `activeContextSettings` absent — the
-  snapshot may be hydrated and inactionable); html-soft-cap is
-  independent of model state.
+  (`activeModelId === undefined`). The nCtx-reading variants (context-full,
+  context-warning) additionally require a known runtime n_ctx
+  (`activeContextSettings.n_ctx`); context-remote-hedged does not read
+  n_ctx (remote models never set `activeContextSettings.n_ctx`) and gates
+  on a loaded model only. html-soft-cap is independent of model state.
 - **Loaded n_ctx is the user's only runtime signal.** Every reload path
   (Settings, the banner CTA, Models screen, auto-load) honors
   `contextInitParams.n_ctx` by construction; there is no hidden state
