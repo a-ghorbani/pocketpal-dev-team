@@ -472,9 +472,9 @@ the latest turn — see D4.
 | `metadata.interrupted`                   | `updateMessage` from the catch path (abort with partial content) |
 | `metadata.truncationLikely`              | `updateMessage` from the catch path, only when the tool-args JSON parse error fires |
 | `metadata.hitMaxTurns`                   | `updateMessage` from `run_finished`, only when `result.hitMaxTurns === true` (absent otherwise) |
-| `chatSessionStore.lastCompletionResult`  | `recordCompletionSnapshot`, called by `useChatSession` at `run_finished` AND abort-with-partial-content (same site that writes `metadata.completionResult`); `setActiveSession` hydrates from the newest turn on disk; `resetActiveSession` clears |
-| `chatSessionStore.dismissedBannerVariants` | `BannerRow` on user dismiss (`setBannerDismissed`); cleared per-draft by `recordCompletionSnapshot`, on `deleteSession(id)`, as a whole-op clear in `bulkDeleteSessions()`, and on `resetActiveSession` / `setActiveSession` |
-| `chatSessionStore.consecutiveFullFailures` | `recordCompletionSnapshot` (called from `useChatSession` at `run_finished` / abort-with-partial-content): increment on `snapshot.contextFull`, reset otherwise; cleared on `resetActiveSession` / `setActiveSession` |
+| `chatSessionStore.lastCompletionResult`  | `recordCompletionSnapshot`, called by `useChatSession` at `run_finished` AND abort-with-partial-content (same site that writes `metadata.completionResult`); `setActiveSession` hydrates from the newest turn on disk; cleared on `resetActiveSession` and on `removeMessagesFromId` (edit/regenerate invalidates the frozen snapshot) |
+| `chatSessionStore.dismissedBannerVariants` | `BannerRow` on user dismiss (`setBannerDismissed`, incl. the per-draft `context-full` dismiss); cleared per-draft by `recordCompletionSnapshot`, on `deleteSession(id)`, as a whole-op clear in `bulkDeleteSessions()`, on `removeMessagesFromId` (edit/regenerate), and on `resetActiveSession` / `setActiveSession` |
+| `chatSessionStore.consecutiveFullFailures` | `recordCompletionSnapshot` (called from `useChatSession` at `run_finished` / abort-with-partial-content): increment on `snapshot.contextFull`, reset otherwise; cleared on `resetActiveSession` / `setActiveSession` / `removeMessagesFromId` |
 | `modelStore.contextInitParams.n_ctx` | Settings n_ctx input (`ModelStore.setNContext`) AND `IncreaseContextSheet` confirm (calls `setNContext(target)` then `releaseContext` + `initContext`; on failure restores the prior value with a second `setNContext`). Single global — no per-session or pending override. |
 | `chatSessionStore.palLoadHintSeen` | `usePalLoadHint` at emit time (`markPalLoadHintSeen`); cleared on `resetActiveSession` |
 | `modelStore.activeContextSettings` | `ModelStore.initContext` on success; cleared on release. Set only by those two writers. |
@@ -991,9 +991,10 @@ content is computed by a pure resolver from a single
 `CompletionResultSnapshot` written at every turn boundary. The resolver
 returns exactly one of five variants in this precedence order:
 
-1. `context-full` — `snap.contextFull === true`. Sticky (no dismiss);
-   exits via auto-clear when the next turn satisfies
-   `used < nCtx - AUTOCLEAR_RUNWAY` AND no §4a match.
+1. `context-full` — `snap.contextFull === true`. Per-draft dismiss
+   (reappears next turn if still full); also exits via auto-clear when
+   the next turn satisfies `used < nCtx - AUTOCLEAR_RUNWAY` AND no §4a
+   match, and when the snapshot is invalidated by a message edit/regenerate.
 2. `context-warning` — local session, `ratio >= WARNING_THRESHOLD` (0.80),
    not `contextFull`. Per-draft dismiss, reappears next turn if still
    triggered.
