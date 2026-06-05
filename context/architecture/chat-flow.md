@@ -17,14 +17,15 @@ Convention used in this doc:
 Load-bearing rules. If a change breaks one of these, the reviewer should
 ask "is this an architecture change?" before approving.
 
-- **Runtime vs configured n_ctx.** Banner, sticky-full normaliser, and
-  pal-load hint read `modelStore.runtimeNCtx` — the n_ctx the running
-  LlamaContext was actually initialised with. `contextInitParams.n_ctx`
-  is the *next-init intent* and must never appear in a banner-side
-  read. If a future field exposes "the n_ctx for X", it must say which
-  copy of state it represents. Two named helpers enforce the split:
-  `runtimeNCtxFor` for readers (caps at runtime), `nextInitNCtxFor`
-  for the loader (no cap).
+- **Single global n_ctx, two named views.** Banner, sticky-full
+  normaliser, pal-load hint, and the active model card read
+  `modelStore.runtimeNCtx` — the n_ctx the running LlamaContext was
+  actually initialised with. `modelStore.contextInitParams.n_ctx` is
+  the *next-init intent* (writable from Settings slider and from the
+  banner "Increase context" CTA). Both views read from the same
+  global — there is no per-session or pending override layer. If a
+  future field exposes "the n_ctx for X", it must say which copy of
+  state it represents.
 - **Snapshot truth.** The `lastCompletionResult` stored on the session
   store and the matching `metadata.completionResult` persisted on the
   newest assistant message is normalised at the moment of writing
@@ -42,17 +43,16 @@ ask "is this an architecture change?" before approving.
   are suppressed when no LlamaContext is loaded (the snapshot may be
   hydrated and inactionable); html-soft-cap is independent of model
   state.
-- **Override map outlives the LlamaContext, capped at runtime.**
-  `sessionContextOverrides` survives release/init cycles within a
-  process so a confirmed override applies on the next initContext via
-  `nextInitNCtxFor`. When the runtime can't honour the stored value
-  (silent reload-to-default after an OS evict), `runtimeNCtxFor` caps
-  it at runtime and a one-shot advisory snackbar surfaces.
 - **Settings drift is observable, not just internal.**
   `modelStore.pendingReloadRequired` is the derived getter every
   Settings-affecting surface reads — Settings screen today, future
   header chip / chat banner if needed. Adding a comparison to ad-hoc
   `contextInitParams.x === runtimeContextSettings.x` is a smell.
+- **Loaded n_ctx is the user's only runtime signal.** The active model
+  card surfaces `Loaded: N` whenever a context is alive. There is no
+  hidden state shadowing Settings — every reload path (Settings,
+  banner, Models screen, auto-load) honors `contextInitParams.n_ctx`
+  by construction.
 
 ---
 
@@ -475,10 +475,8 @@ the latest turn — see D4.
 | `chatSessionStore.lastCompletionResult`  | `useChatSession` at `run_finished` AND abort-with-partial-content (same write that updates `metadata.completionResult`); `setActiveSession` hydrates from disk; `resetActiveSession` clears |
 | `chatSessionStore.dismissedBannerVariants` | `ChatView` `BannerRow` on user dismiss (`setBannerDismissed`); cleared per-session by the `run_finished` writer, on `deleteSession`, and per-id on `bulkDeleteSessions` |
 | `chatSessionStore.consecutiveFullFailures` | `useChatSession` at `run_finished` / abort-with-partial-content: increment on `snap.contextFull`, reset otherwise |
-| `chatSessionStore.sessionContextOverrides[sessionId]` | `useContextBanner.handleConfirmIncrease` (session branch — when `activeSessionId !== null`); `createNewSession` consuming a pending value into the new id; cleared on `deleteSession` and per-id on `bulkDeleteSessions`. |
-| `chatSessionStore.pendingContextOverride` | `useContextBanner.handleConfirmIncrease` (no-session branch — when `activeSessionId === null`); consumed and cleared by `createNewSession`; cleared by `resetActiveSession` and `setActiveSession` (drawer-switch leak guard). |
+| `modelStore.contextInitParams.n_ctx` | Settings slider/input (`ModelStore.setNContext`) AND `useContextBanner.handleConfirmIncrease` (which calls `setNContext(target)` then `releaseContext` + `initContext`; on failure, restores the prior value with a second `setNContext` call). Single global — no per-session or pending override. |
 | `chatSessionStore.palLoadHintSeen` | `usePalLoadHint` at emit time (`markPalLoadHintSeen`); cleared on `resetActiveSession` |
-| `chatSessionStore.silentRevertAcknowledged` | `useContextBanner` advisory effect (`markSilentRevertAcknowledged`) when a stored override exceeds the current runtime n_ctx; never cleared (one-shot per `${sessionId}:${runtimeNCtx}`, process-lifetime). |
 | `modelStore.runtimeContextSettings` | `ModelStore.initContext` on success; cleared in `_releaseContextInternal`. Set only by these two writers. |
 | `agentUiState` (full bag)                | `agentStateReducer` only (canonical state source)   |
 | `chatSessionStore.isStopping`            | `useChatSession.handleStopPress` (set), `handleSendPress` cleanup paths (clear) |
@@ -490,26 +488,15 @@ the latest turn — see D4.
 
 Reading is unrestricted.
 
-**Cross-store read (banner / increase-context CTA)**: a single one-way
-read direction `ModelStore → ChatSessionStore` is permitted.
-`ModelStore.getEffectiveContextInitParams` consults both
-`chatSessionStore.sessionContextOverrides.get(activeSessionId)` and
-`chatSessionStore.pendingContextOverride` to pick the n_ctx for the
-next initContext. Two named helpers in `src/utils/bannerVariantResolver.ts`
-encode the precedence:
-
-- `nextInitNCtxFor(overrides, activeSessionId, configuredNCtx, pending?)`
-  — called by `ModelStore.getEffectiveContextInitParams`. Returns the
-  consented override verbatim (no cap); the loader honours user intent.
-- `runtimeNCtxFor(overrides, activeSessionId, runtimeNCtx, pending?)`
-  — called by `useContextBanner`, `useChatSession` (sticky-full
-  branch), and `usePalLoadHint`. Caps intrinsically at `runtimeNCtx`
-  so a stored override that no longer fits the running LlamaContext
-  (silent reload-to-default after an OS evict) doesn't under-warn.
-
-Both helpers use the same precedence (`session override > pending >
-base`) — they differ only in what "base" means and whether they cap.
-`ChatSessionStore` does NOT read `ModelStore`; no cycle.
+**n_ctx resolution is trivial after the override layer was removed:**
+`ModelStore.getEffectiveContextInitParams` reads
+`this.contextInitParams.n_ctx` directly — no override consult, no
+session-keyed lookup, no precedence chain. Banner-side readers
+(`useContextBanner`, `useChatSession` sticky-full branch,
+`usePalLoadHint`, ModelCard) read `modelStore.runtimeNCtx` for "what
+is actually loaded" and `modelStore.contextInitParams.n_ctx` for
+"what would the next reload use". `ChatSessionStore` does NOT read
+`ModelStore`; no cycle.
 
 `modelStore.runtimeNCtx` is the canonical observable for "the n_ctx
 the running context was loaded with" (derived from
@@ -1064,15 +1051,13 @@ Hard invariants:
   returning to the caller.
 
 The "Increase context" CTA opens `IncreaseContextSheet`. Confirm flow
-branches by `activeSessionId`: when a session is active, write
-`sessionContextOverrides[sessionId]=target`; when no session is active
-(user is on the new-chat scratch surface), write
-`pendingContextOverride=target` and let `createNewSession` copy it
-onto the session-keyed Map at session birth. Both branches then run
-`releaseContext → initContext` and show an indefinite reload snackbar
-that flips to success / failure on completion. Failure reverts the
-override; chat history is preserved (messages live in
-`ChatSessionStore`, not in `LlamaContext`).
+calls `modelStore.setNContext(target)` (writes the global Settings
+value) then `releaseContext → initContext`, and shows an indefinite
+reload snackbar that flips to success / failure on completion. The
+gesture is identical from chat and from Settings — both write the
+same global. On failure the hook restores the prior `n_ctx` value
+with a second `setNContext` call; chat history is preserved (messages
+live in `ChatSessionStore`, not in `LlamaContext`).
 
 See `pals-and-talents.md` §5a I8 for the `recommendedContextTokens`
 declarative hint that powers (a) the pal-load snackbar trigger and

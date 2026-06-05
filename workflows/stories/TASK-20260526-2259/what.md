@@ -529,4 +529,100 @@ Folded into A3.2 above. Both scenarios now assert resolver-side freshness post-r
 
 ---
 
+## Amendment 4 — Override layer removed pre-merge (Phase 6)
+
+### A4.0 — Decision reversal
+
+PR #748 is still draft. Hunting a user-reported bug surfaced that the per-session override layer (`sessionContextOverrides` Map + `pendingContextOverride` slot) is the root cause of a structural problem, not an incidental defect:
+
+**Symptom.** Set Settings `n_ctx` = 250 → in chat, banner-increase to 2048 → return to Settings → mismatch banner fires ("settings differ from loaded, reload to apply") → click Reload → reloads at 2048 again, not 250 → mismatch banner sticks → button appears broken.
+
+**Root cause.** `getEffectiveContextInitParams` honors `sessionContextOverrides[activeSessionId]` (and `pendingContextOverride`) ahead of `contextInitParams.n_ctx` via `nextInitNCtxFor`. Every `initContext` path — Settings reload, Models-screen reload, auto-reload of `lastUsedModelId`, ChatView auto-load — is shadowed by an override the user can neither see nor clear. The Settings reload button is not unique; the same shadow applies anywhere a reload originates while the overridden session is active.
+
+**Why the layer can't be patched.** The override is invisible (no UI surfaces it) and one-way (no user-visible clear). Any rule we add — "Settings reload clears overrides", "Lower Settings clamps overrides" — re-encodes the same answer (let the user's explicit intent win) under a new conditional, while keeping the dual source of truth that makes the bug class possible.
+
+**Resolution.** Collapse the layer. Single source of truth: `modelStore.contextInitParams.n_ctx`. Banner "Increase context" writes the global value, then reloads. Every reload path honors Settings by construction. The Settings mismatch banner means exactly what it says. To compensate for the lost "this chat is running at N" signal, the active model card gains a `Loaded: N` line — discoverable on inspection, never silently load-bearing.
+
+### A4.1 — Trade-off acknowledged
+
+Lost workflow: "low Settings default for battery, bump one chat for `render_html`". After Amendment 4, bumping in chat A also raises the global default, so chat B will load at the bumped value next time. User can re-lower Settings to restore.
+
+Acceptable because:
+
+- The cohort that uses per-chat granularity is small (no telemetry signal pre-merge; this is a designed-for-not-observed feature).
+- The cost is **visible and recoverable** (Settings shows the new value, user can lower it). The current override is invisible and non-recoverable — the worse failure mode.
+- Every reload from Settings now honors Settings. That contract was the user's primary expectation.
+
+### A4.2 — State deletions
+
+| Removed | Where | Why |
+|---|---|---|
+| `ChatSessionStore.sessionContextOverrides: Map<sessionId, n_ctx>` | §1c | Replaced by global `contextInitParams.n_ctx`. |
+| `ChatSessionStore.pendingContextOverride: number \| undefined` | A3.1 / D17 | Replaced by global write. No-session branch calls `modelStore.setNContext(target)` directly. |
+| `ChatSessionStore.silentRevertAcknowledged: Set<sessionId>` | A3 / Phase 5 (D3) | Silent-revert scenario doesn't exist without an override layer to revert from. Eviction + reload returns to the same Settings value. |
+| `nextInitNCtxFor`, `runtimeNCtxFor` in `bannerVariantResolver` | §5 | Override-aware resolution no longer needed. Resolver reads `modelStore.contextInitParams.n_ctx` (configured) and `modelStore.runtimeNCtx` (loaded) directly. |
+| `silentRevertSnackbar` state + effect in `useContextBanner` | A3.3 / D19 (snackbar set) | No silent-revert state to surface. |
+| l10n key `chat.contextWarning.silentRevertAdvisory` | en.json | Dead string. |
+| `setActiveSession` override-clear branch (B-1 fix) | A3.1 | No override state to clear on session switch. |
+| `createNewSession` pending-override carry into new session id | A3.1 | No pending override to carry. |
+| `bulkDeleteSessions` per-id override cleanup (S-5 fix) | A3.1 | No per-id map to clean. |
+| Override-aware n_ctx resolution in `usePalLoadHint` | §4i | Reads global `n_ctx` directly. |
+
+### A4.3 — Code additions
+
+| Added | Where | Purpose |
+|---|---|---|
+| `Loaded: N` line on the active model card | model list card component | Surfaces runtime `n_ctx` whenever it differs from configured (or just always — visual weight subtle enough that "matches Settings" case is not noisy). Replaces the override as the runtime-vs-configured signal. |
+
+### A4.4 — Updated single-writer rule (§5 successor)
+
+`modelStore.contextInitParams.n_ctx` writers (single source of truth):
+1. Settings screen slider/input → `modelStore.setNContext(value)`.
+2. Banner "Increase context" CTA → `modelStore.setNContext(target)` then `releaseContext` + `initContext`; on failure, restore prior value.
+
+Readers (after collapse):
+- `getEffectiveContextInitParams` — reads `this.contextInitParams.n_ctx` directly, no override layer.
+- `useContextBanner` — `modelStore.runtimeNCtx` (loaded) for variant resolution + meter, `modelStore.contextInitParams.n_ctx` (configured) for the Increase target ceiling.
+- `usePalLoadHint` — `modelStore.runtimeNCtx` (loaded) ?? `modelStore.contextInitParams.n_ctx` (configured).
+- Active model card — `modelStore.runtimeNCtx` for the `Loaded: N` line.
+
+### A4.5 — Updated decisions
+
+| ID | Decision | Status |
+|---|---|---|
+| D17 | (Amendment 3) No-session override → `pendingContextOverride` slot | **Reversed.** No-session branch writes global directly. |
+| D3 | (Phase 5) Snackbar on silent override revert | **Reversed.** Scenario gone with override layer. |
+
+Adds:
+
+| ID | Decision | Rationale |
+|---|---|---|
+| D21 | (A4) Single global `n_ctx`. Banner Increase writes global; all reload paths honor global by construction. | Eliminates dual-source-of-truth class of bugs (Settings-reload-shadowed-by-override). Cost: per-chat granularity lost; recoverable via Settings. |
+| D22 | (A4) Active model card shows `Loaded: N` line. | Replaces the invisible override layer as the runtime-vs-configured signal. Discoverable, never load-bearing. |
+
+### A4.6 — Tests retired
+
+- Per-session override behavior (sessionContextOverrides set/get/clear).
+- Pending-override carry-over to new session at `createNewSession`.
+- Override-cleared-on-session-switch (B-1).
+- Override-cleared-on-bulk-delete (S-5).
+- Silent-revert acknowledgement / snackbar suppression.
+
+### A4.7 — Tests added
+
+- `getEffectiveContextInitParams` returns Settings `n_ctx` verbatim.
+- Banner "Increase context" calls `setNContext(target)` then `releaseContext` + `initContext`; on failure, prior `n_ctx` is restored.
+- `pendingReloadDiff` still flags `n_ctx` (and other contextInitParams fields) when configured ≠ loaded.
+- Active model card renders `Loaded: N` line.
+
+### A4.8 — Out of scope
+
+- Per-pal `contextSizeOverride` field. Still deferred to a separate story.
+- "Reset context for this chat" affordance. No per-chat state to reset.
+- Clamping behavior when Settings drops below current `runtimeNCtx`. Handled organically — next reload picks up the lower value like any Settings change.
+- Banner copy changes. Existing strings still apply ("Increase context" → reload at higher value still reads correctly when "higher value" is now the global default).
+- Per-session granularity in any form. If telemetry post-launch shows a real cohort wanting it, revisit; until then, YAGNI.
+
+---
+
 Review history: [./deliberation-log.md](./deliberation-log.md)
