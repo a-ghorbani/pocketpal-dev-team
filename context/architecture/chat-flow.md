@@ -438,8 +438,8 @@ bubble (a UX regression we don't want).
 | `PendingIndicator`                | subtle dot-row indicator + optional label / token-count / "Stopping…" overlay         | text, chrome               |
 | `ChatView`                        | message list + pending indicator (visibility-gated by `status` + `isStopping`)        | per-turn structure         |
 | `BannerRow` (`ChatView/BannerRow.tsx`, in the input slot) | ONE of five variants from `resolveBannerVariant` (`context-full` / `context-warning` / `context-remote-hedged` / `html-soft-cap` / none) | per-variant logic (lives in the resolver) |
-| `IncreaseContextSheet`            | confirm sheet for the banner CTA + reloads the model; reports result to `ChatView`'s reload snackbar | computing the target (resolver supplies the memory-gated next-fit n_ctx) |
-| `resolveBannerVariant` (pure, `utils/bannerVariantResolver.ts`) | resolved variant + payload (memory-gated next-fit n_ctx via `computeNextFitNCtx`, heavy-talent name) | JSX, MobX writes, async |
+| `IncreaseContextSheet`            | owns target selection (slider over `CONTEXT_LADDER`, filtered to stops above current n_ctx and capped at `model.ggufMetadata.context_length`, 3-zone fit classifier); reloads the model + reports result to `ChatView`'s reload snackbar | the banner variant; the resolver's `ratio` |
+| `resolveBannerVariant` (pure, `utils/bannerVariantResolver.ts`) | resolved variant + payload (`ratio` = `used / effectiveNCtx` on the warning/full branches, heavy-talent name) | JSX, MobX writes, async, the increase target |
 | `usePalLoadHint` (pure hook)      | one-shot snackbar trigger when a heavy-talent pal loads below its recommended n_ctx  | banner state (I8 — snackbar layer is separate) |
 
 **Footer-ownership decision (D9)**: Message owns chrome **universally** for all
@@ -1040,18 +1040,31 @@ Hard invariants:
   `onAction()` follows the same pattern: it dismisses itself before
   returning to the caller.
 
-The "Increase context" CTA opens `IncreaseContextSheet` with the
-resolver-supplied target n_ctx. The target is the next-fit n_ctx from
-`computeNextFitNCtx` — the next doubling step whose
-`getModelMemoryRequirement(...)` is `<= modelStore.availableMemoryCeiling`.
-There is no n_ctx slider, so the device memory ceiling is the sole upper
-bound; when nothing larger fits, `nextNCtx` is `undefined` and the banner
-hides the increase CTA, offering only [New chat]. Confirm calls
-`modelStore.setNContext(target)` (the same global Settings value) then
-`releaseContext → initContext`, while `ChatView` shows an indefinite
-reload snackbar that flips to success / failure. On failure the sheet
-restores the prior `n_ctx` with a second `setNContext` call; chat history
-is preserved (messages live in `ChatSessionStore`, not in `LlamaContext`).
+The "More room" CTA opens `IncreaseContextSheet` without a precomputed
+target — the sheet owns target selection. The user picks a larger context
+size on a slider over `CONTEXT_LADDER`, filtered to stops above the current
+n_ctx and capped at `model.ggufMetadata.context_length` (the model max is
+appended as the rightmost stop). The sheet classifies each stop into three
+zones via a pure, caller-injected fit helper: `fits` (`getModelMemoryRequirement(...)`
+`<= max(largestSuccessfulLoad, availableMemoryCeiling)`), `tight`
+(`<= DeviceInfo.getTotalMemory()`), else `wont_fit`. Confirm is disabled on
+a `wont_fit` stop. When no stop above the current value `fits`, the sheet
+hides confirm entirely and offers a [New chat] affordance so it is never a
+dead-end (it is reachable from the pal-load hint's "More room" action even
+when the banner CTA is hidden). The banner's increase CTA mirrors the same
+OOM-safe intent: it is shown only when at least one ladder tier above the
+current n_ctx `fits` the device; otherwise the full banner offers only
+[New chat].
+
+Confirm calls `modelStore.setNContext(chosen)` (the same global Settings
+value) then `releaseContext → initContext`, while `ChatView` shows an
+indefinite reload snackbar that flips to success / failure. On failure the
+sheet restores the prior `n_ctx` with a second `setNContext` call AND
+re-`initContext`s so the model ends up loaded, not just the setting
+restored; chat history is preserved (messages live in `ChatSessionStore`,
+not in `LlamaContext`). The warning and full banners also render a fullness
+meter whose width is the resolver's `used / effectiveNCtx` ratio (clamped
+`[0, 1]`); the meter is absent on the remote-hedged variant.
 
 See `pals-and-talents.md` §5a I8 for the `recommendedContextTokens`
 declarative hint that powers (a) the pal-load snackbar trigger and
