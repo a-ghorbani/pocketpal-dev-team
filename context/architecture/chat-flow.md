@@ -1010,9 +1010,15 @@ returns exactly one of five variants in this precedence order:
 Hard invariants:
 
 - ONE banner visible at any time (resolver short-circuits).
-- `snap.contextFull === true` iff the most recent finished turn matches
-  the OR predicate (`result.context_full` / `result.truncated` /
-  `metadata.truncationLikely` / remote `finish_reason==='length'`).
+- `snap.contextFull === true` iff the most recent turn matches the OR
+  predicate (`result.context_full` / `result.truncated` /
+  `metadata.truncationLikely` / remote `finish_reason==='length'` /
+  a thrown `"Context is full"` completion error). The last source is the
+  prompt-processing overflow: when the prompt itself exceeds n_ctx and
+  `ctx_shift` is off (the llama.rn default), the native layer throws before
+  any token, so it surfaces via the completion catch path rather than
+  `run_finished` — the catch records a `contextFull` snapshot (used pinned to
+  n_ctx) even when the turn produced no content.
 - `lastCompletionResult` and `metadata.completionResult` are written
   together, in the same MobX action.
 - The pal-load hint (`usePalLoadHint`) is a snackbar, not a banner.
