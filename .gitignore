@@ -9,6 +9,7 @@ workflows/reviews/*
 .env
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/projects/
 
 # Machine-local config/secret stash used for populating worktrees
 # (keystores, GoogleService-*, Env.xcconfig, e2e/.env, devices.json, etc.)
