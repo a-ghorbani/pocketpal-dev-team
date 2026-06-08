@@ -1,3 +1,0 @@
---------- beginning of perf
---------- beginning of system
---------- beginning of main
