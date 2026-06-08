@@ -15,7 +15,59 @@ Typical invocation:
 /review-l10n 683          # Weblate auto-merge PR
 /review-l10n PR-683       # same, by branch label
 /review-l10n weblate-translations   # branch ref
+/review-l10n --auto       # unattended merge-gate (discovers the open Weblate PR)
 ```
+
+## Auto mode (`--auto`) — unattended merge gate
+
+`--auto` turns the review into a **merge decision** for the recurring Weblate
+auto-merge PR. It is designed to run unattended (twice-weekly remote routine) and
+replaces the "ask before every write" gate with a deterministic rubric.
+
+Flow (orchestrated by `scripts/auto-review.sh` → semantic subagents → `scripts/decide.mjs` → `scripts/apply-decision.sh`):
+
+1. **Discover** the open Weblate PR (`author:weblate`, head `weblate-translations`). No PR → exit cleanly.
+2. **Pre-review** (`auto-review.sh`): fetch head/base locale JSONs, run coverage + placeholder checks, split the diff per language.
+3. **Semantic review**: spawn one `general-purpose` subagent per *changed wired* language (parallel, blind to each other), each returning STRICT-JSON findings: `[{lang,key,severity:WRONG|AWKWARD,en,current,new?,proposal?,note}]`. Collate into `findings.json`.
+4. **Mechanical gate** (`decide.mjs`): split into two layers and write `decision.json` + `plan.json`.
+   - **Layer 1 — hard blockers (non-overridable, no judgment):** out-of-scope file (anything outside `src/locales/*.json`), malformed JSON, placeholder mismatch in a changed wired lang, or GitHub `CONFLICTING`. These can crash/break the app or are unsafe to auto-merge, so any one of them => `mechanical_verdict: HOLD` and the decision is final. The model cannot wave these through.
+   - **Layer 2 — semantic findings (adjudicable):** `WRONG` (wired) and `AWKWARD` findings. These never auto-decide. With no hard blockers, `mechanical_verdict: ADJUDICATE`.
+   - Unwired-language issues are recorded (`ignoredUnwired`) but never gate — they don't ship in-app.
+5. **Adjudicate** (main session, only when `ADJUDICATE`): the session reads **all** `WRONG` + `AWKWARD` findings together (key, en, current, proposed fix, rationale, lang) and makes one reasoned `MERGE` or `HOLD` call — "are these wrongs terrible enough to keep off prod, or tolerable to fix next round?" This judgment lives with the main model, not a per-language subagent or a count threshold.
+6. **Act** (`apply-decision.sh`, **dry-run by default; `--execute` to act**). Pass the session's call as `--decision=MERGE|HOLD --reason=...`; it is ignored if Layer 1 already forced HOLD.
+   - **MERGE:** `gh pr merge` first (needs `--admin` to bypass branch protection — the routine *is* the review), then file all Weblate writes (corrections + suggestions, state=10) for the next cycle.
+   - **HOLD:** do **not** merge; apply the Weblate writes so the source is fixed and the *next* regenerated PR is cleaner.
+   - Either way: post a summary comment on the PR (and the caller fires a push notification).
+
+Why this shape: structural breakage (placeholders/JSON) is a fact, not an opinion — it stays mechanical. Translation quality is a judgment — it goes to the model, which sees the whole picture at once rather than a single subagent's local call.
+
+Secrets for unattended runs: `WLT_TOKEN` (Weblate) and a `gh` token with merge
+scope must be present in the run environment — a remote routine needs them
+provisioned; a local cron inherits `.env` + the gh keyring.
+
+## Fill mode (`--fill`)
+
+`--fill <lang[,lang...]>` backfills **genuinely-missing** strings (keys present in
+`en.json` but absent/empty in the locale) for wired languages, written to Weblate
+at **state=10 ("needs-editing")**.
+
+Run it on demand, not as part of the twice-weekly merge gate — it is a proactive,
+batched backfill, not a PR decision.
+
+**Know before running:** a value in the locale JSON **ships** — Weblate `state` is a
+review flag, not a publish gate. So filled strings reach users on the next
+regenerated Weblate PR, *replacing the English fallback*. This is the agreed policy
+(MT baseline, community refines), but it means fills are a deliberate
+ship-machine-translation action, not just a suggestion.
+
+Flow:
+1. `find-missing.mjs <head-dir> <lang> --json <out>` → the missing keys (excludes present-but-identical-to-en, which may be intentional, e.g. brand names).
+2. Split each language's missing list into batches; spawn one translation subagent per batch (parallel). Each gets its batch + the existing `<lang>.json` as a style/terminology anchor, must **preserve `{{placeholders}}` byte-identical**, keep brand/engine/model names English, and write `[{lang,key,en,new,note?}]` to an output file.
+3. `build-fill-plan.mjs --missing-dir=<d> --out-dir=<d> --langs=ja,ms` → validates (placeholders, coverage, dupes; skips whitespace-only `en` icon labels) and assembles `fill-plan.json` (overwrites only, state=10).
+4. `apply-plan.mjs fill-plan.json [--dry-run]` → applies. ~2 req/unit at 1 req/sec, so large backfills take minutes — run in the background. No per-unit comments (avoids flooding Weblate with hundreds).
+
+Scope guidance: start with the laggards (lowest %translated) or finish near-complete
+langs; do all wired only when comfortable shipping that much MT at once.
 
 ## What this skill does
 
@@ -101,7 +153,7 @@ If none qualify, say so explicitly. Do not "round up" 90% to "almost wirable" �
 node skills/review-l10n/scripts/diff-entries.mjs "${SCRATCH}/head" "${SCRATCH}/base" "${SCRATCH}/diff-report.txt"
 
 # Split per language for parallel agents
-awk -v scratch="${SCRATCH}" '/^## [a-z_]+:/ {f=scratch "/diff-" $2 ".txt"; sub(":","",f)} {print > f}' "${SCRATCH}/diff-report.txt"
+awk -v scratch="${SCRATCH}" '/^## [A-Za-z_]+:/ {f=scratch "/diff-" $2 ".txt"; sub(":","",f)} f {print > f}' "${SCRATCH}/diff-report.txt"
 ```
 
 For each changed wired language, spawn a `general-purpose` agent **in parallel**. Each agent gets:
@@ -210,6 +262,11 @@ End with a short summary:
 - `scripts/find-placeholder-issues.mjs` — placeholder mismatch scanner.
 - `scripts/diff-entries.mjs` — per-language diff producer.
 - `scripts/apply-plan.mjs` — Weblate API executor.
+- `scripts/find-missing.mjs` — `--fill`: list en keys missing/empty in a locale.
+- `scripts/build-fill-plan.mjs` — `--fill`: validate subagent translations → fill plan (overwrites, state=10).
+- `scripts/auto-review.sh` — `--auto` pre-review: discover PR, fetch, machine checks, per-lang diff split.
+- `scripts/decide.mjs` — `--auto` merge-gate decision engine → `decision.json` + `plan.json`.
+- `scripts/apply-decision.sh` — `--auto` act path: merge-or-not + Weblate writes + PR comment (dry-run by default).
 - `repos/pocketpal-ai/scripts/validate-l10n.js` — the repo's own (registry-aware) validator.
 - Memory: locale registry lives in `repos/pocketpal-ai/src/locales/index.ts`.
 
