@@ -38,8 +38,9 @@ Flow (orchestrated by `scripts/auto-review.sh` → semantic subagents → `scrip
    - **MERGE:** `gh pr merge` first (needs `--admin` to bypass branch protection — the routine *is* the review), then file all Weblate writes (corrections + suggestions, state=10) for the next cycle.
    - **HOLD:** do **not** merge; apply the Weblate writes so the source is fixed and the *next* regenerated PR is cleaner.
    - Either way: post a summary comment on the PR (and the caller fires a push notification).
+7. **Fill phase (opt-in: `--auto --fill-missing`).** After the merge decision, top up missing strings for wired languages, **uncapped**, per **Fill mode** above: find-missing → model sanity-judge each language's delta (fill new strings; flag-and-skip anything that looks like an `en.json` restructure) → translate contextually in a less-formal register → model quality pass → write at state=10. Fills never change the *current* PR's decision (missing keys aren't in its diff) — they ride the next regenerated PR. Report what was filled and anything skipped.
 
-Why this shape: structural breakage (placeholders/JSON) is a fact, not an opinion — it stays mechanical. Translation quality is a judgment — it goes to the model, which sees the whole picture at once rather than a single subagent's local call.
+Why this shape: structural breakage (placeholders/JSON) is a fact, not an opinion — it stays mechanical. Everything that needs taste — the merge call, "does this backfill make sense," and translation quality — goes to the model, which sees the whole picture at once rather than a single subagent's local call or a numeric threshold.
 
 Secrets for unattended runs: `WLT_TOKEN` (Weblate) and a `gh` token with merge
 scope must be present in the run environment — a remote routine needs them
@@ -51,8 +52,12 @@ provisioned; a local cron inherits `.env` + the gh keyring.
 `en.json` but absent/empty in the locale) for wired languages, written to Weblate
 at **state=10 ("needs-editing")**.
 
-Run it on demand, not as part of the twice-weekly merge gate — it is a proactive,
-batched backfill, not a PR decision.
+Runs on demand, or as an opt-in phase of the twice-weekly `--auto` run
+(`--auto --fill-missing`, see Auto mode). **Uncapped** — each run fills whatever is
+missing, so wired languages stay at ~0 untranslated continuously; in steady state
+the per-run delta is just the handful of `en` keys added since the last run. Fill
+closes the *coverage* gap (strings present), not the *approval* gap — drafts sit at
+needs-editing until a human approves them in Weblate.
 
 **Know before running:** a value in the locale JSON **ships** — Weblate `state` is a
 review flag, not a publish gate. So filled strings reach users on the next
@@ -62,12 +67,14 @@ ship-machine-translation action, not just a suggestion.
 
 Flow:
 1. `find-missing.mjs <head-dir> <lang> --json <out>` → the missing keys (excludes present-but-identical-to-en, which may be intentional, e.g. brand names).
-2. Split each language's missing list into batches; spawn one translation subagent per batch (parallel). Each gets its batch + the existing `<lang>.json` as a style/terminology anchor, must **preserve `{{placeholders}}` byte-identical**, keep brand/engine/model names English, and write `[{lang,key,en,new,note?}]` to an output file.
-3. `build-fill-plan.mjs --missing-dir=<d> --out-dir=<d> --langs=ja,ms` → validates (placeholders, coverage, dupes; skips whitespace-only `en` icon labels) and assembles `fill-plan.json` (overwrites only, state=10).
-4. `apply-plan.mjs fill-plan.json [--dry-run]` → applies. ~2 req/unit at 1 req/sec, so large backfills take minutes — run in the background. No per-unit comments (avoids flooding Weblate with hundreds).
+2. **Sanity-judge the delta — model judgment, NOT a numeric cap.** Look at what is missing per language and decide whether filling makes sense. A normal delta is a few newly-added `en` keys → fill. A *large or structural* delta is a signal, not a workload: it usually means an `en.json` rename/restructure, where a "missing" key still has a good **human** translation under the old key name — machine-filling it would replace human work with a draft. If the delta looks like a restructure (e.g. a whole key prefix newly missing while the locale holds orphaned old keys), **don't auto-fill that language — flag and report it** so a human migrates the old translations instead. Reasoning about "does this fill make sense" is the model's job; that is the whole reason we use a model rather than a threshold.
+3. Split each language's missing list into batches; spawn one translation subagent per batch (parallel). Each gets its batch + the existing `<lang>.json` as a style/terminology anchor. Requirements: **preserve `{{placeholders}}` byte-identical**; keep brand/engine/model names in English; **translate contextually** — use the key path, the screen/feature it belongs to, and neighbouring strings to get terminology and meaning right; and use a **natural, less-formal register** — a friendly consumer-app tone, not stiff or over-formal. Write `[{lang,key,en,new,note?}]` to an output file.
+4. **Quality pass — model judgment.** Before writing, review the drafts for real problems (wrong sense, leaked English, over-formal/awkward phrasing, inconsistent terminology) and fix or re-generate. Only placeholder/JSON correctness is mechanical (next step); quality is judged by the model, same principle as the merge gate.
+5. `build-fill-plan.mjs --missing-dir=<d> --out-dir=<d> --langs=...` → validates (placeholders byte-identical, coverage, dupes; skips whitespace-only `en` icon labels) and assembles `fill-plan.json` (overwrites only, state=10).
+6. `apply-plan.mjs fill-plan.json [--dry-run]` → applies. ~2 req/unit at 1 req/sec, so large backfills take minutes — run in the background. No per-unit comments (avoids flooding Weblate with hundreds).
 
-Scope guidance: start with the laggards (lowest %translated) or finish near-complete
-langs; do all wired only when comfortable shipping that much MT at once.
+Scope: the initial backfill brought all wired languages to ~0 untranslated; ongoing,
+the `--fill-missing` phase keeps them there by filling only the per-run delta.
 
 ## What this skill does
 
