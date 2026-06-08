@@ -45,6 +45,30 @@ Secrets for unattended runs: `WLT_TOKEN` (Weblate) and a `gh` token with merge
 scope must be present in the run environment — a remote routine needs them
 provisioned; a local cron inherits `.env` + the gh keyring.
 
+## Fill mode (`--fill`)
+
+`--fill <lang[,lang...]>` backfills **genuinely-missing** strings (keys present in
+`en.json` but absent/empty in the locale) for wired languages, written to Weblate
+at **state=10 ("needs-editing")**.
+
+Run it on demand, not as part of the twice-weekly merge gate — it is a proactive,
+batched backfill, not a PR decision.
+
+**Know before running:** a value in the locale JSON **ships** — Weblate `state` is a
+review flag, not a publish gate. So filled strings reach users on the next
+regenerated Weblate PR, *replacing the English fallback*. This is the agreed policy
+(MT baseline, community refines), but it means fills are a deliberate
+ship-machine-translation action, not just a suggestion.
+
+Flow:
+1. `find-missing.mjs <head-dir> <lang> --json <out>` → the missing keys (excludes present-but-identical-to-en, which may be intentional, e.g. brand names).
+2. Split each language's missing list into batches; spawn one translation subagent per batch (parallel). Each gets its batch + the existing `<lang>.json` as a style/terminology anchor, must **preserve `{{placeholders}}` byte-identical**, keep brand/engine/model names English, and write `[{lang,key,en,new,note?}]` to an output file.
+3. `build-fill-plan.mjs --missing-dir=<d> --out-dir=<d> --langs=ja,ms` → validates (placeholders, coverage, dupes; skips whitespace-only `en` icon labels) and assembles `fill-plan.json` (overwrites only, state=10).
+4. `apply-plan.mjs fill-plan.json [--dry-run]` → applies. ~2 req/unit at 1 req/sec, so large backfills take minutes — run in the background. No per-unit comments (avoids flooding Weblate with hundreds).
+
+Scope guidance: start with the laggards (lowest %translated) or finish near-complete
+langs; do all wired only when comfortable shipping that much MT at once.
+
 ## What this skill does
 
 1. **Fetch** the locale JSON files at the PR head and the PR base.
@@ -238,6 +262,8 @@ End with a short summary:
 - `scripts/find-placeholder-issues.mjs` — placeholder mismatch scanner.
 - `scripts/diff-entries.mjs` — per-language diff producer.
 - `scripts/apply-plan.mjs` — Weblate API executor.
+- `scripts/find-missing.mjs` — `--fill`: list en keys missing/empty in a locale.
+- `scripts/build-fill-plan.mjs` — `--fill`: validate subagent translations → fill plan (overwrites, state=10).
 - `scripts/auto-review.sh` — `--auto` pre-review: discover PR, fetch, machine checks, per-lang diff split.
 - `scripts/decide.mjs` — `--auto` merge-gate decision engine → `decision.json` + `plan.json`.
 - `scripts/apply-decision.sh` — `--auto` act path: merge-or-not + Weblate writes + PR comment (dry-run by default).
