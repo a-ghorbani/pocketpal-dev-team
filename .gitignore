@@ -5,6 +5,9 @@ worktrees/*
 workflows/reviews/*
 !workflows/reviews/README.md
 
+workflows/stories/*
+!workflows/stories/.gitkeep
+
 # Environment and local settings
 .env
 .claude/settings.local.json
