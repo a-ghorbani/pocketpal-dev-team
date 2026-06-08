@@ -16,7 +16,7 @@ echo "Press Ctrl+C to stop"
 
 while true; do
   # Check if the MIUI security center install dialog is in the foreground
-  FOCUS=$($ADB_CMD shell dumpsys window 2>/dev/null | grep "mCurrentFocus" || true)
+  FOCUS=$($ADB_CMD shell dumpsys window 2>/dev/null | grep -E "mCurrentFocus|mFocusedApp" || true)
 
   if echo "$FOCUS" | grep -q "com.miui.securitycenter"; then
     echo "$(date '+%H:%M:%S') Install dialog detected"
