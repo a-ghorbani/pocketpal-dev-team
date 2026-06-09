@@ -20,7 +20,8 @@ This repo is the workflow control plane for PocketPal AI. The target app code is
   - incomplete required independent review artifacts
   - failed mandatory verification
   - `BLOCKER` or `CONCERN` findings persisting after round 2 of the independent review/fix loop
-- **Public artifacts hygiene.** In GitHub artifacts (PR title/body/comment, issue, commit message) and in `repos/pocketpal-ai/` source/tests/configs, reference only public things — public GitHub issues/PRs, file paths, library names. No Linear (`FOU-*`, `linear.app`), no internal task IDs, no story-doc anchors (`I_DSn`, `Dn`, `§4x`, `Scenario X`, `WHAT/HOW`, `round N`). Source comments stay terse — current state, not the story.
+- **Issue tracking & routing:** see `context/issue-tracking.md` for how a work reference resolves to its tracker, and the internal-ID hygiene rule.
+- **Public artifacts hygiene.** In GitHub artifacts (PR title/body/comment, issue, commit message) and in `repos/pocketpal-ai/` source/tests/configs, reference only public things — public GitHub issues/PRs, file paths, library names. No internal tracker IDs (see `context/issue-tracking.md`), no `linear.app`, no internal task IDs, no story-doc anchors (`I_DSn`, `Dn`, `§4x`, `Scenario X`, `WHAT/HOW`, `round N`). Source comments stay terse — current state, not the story.
 
 ## Workflow
 

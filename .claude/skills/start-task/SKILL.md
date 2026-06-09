@@ -1,8 +1,8 @@
 ---
 name: start-task
-description: Start a new PocketPal delivery task from a GitHub issue or description. Runs the delivery loop through implementation, draft PR, independent review, and review-fix rounds when needed.
+description: Start a new PocketPal delivery task from a work-item reference (any tracker) or a free-form description. Resolves the reference per context/issue-tracking.md, then runs the delivery loop through implementation, draft PR, independent review, and review-fix rounds when needed.
 user-invocable: true
-argument-hint: "[#issue-number or description]"
+argument-hint: "[work reference or description]"
 ---
 
 # Start Task Workflow
@@ -13,12 +13,9 @@ You are the top-level delivery controller for a new PocketPal AI task. This skil
 
 Task: $ARGUMENTS
 
-## Determine Input Type
+## Determine input type — resolve the reference
 
-Check if the input is:
-
-1. **GitHub Issue**: Starts with `#` followed by a number (e.g., `#123`, `#456`)
-2. **Description**: Any other text (e.g., "Add dark mode toggle")
+Resolve the reference per **[`context/issue-tracking.md`](../../../context/issue-tracking.md)**, which lists each reference shape, its tracker, and how to fetch it. Then hand off to `pocketpal-intake` with a `Source:` + `Tracker ID:` tag. Internal tracker IDs must never appear in public GitHub artifacts.
 
 ## For GitHub Issue (e.g., #123)
 
@@ -37,8 +34,33 @@ Request:
 [paste the issue body verbatim so the brief stands alone]
 
 Metadata:
+- Source: github
 - GitHub issue: #[number]
 - Labels: [labels from gh]
+
+Repository: ./repos/pocketpal-ai
+```
+
+## For an internal-tracker reference
+
+Fetch the work item with its tracker's tool:
+
+- Plane: `./tools/plane.sh show <ref>`
+- Linear (legacy): `./tools/linear.sh issues`, then match the identifier
+
+Extract the title, priority, status, description, and identifier from the output. Then invoke `pocketpal-intake` with a self-contained brief — mirror the GitHub handoff structure so the brief stands alone:
+
+```
+Use pocketpal-intake: [title from tracker]
+
+Request:
+[paste the work-item description verbatim so the brief stands alone]
+
+Metadata:
+- Source: plane          # or: linear
+- Tracker ID: [identifier]   # internal ID — keep out of public GitHub artifacts (PR title/body/comments, commits)
+- Priority: [priority from tracker]
+- Status: [status from tracker]
 
 Repository: ./repos/pocketpal-ai
 ```

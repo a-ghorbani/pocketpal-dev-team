@@ -333,7 +333,7 @@ For trivial tasks pass only INTENT_BRIEF (WHAT/HOW/ARCHITECTURE_DOCS are absent)
 
 ## Comment Discipline (shipped artifacts)
 
-PocketPal AI is open source. Test `describe()`/`it()` strings, comments, and commit messages must not contain internal references — no Linear IDs (`FOU-*`), TASK IDs, or story-doc labels (`I1`, `D10`, `§1a`, `Scenario H`). Strip the labels, keep the human-readable prose. Public refs only: GitHub `#1234`, SHAs, external docs.
+PocketPal AI is open source. Test `describe()`/`it()` strings, comments, and commit messages must not contain internal references — no internal tracker IDs (see `context/issue-tracking.md`), TASK IDs, or story-doc labels (`I1`, `D10`, `§1a`, `Scenario H`). Strip the labels, keep the human-readable prose. Public refs only: GitHub `#1234`, SHAs, external docs.
 
 ## Anti-Patterns
 

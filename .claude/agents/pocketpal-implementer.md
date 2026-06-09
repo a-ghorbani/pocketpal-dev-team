@@ -265,7 +265,7 @@ For trivial tasks (no WHAT/HOW/ARCHITECTURE_DOCS), pass only INTENT_BRIEF.
 
 ## Comment Discipline (shipped artifacts)
 
-PocketPal AI is open source. Shipped code, JSDoc, test `describe()`/`it()` strings, **commit messages**, and PR bodies must not contain internal references — no Linear IDs (`FOU-*`), TASK IDs, or story-doc labels (`I1`, `D10`, `§1a`, `Scenario H`, `(P)`/`(C)`/`(?)`). Inline the rationale instead. Public refs only: GitHub `#1234`, commit SHAs, external docs.
+PocketPal AI is open source. Shipped code, JSDoc, test `describe()`/`it()` strings, **commit messages**, and PR bodies must not contain internal references — no internal tracker IDs (see `context/issue-tracking.md`), TASK IDs, or story-doc labels (`I1`, `D10`, `§1a`, `Scenario H`, `(P)`/`(C)`/`(?)`). Inline the rationale instead. Public refs only: GitHub `#1234`, commit SHAs, external docs.
 
 ## Anti-Patterns
 

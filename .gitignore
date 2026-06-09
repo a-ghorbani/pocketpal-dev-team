@@ -22,3 +22,6 @@ repos/pocketpal-ai.configs/
 
 __pycache__
 
+
+# Plane connection config (local; copy from tools/plane.config.example)
+tools/plane.config
