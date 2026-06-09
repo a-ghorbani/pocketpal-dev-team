@@ -42,7 +42,15 @@ Flow (orchestrated by `scripts/auto-review.sh` → semantic subagents → `scrip
 6. **Act** (`apply-decision.sh`, **dry-run by default; `--execute` to write**). Applies **Weblate writes only** (overwrites + suggestions + comments, state=10) in all cases, and **records a MERGE/HOLD recommendation** — it does **not** merge or comment on GitHub. Pass `--decision=MERGE|HOLD --reason=...` (ignored if Layer 1 forced HOLD). A maintainer reads the recommendation, and merges PR manually once it looks clean (the `main` ruleset needs one approving review).
 7. **Fill phase (opt-in: `--auto --fill-missing`).** After the merge decision, top up missing strings for wired languages, **uncapped**, per **Fill mode** above: find-missing → model sanity-judge each language's delta (fill new strings; flag-and-skip anything that looks like an `en.json` restructure) → translate contextually in a less-formal register → model quality pass → write at state=10. Fills never change the *current* PR's decision (missing keys aren't in its diff) — they ride the next regenerated PR. Report what was filled and anything skipped.
 
-Why this shape: structural breakage (placeholders/JSON) is a fact, not an opinion — it stays mechanical. Everything that needs taste — the merge call, "does this backfill make sense," and translation quality — goes to the model, which sees the whole picture at once rather than a single subagent's local call or a numeric threshold.
+Why this shape: structural breakage (placeholders/JSON) is a fact, not an opinion — it stays mechanical. Everything that needs taste — the merge recommendation, "does this backfill make sense," and translation quality — goes to the model, which sees the whole picture at once rather than a single subagent's local call or a numeric threshold.
+
+**Human merge (manual step).** When a maintainer acts on a MERGE recommendation, merge the Weblate PR with a **merge commit**, never squash:
+`gh pr merge <n> --repo a-ghorbani/pocketpal-ai --merge --admin`. Squash rewrites
+history so Weblate's commits stop being ancestors of `main`, and Weblate's next
+update fails with a rebase conflict (`CONFLICT in src/locales/*.json`). If that
+happens, recover with a Weblate **repository reset** (`POST .../repository/
+{"operation":"reset"}`) — `main` already has the content; reset drops only
+un-pushed pending edits, which the next routine run regenerates.
 
 Secrets for unattended runs: only `WLT_TOKEN` (Weblate) is needed — the routine no
 longer merges or comments on GitHub, so no GitHub write token is required. Reading
