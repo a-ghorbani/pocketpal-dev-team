@@ -1,21 +1,18 @@
 #!/usr/bin/env bash
-# Act on a review-l10n --auto decision. DRY-RUN by default; pass --execute to act.
+# Apply a review-l10n --auto decision to WEBLATE ONLY. DRY-RUN by default; --execute to write.
 #
-# The final MERGE/HOLD call:
-#   - If decision.json mechanical_verdict == HOLD (placeholder/JSON/scope/conflict),
-#     the decision is HOLD and CANNOT be overridden. --decision is ignored.
-#   - Otherwise (ADJUDICATE) the main session passes its reasoned call via
-#     --decision=MERGE|HOLD (and optional --reason="..."). Required in that case.
+# Human-merge model (option B): the routine NEVER merges or comments on GitHub.
+# It applies the Weblate fixes and RECORDS a MERGE/HOLD recommendation for a human,
+# who reviews it (and the `main` ruleset's required approval) and merges manually.
 #
-#   MERGE: merge the PR first (locks current translations to prod), THEN file all
-#          Weblate writes (corrections + suggestions) so they ride the NEXT cycle.
-#   HOLD:  do NOT merge. Apply the Weblate writes so the source is fixed and the
-#          next regenerated PR is cleaner.
-#   Either way: post a summary comment on the PR.
+# Recommendation source:
+#   - decision.json mechanical_verdict == HOLD  -> HOLD (non-overridable hard blocker)
+#   - else                                       -> --decision=MERGE|HOLD (session's call)
 #
-# Usage: apply-decision.sh <scratch-dir> [--execute] [--decision=MERGE|HOLD] [--reason=...] [--repo=owner/name]
-# Env:   MERGE_METHOD (default: --squash), MERGE_ADMIN (default: --admin to bypass
-#        branch protection, since the routine IS the review).
+# In all cases it applies the full Weblate plan (overwrites + suggestions + comments).
+# No gh pr merge, no gh pr comment, no GitHub token needed.
+#
+# Usage: apply-decision.sh <scratch-dir> [--execute] [--decision=MERGE|HOLD] [--reason=...]
 set -euo pipefail
 
 SCRATCH="${1:?scratch dir required}"
@@ -23,7 +20,6 @@ shift || true
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 EXECUTE=0
-REPO="a-ghorbani/pocketpal-ai"
 SESSION_DECISION=""
 REASON=""
 for a in "$@"; do
@@ -31,11 +27,8 @@ for a in "$@"; do
     --execute)    EXECUTE=1 ;;
     --decision=*) SESSION_DECISION="${a#--decision=}" ;;
     --reason=*)   REASON="${a#--reason=}" ;;
-    --repo=*)     REPO="${a#--repo=}" ;;
   esac
 done
-MERGE_METHOD="${MERGE_METHOD:---squash}"
-MERGE_ADMIN="${MERGE_ADMIN:---admin}"
 
 DEC="${SCRATCH}/decision.json"
 PLAN="${SCRATCH}/plan.json"
@@ -44,76 +37,41 @@ PLAN="${SCRATCH}/plan.json"
 VERDICT=$(node -e "process.stdout.write(require('${DEC}').mechanical_verdict)")
 PR=$(node -e "process.stdout.write(String(require('${DEC}').pr ?? ''))")
 
-# Resolve the final decision.
+# Resolve the recommendation (advisory only — nothing merges here).
 if [[ "${VERDICT}" == "HOLD" ]]; then
-  DECISION="HOLD"
-  if [[ -n "${SESSION_DECISION}" && "${SESSION_DECISION}" != "HOLD" ]]; then
-    echo ">> NOTE: session said ${SESSION_DECISION} but a mechanical hard blocker forces HOLD (non-overridable)."
-  fi
+  RECO="HOLD"
+  [[ -n "${SESSION_DECISION}" && "${SESSION_DECISION}" != "HOLD" ]] && \
+    echo ">> NOTE: session said ${SESSION_DECISION} but a mechanical hard blocker forces HOLD."
 else
   if [[ -z "${SESSION_DECISION}" ]]; then
-    echo "ERROR: verdict is ADJUDICATE — the session must pass --decision=MERGE|HOLD." >&2
+    echo "ERROR: verdict is ADJUDICATE — pass --decision=MERGE|HOLD (the recommendation)." >&2
     exit 3
   fi
-  DECISION="${SESSION_DECISION}"
+  RECO="${SESSION_DECISION}"
 fi
 
 DRYFLAG="--dry-run"; [[ "${EXECUTE}" -eq 1 ]] && DRYFLAG=""
-echo ">> mechanical_verdict=${VERDICT} final_decision=${DECISION} pr=${PR} execute=${EXECUTE}"
+echo ">> mechanical_verdict=${VERDICT} recommendation=${RECO} pr=${PR} execute=${EXECUTE}"
 
-# Persist the final decision + reasoning back into decision.json for the record.
+# Record the recommendation + reasoning into decision.json (durable, for the human).
 node -e '
-  const fs = require("fs");
-  const p = process.argv[1];
+  const fs = require("fs"); const p = process.argv[1];
   const d = JSON.parse(fs.readFileSync(p, "utf-8"));
-  d.decision = process.argv[2];
+  d.recommendation = process.argv[2];
   if (process.argv[3]) d.adjudication = {decision: process.argv[2], reasoning: process.argv[3]};
   fs.writeFileSync(p, JSON.stringify(d, null, 2));
-' "${DEC}" "${DECISION}" "${REASON}"
+' "${DEC}" "${RECO}" "${REASON}"
 
-# Build the PR comment body.
-BODY=$(node -e '
-  const d = require(process.argv[1]);
-  const L = [];
-  L.push(`### review-l10n — automated translation gate`);
-  L.push(``);
-  L.push(`**Decision: ${d.decision}**${d.mechanical_verdict === "HOLD" ? " (mechanical — non-overridable)" : " (adjudicated)"}`);
-  L.push(``);
-  L.push(`- gated languages: ${d.gateLangs.join(", ") || "none"}`);
-  L.push(`- hard blockers: ${d.counts.hardBlockers} · WRONG: ${d.counts.wrong} · AWKWARD: ${d.counts.awkward}`);
-  L.push(`- weblate writes: ${d.counts.overwrites} overwrite(s), ${d.counts.suggestions} suggestion(s), ${d.counts.comments} comment(s)`);
-  if (d.hardReasons && d.hardReasons.length) { L.push(``); L.push(`**Hard blockers (must fix, cannot merge):**`); for (const r of d.hardReasons) L.push(`- ${r}`); }
-  if (d.wrong && d.wrong.length) { L.push(``); L.push(`**Flagged WRONG:**`); for (const w of d.wrong) L.push(`- \`${w.lang}/${w.key}\` — ${w.note || ""}`); }
-  if (d.adjudication && d.adjudication.reasoning) { L.push(``); L.push(`**Adjudication:** ${d.adjudication.reasoning}`); }
-  L.push(``);
-  L.push(d.decision === "MERGE"
-    ? `Merging; corrections + stylistic suggestions filed to Weblate for the next cycle.`
-    : `Held back. Fixes applied to Weblate (state \`needs editing\`); the next auto-merge PR will pick them up.`);
-  L.push(``);
-  L.push(`Generated by [PocketPal Dev Team](https://github.com/a-ghorbani/pocketpal-dev-team)`);
-  process.stdout.write(L.join("\n"));
-' "${DEC}")
-
-if [[ "${DECISION}" == "MERGE" ]]; then
-  if [[ "${EXECUTE}" -eq 1 ]]; then
-    echo ">> merging PR #${PR} (${MERGE_METHOD} ${MERGE_ADMIN})"
-    gh pr merge "${PR}" --repo "${REPO}" ${MERGE_METHOD} ${MERGE_ADMIN}
-  else
-    echo ">> [dry-run] would: gh pr merge ${PR} --repo ${REPO} ${MERGE_METHOD} ${MERGE_ADMIN}"
-  fi
-fi
-
-# Apply the full Weblate plan (overwrites + suggestions + comments) in both cases.
+# Apply the full Weblate plan (overwrites + suggestions + comments). Weblate only.
 echo ">> applying Weblate writes (overwrites + suggestions + comments)"
 node "${HERE}/apply-plan.mjs" "${PLAN}" ${DRYFLAG}
 
-# Post the summary comment on the PR.
-if [[ "${EXECUTE}" -eq 1 ]]; then
-  echo ">> commenting on PR #${PR}"
-  printf '%s' "${BODY}" | gh pr comment "${PR}" --repo "${REPO}" --body-file -
-else
-  echo ">> [dry-run] PR comment body:"
-  printf '%s\n' "${BODY}" | sed 's/^/   | /'
-fi
-
-echo ">> done (${DECISION})"
+# Print the recommendation for the human to act on (no GitHub write).
+echo ""
+echo "================ HUMAN ACTION ================"
+echo "PR #${PR} recommendation: ${RECO}"
+[[ -n "${REASON}" ]] && echo "reason: ${REASON}"
+WORD="previewed (dry-run)"; [[ "${EXECUTE}" -eq 1 ]] && WORD="applied"
+echo "Weblate fixes ${WORD}. A maintainer reviews + merges PR #${PR} manually."
+echo "============================================="
+echo ">> done (recommendation: ${RECO}; no GitHub merge/comment performed)"

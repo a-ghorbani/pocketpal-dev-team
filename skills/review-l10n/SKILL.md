@@ -18,11 +18,16 @@ Typical invocation:
 /review-l10n --auto       # unattended merge-gate (discovers the open Weblate PR)
 ```
 
-## Auto mode (`--auto`) — unattended merge gate
+## Auto mode (`--auto`) — unattended reviewer + Weblate fixer
 
-`--auto` turns the review into a **merge decision** for the recurring Weblate
-auto-merge PR. It is designed to run unattended (twice-weekly remote routine) and
-replaces the "ask before every write" gate with a deterministic rubric.
+`--auto` reviews the recurring Weblate PR, **applies fixes to Weblate**, and emits a
+**MERGE/HOLD recommendation** — a human does the actual merge. It is designed to run
+unattended (twice-weekly remote routine) and replaces the "ask before every write"
+gate with a deterministic rubric.
+
+**It never touches GitHub** — no PR merge, no PR comment. The `main` ruleset requires
+an approving review, and merges to a prod branch stay a human decision. The routine's
+only writes are to Weblate; the recommendation is recorded for a maintainer to act on.
 
 Flow (orchestrated by `scripts/auto-review.sh` → semantic subagents → `scripts/decide.mjs` → `scripts/apply-decision.sh`):
 
@@ -34,17 +39,14 @@ Flow (orchestrated by `scripts/auto-review.sh` → semantic subagents → `scrip
    - **Layer 2 — semantic findings (adjudicable):** `WRONG` (wired) and `AWKWARD` findings. These never auto-decide. With no hard blockers, `mechanical_verdict: ADJUDICATE`.
    - Unwired-language issues are recorded (`ignoredUnwired`) but never gate — they don't ship in-app.
 5. **Adjudicate** (main session, only when `ADJUDICATE`): the session reads **all** `WRONG` + `AWKWARD` findings together (key, en, current, proposed fix, rationale, lang) and makes one reasoned `MERGE` or `HOLD` call — "are these wrongs terrible enough to keep off prod, or tolerable to fix next round?" This judgment lives with the main model, not a per-language subagent or a count threshold.
-6. **Act** (`apply-decision.sh`, **dry-run by default; `--execute` to act**). Pass the session's call as `--decision=MERGE|HOLD --reason=...`; it is ignored if Layer 1 already forced HOLD.
-   - **MERGE:** `gh pr merge` first (needs `--admin` to bypass branch protection — the routine *is* the review), then file all Weblate writes (corrections + suggestions, state=10) for the next cycle.
-   - **HOLD:** do **not** merge; apply the Weblate writes so the source is fixed and the *next* regenerated PR is cleaner.
-   - Either way: post a summary comment on the PR (and the caller fires a push notification).
+6. **Act** (`apply-decision.sh`, **dry-run by default; `--execute` to write**). Applies **Weblate writes only** (overwrites + suggestions + comments, state=10) in all cases, and **records a MERGE/HOLD recommendation** — it does **not** merge or comment on GitHub. Pass `--decision=MERGE|HOLD --reason=...` (ignored if Layer 1 forced HOLD). A maintainer reads the recommendation, and merges PR manually once it looks clean (the `main` ruleset needs one approving review).
 7. **Fill phase (opt-in: `--auto --fill-missing`).** After the merge decision, top up missing strings for wired languages, **uncapped**, per **Fill mode** above: find-missing → model sanity-judge each language's delta (fill new strings; flag-and-skip anything that looks like an `en.json` restructure) → translate contextually in a less-formal register → model quality pass → write at state=10. Fills never change the *current* PR's decision (missing keys aren't in its diff) — they ride the next regenerated PR. Report what was filled and anything skipped.
 
 Why this shape: structural breakage (placeholders/JSON) is a fact, not an opinion — it stays mechanical. Everything that needs taste — the merge call, "does this backfill make sense," and translation quality — goes to the model, which sees the whole picture at once rather than a single subagent's local call or a numeric threshold.
 
-Secrets for unattended runs: `WLT_TOKEN` (Weblate) and a `gh` token with merge
-scope must be present in the run environment — a remote routine needs them
-provisioned; a local cron inherits `.env` + the gh keyring.
+Secrets for unattended runs: only `WLT_TOKEN` (Weblate) is needed — the routine no
+longer merges or comments on GitHub, so no GitHub write token is required. Reading
+the PR uses the ambient read-only token.
 
 ## Fill mode (`--fill`)
 
