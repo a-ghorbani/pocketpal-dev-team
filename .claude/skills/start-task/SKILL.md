@@ -45,7 +45,7 @@ Repository: ./repos/pocketpal-ai
 
 Fetch the work item with its tracker's tool:
 
-- Plane: `plane.sh show <ref>`
+- Plane: load the `plane` skill, then run `show <ref>`
 - Linear (legacy): `./tools/linear.sh issues`, then match the identifier
 
 Extract the title, priority, status, description, and identifier from the output. Then invoke `pocketpal-intake` with a self-contained brief — mirror the GitHub handoff structure so the brief stands alone:

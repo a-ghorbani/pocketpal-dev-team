@@ -10,7 +10,7 @@ How this dev team picks up work. The team is **agnostic to the issue tracker**: 
 |---|---|---|---|
 | `#123`, `owner/repo#123` | GitHub | `gh issue view <n> --repo <repo> --json title,body,labels,assignees` | **public** |
 | `FOU-123` | Linear | `./tools/linear.sh issues`, then match the identifier | internal |
-| `POC-123` / `PAL-123` / `ADV-123` | Plane | `plane.sh show <ref>` | internal |
+| `POC-123` / `PAL-123` / `ADV-123` | Plane | the `plane` skill: `show <ref>` | internal |
 | anything else | — | treat as a free-form description → go straight to the orchestrator | — |
 
 When handing off to the orchestrator, include a `Source:` tag (`github` / `linear` / `plane` / `description`) and the `Tracker ID` (the identifier) so downstream stages can honor the hygiene rule below.
@@ -19,7 +19,7 @@ When handing off to the orchestrator, include a `Source:` tag (`github` / `linea
 
 - **GitHub** — tool: `gh`. Public product issues. IDs (`#123`) are public.
 - **Linear** — tool: `./tools/linear.sh` (legacy). Prefix `FOU-`. Needs `LINEAR_API_KEY` in `.env`.
-- **Plane** — tool: the `plane` skill (`plane` Claude Code plugin; CLI: `plane.sh`). Work-item references look like `POC-123`. Needs `PLANE_TOKEN` in `.env` (secret); the workspace slug + project map live in `~/.config/plane/plane.config`.
+- **Plane** — tool: the `plane` skill (`plane` Claude Code plugin). Work-item references look like `POC-123`. Needs `PLANE_TOKEN` in `.env` (secret); the workspace slug + project map live in `~/.config/plane/plane.config`.
 
 ## Public-artifact hygiene
 
