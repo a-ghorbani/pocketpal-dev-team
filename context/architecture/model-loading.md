@@ -52,6 +52,8 @@ Read-only consumption. Required: `platform`, `rules_version`, `schema_version`, 
 
 The schema is owned cross-repo in `a-ghorbani/pocketpal-device-rules` — out of the app's diff. (D1b)
 
+**Host-pinning (untrusted input).** Rule URLs are baked out-of-tree and fetched from a third-party CDN, so they are untrusted. `parse.ts` rejects (drops the entry/sibling) any `modelFile.url` / `hfModel.url` / `sibling.url` that is not an `https://huggingface.co/...` URL, and rejects any `rfilename` / `author` / derived `repo` containing a path separator or `..`. A dropped main `modelFile` skips the whole entry; a dropped sibling is omitted. As defense-in-depth, `DownloadManager` only attaches the HF `Authorization: Bearer <hfToken>` header when the download URL host is `huggingface.co`, so the token can never leave HF even if a non-HF URL ever slips through. (C, D19)
+
 ---
 
 ## 2. Event flow
@@ -59,24 +61,26 @@ The schema is owned cross-repo in `a-ghorbani/pocketpal-device-rules` — out of
 ```
 app start / ModelStore.initializeStore
   readDeviceSignals() once
-  resolvePresets():
-    fetched = fetchRules(platform)            (jsDelivr, timeout-bounded, parsed)
-      ok (≥1 model)            → use fetched rules
-      fail / old-schema / empty → use bundled rules.<platform>.json (parsed)
+  resolvePresets():                           (NO network — bundled floor only)
+    rules = parseDeviceRules(bundled rules.<platform>.json)
     classify(signals, rules.classifier, Platform.OS) → deviceTier
-    presets = rules.tiers[deviceTier].models.flatMap(hfAsModel expand)  // origin: HF
+    presets = rules.tiers[deviceTier].models.flatMap(hfAsModel expand)  // origin: HF, isRulePreset
       (vision entries also materialize their mmproj sibling Models)
-  merge presets into ModelStore.models (reconcile, §6)
+  merge presets into ModelStore.models (reconcile, §6)   ← list is populated NOW
+  upgradeToFetchedRules() (fire-and-forget, off the first-population path):
+    fetched = fetchRules(platform)            (jsDelivr, timeout-bounded, parsed)
+      ok (≥1 model)            → re-classify + reconcile (id-keyed dedup, §6)
+      fail / old-schema / empty → no-op (bundled floor stays)
   user taps a model in the EXISTING list → checkSpaceAndDownload → downloadUrl → models/hf/...
 ```
 
-No new UI, no producer, no per-tap HF resolve, no new transform. (C)
+The bundled floor is applied **synchronously of the network** so a slow or hanging fetch never leaves the list empty on a fresh install; the online override is folded in afterwards. No new UI, no producer, no per-tap HF resolve, no new transform. (C)
 
 ---
 
 ## 3. State machine
 
-No lifecycle store. Rules resolution is a one-shot inside `initializeStore`: `fetch → (ok | fail→bundled) → classify → expand → reconcile`. On fetch failure (offline, non-2xx, old-schema, parse error) the user-visible result is the bundled model list (possibly an older `rules_version`). (C)
+No lifecycle store. Rules resolution inside `initializeStore` is two-phase: (1) `bundled → classify → expand → reconcile` populates the list immediately; (2) `fetch → (ok → re-classify + reconcile | fail/old-schema/empty → no-op)` upgrades it in the background. On fetch failure (offline, non-2xx, old-schema, parse error) the user-visible result is the bundled model list (possibly an older `rules_version`). (C)
 
 ---
 
@@ -96,8 +100,10 @@ No lifecycle store. Rules resolution is a one-shot inside `initializeStore`: `fe
 - **I4** — Reuse `hfAsModel`; add no transform. Rule entries are the cached subset it reads.
 - **I5** — `defaultModels.ts` is removed, not retained; its 3 consumers are re-sourced (§7).
 - **I6** — Migration preserves every already-downloaded model regardless of origin.
-- **I7** — Offline never breaks the list; bundled rules are imported.
+- **I7** — Offline never breaks the list; bundled rules are imported and applied without awaiting the network fetch (fresh install is never empty while a fetch is in flight).
 - **I8** — A vision entry materializes its mmproj sibling Model(s) into `ModelStore.models` (`addHFModel`-style), so the download path's `this.models.find(m => m.id === projModelId)` resolves. A bare `.map(hfAsModel)` would violate this.
+- **I9** — Every download target is host-pinned to `https://huggingface.co/...` at parse; the HF auth token is only ever sent to `huggingface.co`. A non-HF `url` is dropped at parse, not downloaded.
+- **I10** — Reconcile keeps the list equal to the current rule set: it prunes non-downloaded rule-provenance (`isRulePreset`) entries no longer resolved, and never prunes downloaded models (any origin) or user-added HF/LOCAL models.
 
 ### 4c. Classifier resolution (C)
 - iOS: `machine → device_id_to_chip → chip_to_class`; miss → `device_family_fallback`; then `ram_bands → tier_matrix`.
@@ -117,12 +123,14 @@ No lifecycle store. Rules resolution is a one-shot inside `initializeStore`: `fe
 
 | Field | Single writer |
 | --- | --- |
-| `ModelStore.deviceTier` | `classify()` result in `resolvePresets` |
-| `ModelStore.rulesVersion` | fetch/bundle selection in `resolvePresets` |
+| `ModelStore.deviceTier` | `classify()` result in `resolvePresets` (bundled), then `upgradeToFetchedRules` (fetched) |
+| `ModelStore.rulesVersion` | bundled selection in `resolvePresets`, then fetched selection in `upgradeToFetchedRules` |
 | `ModelStore.models` (rule entries) | reconcile path (merges `rules.tiers[tier].models` via `hfAsModel`) |
+| `Model.isRulePreset` (provenance) | `resolvePresetModels` (set on every materialized rule entry) |
 | device signals | `readDeviceSignals` (read-once) |
 | model download | existing `checkSpaceAndDownload` |
-| Lookie default model | `LOOKIE_DEFAULT_MODEL` constant |
+| HF auth header attachment | `DownloadManager.startDownload` (host-gated to `huggingface.co`) |
+| Lookie default model | `LOOKIE_DEFAULT_MODEL` constant (carries an `hfModel` so it downloads via `downloadHFModel`) |
 | `ModelStore.version` / re-merge gate | `initializeStore` (gate `version < MODEL_LIST_VERSION`) |
 
 Cross-store reads: download URLs are public `/resolve/main` — no HF token needed.
@@ -138,8 +146,9 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once; p
 1. Keep every `isDownloaded` model regardless of origin (incl. legacy PRESET).
 2. Drop non-downloaded PRESET stubs (re-derivable from rules).
 3. No static re-inject — the list is the `flatMap` expansion of `rules.tiers[deviceTier].models`.
-4. **Reconcile presets by `{repo, filename}` across origins** (NOT `id && origin`): a kept legacy downloaded PRESET and a new `origin: HF` rule entry share `{repo,filename}` but differ in origin. The reconcile suppresses the rule stub when a downloaded model with the same `{repo,filename}` exists at **any** origin, keeping the downloaded record (and its `models/preset/...` file). This covers Case A (legacy PRESET downloaded), Case B (HF downloaded), and Case C (not downloaded → resolves as `origin: HF`).
+4. **Reconcile presets by the full `model.id` (`author/repo/filename`) across origins** (NOT `id && origin`, NOT `{repo,filename}`): `hfAsModel` builds the same `id` from a rule entry's `author/repo` + `rfilename` as a legacy PRESET's `id`, so the key is origin-spanning AND collision-free across authors sharing a repo name. The reconcile suppresses the rule stub when a downloaded model with the same `id` exists at **any** origin, keeping the downloaded record (and its `models/preset/...` file). This covers Case A (legacy PRESET downloaded), Case B (HF downloaded), and Case C (not downloaded → resolves as `origin: HF`).
 5. `MODEL_LIST_VERSION` lives in `ModelStore.ts` (single 14→15 bump).
+6. **Steady-state prune.** `reconcilePresets` is two-sided: before appending the fresh set it prunes non-downloaded `isRulePreset` entries whose `id` is not in the fresh set (a newer `rulesVersion` dropped them or the device re-tiered), so the list stays equal to `rules.tiers[tier].models`. Downloaded models (any origin) and user-added HF/LOCAL models (no `isRulePreset` marker) are never pruned. (I10)
 
 ---
 
@@ -151,7 +160,7 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once; p
 | --- | --- | --- |
 | 1 | `createBasicModelFromReference` (`PalStore.ts`, degraded fallback) | generic `chatTemplates.default` + `defaultCompletionParams` (D17) |
 | 2 | `getOriginalModelName` (`formatters.ts`) | `getDisplayNameFromFilename`; no `defaultModels` lookup (D18) |
-| 3 | `initializeLookiePal` (`PalStore.ts`) | `LOOKIE_DEFAULT_MODEL` offline constant in `builtinPalModels.ts` (D15) |
+| 3 | `initializeLookiePal` (`PalStore.ts`) | `LOOKIE_DEFAULT_MODEL` offline constant in `builtinPalModels.ts`, carrying an `hfModel` (SmolVLM repo subset: LLM + both mmproj siblings) so the download warning routes through `downloadHFModel → addHFModel` (D15, D20) |
 
 ---
 
@@ -172,6 +181,11 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once; p
 | D15 | Lookie default = offline constant, not network resolve | Vision model outside tiers |
 | D17 | `createBasicModelFromReference` fallback → `defaultCompletionParams` + default chat template | Generic params suffice (degraded path) |
 | D18 | `getOriginalModelName` is filename-derived for all | No `defaultModels` dependency |
+| D19 | Host-pin rule download targets to `huggingface.co` at parse; gate the HF auth header by host | Baked URLs are untrusted third-party input; prevents off-host GGUF + token exfiltration |
+| D20 | Lookie constant carries an `hfModel` with mmproj siblings | Routes the warning's download through `downloadHFModel` (SmolVLM is in no tier, never reconciled into the store) |
+| D21 | Reconcile/dedup key = full `model.id`, not `{repo,filename}` | Origin-spanning AND collision-free across authors with the same repo name |
+| D22 | Bundled floor applied without awaiting the fetch; fetched override folded in fire-and-forget | Fresh install on slow network is never empty for up to the 10s fetch timeout |
+| D23 | `reconcilePresets` prunes stale non-downloaded `isRulePreset` entries | List stays equal to the current rule set instead of accumulating stubs |
 
 ---
 
@@ -185,11 +199,17 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once; p
 | 9d | Entry missing a required field | skip that entry; rest render |
 | 9e | `platform` mismatches `Platform.OS` | fetched rules treated invalid → bundled floor |
 | 9f | Device unknown to classifier | last-resort floor → `low` tier (I2) |
-| 9g | Legacy downloaded PRESET same `{repo,filename}` as a rule entry | reconcile keeps PRESET download, suppresses HF stub; PRESET file still found |
-| 9h | Already-downloaded HF model also in rule list | same id+origin → reconcile keeps download, suppresses stub |
-| 9i | Two tiers list the same `{repo,filename}` | dedup by `{repo,filename}` at resolve; first wins |
-| 9j | Vision rule entry | baked `hfModel.siblings[].{rfilename,url,…}` → entry expands `addHFModel`-style; LLM + mmproj sibling Models both pushed; projection resolvable AND downloadable (mmproj `downloadUrl` from `sibling.url`; empty `url` → `checkSpaceAndDownload` early-returns, I8) |
+| 9g | Legacy downloaded PRESET same `id` as a rule entry | reconcile keeps PRESET download, suppresses HF stub; PRESET file still found |
+| 9h | Already-downloaded HF model also in rule list | same id → reconcile keeps download, suppresses stub |
+| 9i | Two tiers list the same `id` | dedup by `model.id` at resolve; first wins |
+| 9j | Vision rule entry | baked `hfModel.siblings[].{rfilename,url,…}` → entry expands `addHFModel`-style; LLM + mmproj sibling Models both pushed; projection resolvable AND downloadable (mmproj `downloadUrl` from `sibling.url`; empty/off-HF `url` → sibling dropped at parse, I8/I9) |
 | 9k | Lookie pal init offline | `LOOKIE_DEFAULT_MODEL` constant, no network |
+| 9l | Rule entry / sibling with an off-`huggingface.co` `url` | dropped at parse (entry skipped / sibling omitted); never downloaded; HF token never attached for it (I9) |
+| 9m | Rule entry with `..` / path separator in `rfilename`/`author`/`repo` | rejected at parse (traversal guard) |
+| 9n | Fresh install, slow/hanging network | bundled floor renders immediately; fetched override folds in when it returns (D22, I7) |
+| 9o | Newer `rulesVersion` drops a model the device hadn't downloaded | reconcile prunes the stale non-downloaded `isRulePreset` stub (I10, D23) |
+| 9p | Two authors share a repo name + filename | distinct `model.id` → both kept (no cross-author collision, D21) |
+| 9q | User taps Download on the Lookie warning | routes through the model's `hfModel` → `downloadHFModel → addHFModel` materializes LLM + mmproj and downloads both (D20) |
 
 ---
 
