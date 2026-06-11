@@ -21,7 +21,7 @@ Suggestions render in a section separate from downloaded models and materialise 
 
 ### Suggestion primitive (source-agnostic, app-level) — `src/services/suggestions/`
 
-`ModelSuggestion` (`types.ts`) is the shared shape every producer adapts into: `key{hfRepo,hfFilename}`, `sha256?`, `displayName`, `quant`, `sizeBytes?`, `params?`, `minRamGb?`, `obsTg?`, `badges{multimodal?,nativeLowBit?}`, `isPrimary`, `source`, `fitsDevice`. (C)
+`ModelSuggestion` (`types.ts`) is the shared shape every producer adapts into: `key{hfRepo,hfFilename}`, `displayName`, `quant`, `sizeBytes?`, `params?`, `minRamGb?`, `obsTg?`, `badges{multimodal?,nativeLowBit?}`, `isPrimary`, `source`, `fitsDevice`. (C) `sha256` is intentionally absent: it was parsed but never verified (false assurance), so it is dropped from the consumed schema/types until integrity is actually enforced (D20).
 
 `SuggestionProducer{id, getSuggestions(ctx)}` + a producer registry (`registry.ts`) aggregate suggestions across sources. Device rules are producer #1 of ≥3 anticipated (PalsHub per-pal `models[]` and built-in pals are future, additive — a new producer file + a `registerSuggestionProducer` call, never a card/view-model edit). (C)
 
@@ -47,9 +47,9 @@ Suggestions render in a section separate from downloaded models and materialise 
 
 ### 1b. External wire shape (`rules.<platform>.json`)
 
-Read-only consumption. Required: `platform`, `rules_version`, `schema_version`, `classifier.{ram_bands, tier_matrix}` + platform classifier maps, `tiers[T].candidates[].{model,quant,hf_repo,hf_filename}`. Optional (render/identity, present after the rules-repo `1.1.0` bump): `min_ram_gb`, `obs_tg`, `native_low_bit`, `multimodal`, `size_bytes`, `sha256`, `params`. Unknown fields ignored; both `1.0.0-draft` (no render fields) and `1.1.0-draft` tolerated. (C, D7)
+Read-only consumption. Required: `platform`, `rules_version`, `schema_version`, `classifier.{ram_bands, tier_matrix}` + platform classifier maps, `tiers[T].candidates[].{model,quant,hf_repo,hf_filename}`. Optional (render/identity, present after the rules-repo `1.1.0` bump): `min_ram_gb`, `obs_tg`, `native_low_bit`, `multimodal`, `size_bytes`, `params`. `sha256` may be present in the source rules but is ignored by `parse.ts` (not consumed until verified — D20). Unknown fields ignored; both `1.0.0-draft` (no render fields) and `1.1.0-draft` tolerated. (C, D7)
 
-The `size_bytes`/`sha256`/`params` additions are owned cross-repo in `a-ghorbani/pocketpal-device-rules` — out of the app's diff. (D1b)
+The `size_bytes`/`params` additions are owned cross-repo in `a-ghorbani/pocketpal-device-rules` — out of the app's diff. The repo may also ship `sha256`, but the app ignores it (D20). (D1b)
 
 ---
 
@@ -68,8 +68,9 @@ app start / model-picker open
     offline (no rules/cache) → bundledTierSuggestions[platform][tier]
     fitsDevice recomputed against actual RAM
   picker dedups suggestions against ModelStore.models by {repo,filename}
-  user taps a suggestion:
-    resolveHFModelForDownload(hfRepo,hfFilename,token) → hfAsModel → downloadHFModel
+  user taps a suggestion (requires network — resolve fetches the HF repo):
+    online  → resolveHFModelForDownload(hfRepo,hfFilename,token) → hfAsModel → downloadHFModel
+    offline → resolve fails → card shows "connect to download"; no queueing (D19)
 ```
 
 ---
@@ -97,7 +98,7 @@ ok/error ─ensureRules (stale, TTL 24h)→ fetching
 2. Device rules are the only producer wired now.
 3. Candidate order preserved verbatim; first candidate per `model` = primary, rest alternates.
 4. `fitsDevice = minRamGb*1e9 <= ramBytes` when `minRamGb` present, else `true`. Hint only; never blocks download (D11). Replaces the `(size+mmproj)×1.2` heuristic for suggestion cards only.
-5. Download tap reuses `resolveHFModelForDownload` (I3); no new download path.
+5. Download tap reuses `resolveHFModelForDownload` (I3); no new download path. The HF repo is resolved fresh at tap (no `downloadUrl`/LFS oid baked into the snapshot), so a tap **requires network**. Offline, an offline list is informational only: the tap surfaces a "connect to download" message via the card's error path and does **not** queue an offline download. No offline download-queue in this slice (D19).
 6. Suggestions render via `ModelSuggestion`, not `Model`; the card does not reuse `ModelCard`.
 7. Suggestions and downloaded models are two visually separate sections; a suggestion whose `{repo,filename}` already exists in `ModelStore.models` is suppressed (dedup).
 
@@ -117,7 +118,7 @@ ok/error ─ensureRules (stale, TTL 24h)→ fetching
 
 ### 4d. Component renders (C)
 - Model picker (`ModelsScreen`): downloaded/HF/local models via existing `ModelCard` grouping (unchanged) + a separate suggestions section for `deviceTier`. No static PRESET section.
-- Suggestion card (`ModelsScreen/SuggestionCard`): name, quant, size/params hint, multimodal/low-bit + primary badges, `fitsDevice` warning, expected tok/s, download action. Does NOT reuse `ModelCard`.
+- Suggestion card (`ModelsScreen/SuggestionCard`): name, quant, size/params hint, multimodal/low-bit + primary badges, `fitsDevice` warning, expected tok/s, download action. Does NOT reuse `ModelCard`. A failed resolve on tap (offline or HF error) surfaces an `Alert` and re-enables the button — network failures show a "connect to download" message; other failures reuse `downloadSetupFailed*` (mirrors `ModelStore.downloadHFModel`). (D19)
 
 ### 4e. Native signals (C)
 - iOS `machine`: `RNDeviceInfo.getDeviceId()` — no native change.
@@ -151,7 +152,7 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once:
 2. Drop non-downloaded PRESET stubs.
 3. HF/LOCAL models keep customizations (chatTemplate/stopWords merged with refreshed defaults).
 4. No static re-inject — the default list is data-driven.
-5. Kept downloads reconcile to suggestions by `{hf_repo, hf_filename}` (+`sha256` when present), not raw id, at render-time dedup → no duplicate/orphan (D14).
+5. Kept downloads reconcile to suggestions by `{hf_repo, hf_filename}`, not raw id, at render-time dedup → no duplicate/orphan (D14).
 6. `MODEL_LIST_VERSION` lives in `ModelStore.ts` (moved off the deleted file).
 
 ---
@@ -159,7 +160,7 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once:
 ## 7. Canonical scenarios (C)
 
 - **A. Online mid-tier Android** — socModel → tier; render-complete rules → suggestions; tap → download.
-- **B. Offline fresh install** — fetch fails, no cache → classify via bundled classifier → bundled tier suggestions; tap queues download.
+- **B. Offline fresh install** — fetch fails, no cache → classify via bundled classifier → bundled tier suggestions (informational); a tap can't resolve offline → "connect to download" message, no queueing (D19).
 - **C. Online fail, cache present** — cached tier; no error UI.
 - **D. Upgrade w/ downloaded legacy PRESET** — keep downloaded, drop stubs; reconcile by `{repo,filename}`; suppressed from suggestions; still usable.
 - **E. iPad unknown to classifier** — `device_family_fallback` → tier (totality).
@@ -174,7 +175,7 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once:
 | ID | Decision | Rationale |
 | --- | --- | --- |
 | D1 | Rules JSON stays functionally thin (no template/stop/vision) | GGUF-embedded / runtime-detected |
-| D1b | Add `size_bytes`/`sha256`/`params`; rules repo ships first, app tolerates draft | Render-complete offline; no mutual block |
+| D1b | Add `size_bytes`/`params` (and `sha256`, ignored — D20); rules repo ships first, app tolerates draft | Render-complete offline; no mutual block |
 | D2 | Remote = online override, snapshot = offline floor | Easy online, rich offline |
 | D3 | `mergeModelLists` data-driven; drop static re-inject | Replaces hand-maintained list |
 | D7 | Tolerate unknown/absent fields | Lets the draft format evolve |
@@ -182,12 +183,15 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once:
 | D9 | Offline-while-fetching shows snapshot, no blocking spinner | Picker never empty |
 | D10 | Fetch error with cache/snapshot shows no error UI | Degrade silently |
 | D11 | `minRamGb` drives `fitsDevice`; never blocks download | Replaces ×1.2 for cards |
-| D14 | Reconcile kept downloads by `{repo,filename}`(+sha256), not raw id | hfAsModel id may differ from curated id |
+| D14 | Reconcile kept downloads by `{repo,filename}`, not raw id | hfAsModel id may differ from curated id |
 | D15 | Lookie default = offline constant, not network resolve | Vision model outside tiers |
 | D16 | Suggestion view-model + card are source-agnostic | New producers are additive |
 | D17 | `createBasicModelFromReference` fallback → `defaultCompletionParams` + default chat template | Generic params suffice (degraded path) |
 | D18 | `getOriginalModelName` drops the PRESET branch (filename-derived for all) | Display-name reset |
+| D19 | No offline download-queue this slice; tap requires online resolve, offline shows "connect to download" | Snapshot carries no `downloadUrl`/LFS oid; resolve is always live; queueing would need baked oids (out of scope) |
+| D20 | `sha256` dropped from the consumed wire schema/types/snapshot | Parsed-but-unverified hash is false assurance; `RNFS.hash` is documented unreliable/expensive (integrity uses file-size). Re-add only when verification is enforced |
 | D-persist | `DeviceRulesStore` persists via AsyncStorage (mobx-persist-store), not MMKV | Matches every other store |
+| D-schema | On rehydration, drop persisted `rules` whose `schemaVersion` ≠ bundled `BUNDLED_SCHEMA_VERSION`; `tierSuggestions` falls back to the bundled tier when a cached tier map is shaped unexpectedly | A stale-schema cache must not crash the picker or render a mismatched shape |
 
 ---
 
@@ -195,7 +199,7 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once:
 
 | ID | Edge case | Behaviour |
 | --- | --- | --- |
-| 9a | Offline fresh install | bundled snapshot tier; downloads queue |
+| 9a | Offline fresh install | bundled snapshot tier (informational); tap can't resolve → "connect to download", no queueing (D19) |
 | 9b | Fetch 404/timeout, cache present | use cache, no error UI |
 | 9f | Malformed/partial rules JSON | parse-guard → cache then bundled; never crash |
 | 9j | Two tiers list same `{repo,filename}` | dedup at build; first wins |
@@ -209,4 +213,4 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once:
 
 ## Cross-repo ordering
 
-`size_bytes`/`sha256`/`params` are owned in `a-ghorbani/pocketpal-device-rules`. Order: the rules repo ships them first (forward-compatible bump); both remote rules and the bundled snapshot must carry them for a render-complete offline floor. The app tolerates the current draft throughout, so neither repo blocks the other.
+`size_bytes`/`params` are owned in `a-ghorbani/pocketpal-device-rules` (the repo may also carry `sha256`, which the app ignores — D20). Order: the rules repo ships them first (forward-compatible bump); both remote rules and the bundled snapshot must carry them for a render-complete offline floor. The app tolerates the current draft throughout, so neither repo blocks the other.
