@@ -1,129 +1,115 @@
-# Model Loading & Device-Aware Suggestions
+# Model Loading & Device-Rule-Driven Preset List
 
-Cumulative architecture truth for how PocketPal sources its model list: device-rule-driven suggestions, the offline bundled snapshot, and the migration off the old static default list.
+Cumulative architecture truth for how PocketPal sources its model list: the device-rule-driven preset list, the offline bundled floor, and the migration off the old static default list.
 
-**Conventions**: `(C)` current (in `main`), `(D)` decision, `(?)` open question. Bootstrapped from the device-aware-suggestions WHAT; markers resolved at merge.
+**Conventions**: `(C)` current (in `main`), `(D)` decision.
 
 ---
 
 ## 0. Where the default model list comes from (C)
 
-The model list is **data-driven**, not a hand-maintained array. `src/store/defaultModels.ts` was removed. Two sources feed a source-agnostic suggestion primitive:
+The model list is **data-driven**, not a hand-maintained array. `src/store/defaultModels.ts` was removed. Device rules decide **which preset models populate the existing list** — there is **no separate suggestions UI**. Two sources feed the same path:
 
-- **Remote rules** (`rules.<platform>.json` via jsDelivr) — the online override.
-- **Bundled snapshot** (`src/store/bundledModelSuggestions.ts`, generated) — the offline floor and replacement for the old static list.
+- **Fetched rules** (`rules.<platform>.json` via jsDelivr) — the online override.
+- **Bundled rules** (`src/store/bundledDeviceRules/rules.<platform>.json`, committed, statically imported) — the offline floor and replacement for the old static list.
 
-Suggestions render in a section separate from downloaded models and materialise into a `Model` only when the user taps download, via the existing HF resolve+convert path. (C)
+Each tier entry is a baked `{hfModel, modelFile}` subset — exactly the fields the existing `hfAsModel` transform reads. The app runs `hfAsModel(entry.hfModel, entry.modelFile)` verbatim, yielding a `Model` with `origin: ModelOrigin.HF` that is byte-identical to an HF-browser add. Resolved models merge into `ModelStore.models` where `defaultModels` used to merge, and render through the **existing** `ModelCard` grouping. (C)
 
 ---
 
 ## 1. Data model
 
-### Suggestion primitive (source-agnostic, app-level) — `src/services/suggestions/`
-
-`ModelSuggestion` (`types.ts`) is the shared shape every producer adapts into: `key{hfRepo,hfFilename}`, `displayName`, `quant`, `sizeBytes?`, `params?`, `minRamGb?`, `obsTg?`, `badges{multimodal?,nativeLowBit?}`, `isPrimary`, `source`, `fitsDevice`. (C) `sha256` is intentionally absent: it was parsed but never verified (false assurance), so it is dropped from the consumed schema/types until integrity is actually enforced (D20).
-
-`SuggestionProducer{id, getSuggestions(ctx)}` + a producer registry (`registry.ts`) aggregate suggestions across sources. Device rules are producer #1 of ≥3 anticipated (PalsHub per-pal `models[]` and built-in pals are future, additive — a new producer file + a `registerSuggestionProducer` call, never a card/view-model edit). (C)
-
 ### Device rules — `src/services/deviceRules/`
 
-- `types.ts` — `DeviceRules` (parsed wire), `RuleCandidate`, `Classifier`, `DeviceSignals`, `Tier = low|mid|high|flagship`.
+- `types.ts` — `DeviceRules` (parsed wire), `RuleModelEntry = {name?, hfModel, modelFile}` (the baked subset `hfAsModel` reads; `RuleHFModel` is a `HuggingFaceModel` subset), `Classifier`, `DeviceSignals`, `Tier = low|mid|high|flagship`.
 - `signals.ts` — `readDeviceSignals()` reads once: RAM (`DeviceInfo.getTotalMemory`), iOS `machine` (`getDeviceId`), Android `socModel`/`hardware`/`cpuFeatures`/`maxFreqMhz` (`NativeHardwareInfo.getCPUInfo`).
-- `classify.ts` — pure `classify(signals, classifier, platform): Tier`.
-- `parse.ts` — parse-guard wire → `DeviceRules`; render fields optional.
-- `producer.ts` — `buildSuggestionsForTier`, `recomputeFitsDevice`, `createDeviceRulesProducer`.
+- `classify.ts` — pure `classify(signals, classifier, platform): Tier`; total (last-resort floor → `low`).
+- `parse.ts` — `parseDeviceRules`: classifier normalizer (snake→camel) + per-entry guard that maps each tier entry to a typed `RuleModelEntry`, skipping any missing a field `hfAsModel` needs. An old `candidates[]` doc parses to all-empty tiers (does not throw).
+- `rulesUrls.ts` — jsDelivr URL per platform.
+- `rules.ts` — `fetchRules(platform)`: timeout-bounded fetch + `parseDeviceRules` + platform-match guard. Returns `null` (→ bundled floor) on any failure, **including a parse that yields zero models across all tiers** (the still-old hosted JSON).
 
-### Backing store — `src/store/DeviceRulesStore.ts` (MobX)
+### Bundled offline floor — `src/store/bundledDeviceRules/rules.{android,ios}.json`
 
-`{rules, rulesVersion, fetchedAt, fetchState: idle|fetching|ok|error, deviceTier, deviceSignals}`. Persisted: `{rules, rulesVersion, fetchedAt, deviceTier}` via `makePersistable` + **AsyncStorage (mobx-persist-store)** — no MMKV in `src/store/`; every store uses AsyncStorage (HFStore precedent). (C, D-persist)
-
-### Bundled snapshot — `src/store/bundledModelSuggestions.ts` (generated)
-
-`{version, classifiers: {android, ios}, tierSuggestions: {android, ios: {tier → ModelSuggestion[]}}}` + `BUNDLED_RULES_VERSION`. Generated by `src/store/bundledModelSuggestions.gen.test.ts` (jest fixture-test; `hfAsModel`'s module graph pulls react-native so it only runs under jest). Regenerate: `yarn gen:bundled-suggestions`. (C)
+Committed, statically imported by `ModelStore`, run through the same `parseDeviceRules` as the fetched path. New `models[]` schema (§1b). Regenerated by an out-of-tree one-off bake (no committed app/CI generator — D3). (C)
 
 ### Lookie offline constant — `src/store/builtinPalModels.ts`
 
 `LOOKIE_DEFAULT_MODEL: Model` — full SmolVLM-500M vision model, origin HF, resolved offline at pal init (no network). (C, D15)
 
+### Backing store — `ModelStore` (MobX)
+
+No separate device-rules store. `ModelStore` gains:
+
+- `deviceTier: Tier | null` — resolved once per init via `classify`.
+- `rulesVersion: string | null` — provenance of the list (fetched vs bundled).
+- `models[]` — now contains rule-resolved `origin: HF` entries instead of static PRESET `defaultModels`.
+
+Persisted: `ModelStore.{models, version, deviceTier, rulesVersion, …}` via the existing `makePersistable` + AsyncStorage. (C)
+
 ### 1b. External wire shape (`rules.<platform>.json`)
 
-Read-only consumption. Required: `platform`, `rules_version`, `schema_version`, `classifier.{ram_bands, tier_matrix}` + platform classifier maps, `tiers[T].candidates[].{model,quant,hf_repo,hf_filename}`. Optional (render/identity, present after the rules-repo `1.1.0` bump): `min_ram_gb`, `obs_tg`, `native_low_bit`, `multimodal`, `size_bytes`, `params`. `sha256` may be present in the source rules but is ignored by `parse.ts` (not consumed until verified — D20). Unknown fields ignored; both `1.0.0-draft` (no render fields) and `1.1.0-draft` tolerated. (C, D7)
+Read-only consumption. Required: `platform`, `rules_version`, `schema_version`, `classifier.{ram_bands, tier_matrix}` + platform classifier maps, and per entry `tiers[T].models[].{hfModel:{id,author,url}, modelFile:{rfilename,url}}`. Optional: `name` (curated display name), `hfModel.specs.gguf.{total,bos_token,eos_token}`, `hfModel.siblings[{rfilename,size?,oid?,lfs?}]` (vision repos only — mmproj pairing), `modelFile.{size, oid, lfs:{oid,size,pointerSize}}`. Baking `oid`+`lfs` makes the resolved Model identical to an HF-browser add and the offline integrity check self-contained. Unknown fields ignored; an entry missing a required field is skipped. (C, D9)
 
-The `size_bytes`/`params` additions are owned cross-repo in `a-ghorbani/pocketpal-device-rules` — out of the app's diff. The repo may also ship `sha256`, but the app ignores it (D20). (D1b)
+The schema is owned cross-repo in `a-ghorbani/pocketpal-device-rules` — out of the app's diff. (D1b)
 
 ---
 
 ## 2. Event flow
 
 ```
-app start / model-picker open
-  DeviceRulesStore.ensureRules():
-    read DeviceSignals once (cache)
-    fetch rules.<platform>.json (jsDelivr, timeout-bounded)
-      ok   → cache rules + rulesVersion + fetchedAt; fetchState=ok
-      fail → fetchState=error; keep last cached rules
-    classify(signals, effectiveClassifier) → deviceTier   (bundled classifier when offline)
-  device-rules producer → ModelSuggestion[] for deviceTier
-    online (rules ok/cached) → rules.tiers[tier].candidates
-    offline (no rules/cache) → bundledTierSuggestions[platform][tier]
-    fitsDevice recomputed against actual RAM
-  picker dedups suggestions against ModelStore.models by {repo,filename}
-  user taps a suggestion (requires network — resolve fetches the HF repo):
-    online  → resolveHFModelForDownload(hfRepo,hfFilename,token) → hfAsModel → downloadHFModel
-    offline → resolve fails → card shows "connect to download"; no queueing (D19)
+app start / ModelStore.initializeStore
+  readDeviceSignals() once
+  resolvePresets():
+    fetched = fetchRules(platform)            (jsDelivr, timeout-bounded, parsed)
+      ok (≥1 model)            → use fetched rules
+      fail / old-schema / empty → use bundled rules.<platform>.json (parsed)
+    classify(signals, rules.classifier, Platform.OS) → deviceTier
+    presets = rules.tiers[deviceTier].models.flatMap(hfAsModel expand)  // origin: HF
+      (vision entries also materialize their mmproj sibling Models)
+  merge presets into ModelStore.models (reconcile, §6)
+  user taps a model in the EXISTING list → checkSpaceAndDownload → downloadUrl → models/hf/...
 ```
+
+No new UI, no producer, no per-tap HF resolve, no new transform. (C)
 
 ---
 
-## 3. State machine — `DeviceRulesStore.fetchState`
+## 3. State machine
 
-```
-idle ─ensureRules→ fetching ─2xx+valid→ ok
-                   fetching ─network/parse err→ error (fall back to cache, else bundled)
-ok/error ─ensureRules (stale, TTL 24h)→ fetching
-```
-
-| State | User-visible |
-| --- | --- |
-| `fetching` first-ever, no cache | bundled-snapshot tier suggestions immediately; no blocking spinner (D9) |
-| `ok` | tier suggestions; primary highlighted |
-| `error` w/ cache or bundled | last-known / bundled suggestions; **no error UI** (D10) |
+No lifecycle store. Rules resolution is a one-shot inside `initializeStore`: `fetch → (ok | fail→bundled) → classify → expand → reconcile`. On fetch failure (offline, non-2xx, old-schema, parse error) the user-visible result is the bundled model list (possibly an older `rules_version`). (C)
 
 ---
 
 ## 4. Contract
 
-### 4a. Suggestion build & ordering (C)
-1. Every source projects into `ModelSuggestion` via a producer; the card renders `ModelSuggestion` only (I8).
-2. Device rules are the only producer wired now.
-3. Candidate order preserved verbatim; first candidate per `model` = primary, rest alternates.
-4. `fitsDevice = minRamGb*1e9 <= ramBytes` when `minRamGb` present, else `true`. Hint only; never blocks download (D11). Replaces the `(size+mmproj)×1.2` heuristic for suggestion cards only.
-5. Download tap reuses `resolveHFModelForDownload` (I3); no new download path. The HF repo is resolved fresh at tap (no `downloadUrl`/LFS oid baked into the snapshot), so a tap **requires network**. Offline, an offline list is informational only: the tap surfaces a "connect to download" message via the card's error path and does **not** queue an offline download. No offline download-queue in this slice (D19).
-6. Suggestions render via `ModelSuggestion`, not `Model`; the card does not reuse `ModelCard`.
-7. Suggestions and downloaded models are two visually separate sections; a suggestion whose `{repo,filename}` already exists in `ModelStore.models` is suppressed (dedup).
+### 4a. Model resolution & merge (C)
+1. The model list = `rules.tiers[classify(signals)].models` materialized through the `addHFModel`-style expansion (§0): each entry → `hfAsModel`; vision entries also push their mmproj sibling Models. Result `origin: HF`, merged where `defaultModels` was merged.
+2. **No UI change.** Resolved models render through the existing `ModelCard` / grouping path; no new screen, section, card, or primitive.
+3. Fetched rules override bundled rules; bundled rules are the always-present offline floor (statically imported).
+4. A model downloads via the existing HF path (`checkSpaceAndDownload` → baked `downloadUrl` → `getModelFullPath` HF branch → `models/hf/...`); no HF API resolve at tap time.
+5. `getOriginalModelName` has no `defaultModels` lookup (delegates to `getDisplayNameFromFilename`); rule-model names come from the optional baked `name` else `hfAsModel`'s derived name.
 
 ### 4b. Hard invariants (C)
-- **I1** — Device-rules producer emits from remote rules XOR bundled snapshot, never merged; suggestions never written into `ModelStore.models`.
+- **I1** — Rule-resolved entries ARE the model list (`origin: HF` via `hfAsModel`); no separate suggestions list.
 - **I2** — `classify` is pure, deterministic, total (last-resort floor → `low`).
-- **I3** — A suggestion becomes a `Model` only via `resolveHFModelForDownload → hfAsModel → downloadHFModel`.
-- **I4** — Suggestions never auto-download; download starts on user tap only.
-- **I5** — `defaultModels.ts` is removed, not retained.
+- **I3** — No per-tap HF resolve; download uses the baked `downloadUrl`.
+- **I4** — Reuse `hfAsModel`; add no transform. Rule entries are the cached subset it reads.
+- **I5** — `defaultModels.ts` is removed, not retained; its 3 consumers are re-sourced (§7).
 - **I6** — Migration preserves every already-downloaded model regardless of origin.
-- **I7** — Bundled snapshot is generated, never hand-edited; bakes device-independent fields; `canFitInStorage` recomputed at runtime.
-- **I8** — Suggestion view-model + card are app-level and producer-neutral.
+- **I7** — Offline never breaks the list; bundled rules are imported.
+- **I8** — A vision entry materializes its mmproj sibling Model(s) into `ModelStore.models` (`addHFModel`-style), so the download path's `this.models.find(m => m.id === projModelId)` resolves. A bare `.map(hfAsModel)` would violate this.
 
 ### 4c. Classifier resolution (C)
-- iOS: `machine → device_id_to_chip → chip_to_class`; miss → `device_family_fallback`; then `ram_bands` → `tier_matrix`.
-- Android: `socModel → soc_model_to_class`; miss → `hardware → hardware_to_class`; miss → `cpu_heuristic` (`features_any`/`features_all`/`max_freq_mhz_min`); then `ram_bands` → `tier_matrix`.
+- iOS: `machine → device_id_to_chip → chip_to_class`; miss → `device_family_fallback`; then `ram_bands → tier_matrix`.
+- Android: `socModel → soc_model_to_class`; miss → `hardware → hardware_to_class`; miss → `cpu_heuristic` (`features_any`/`features_all`/`max_freq_mhz_min`); then `ram_bands → tier_matrix`.
 
 ### 4d. Component renders (C)
-- Model picker (`ModelsScreen`): downloaded/HF/local models via existing `ModelCard` grouping (unchanged) + a separate suggestions section for `deviceTier`. No static PRESET section.
-- Suggestion card (`ModelsScreen/SuggestionCard`): name, quant, size/params hint, multimodal/low-bit + primary badges, `fitsDevice` warning, expected tok/s, download action. Does NOT reuse `ModelCard`. A failed resolve on tap (offline or HF error) surfaces an `Alert` and re-enables the button — network failures show a "connect to download" message; other failures reuse `downloadSetupFailed*` (mirrors `ModelStore.downloadHFModel`). (D19)
+- Model picker (`ModelsScreen`, unchanged): downloaded/HF/local + rule-resolved `origin: HF` models from `ModelStore.models` via the existing `ModelCard` grouping. No static PRESET section, no suggestions section.
+- Download path (existing HF path): tap → baked `downloadUrl` download/progress in the existing card.
 
 ### 4e. Native signals (C)
-- iOS `machine`: `RNDeviceInfo.getDeviceId()` — no native change.
-- Android `socModel`/`cpuFeatures`: existing `getCPUInfo()`.
-- Android `hardware` (`Build.HARDWARE`) + `maxFreqMhz` (big-core `cpuinfo_max_freq`): added to `getCPUInfo()` as two distinct fields, kept separate from the coalesced `getChipset()`.
+- iOS `machine`: `RNDeviceInfo.getDeviceId()`.
+- Android `socModel`/`cpuFeatures`/`hardware` (`Build.HARDWARE`)/`maxFreqMhz` (big-core max freq): `NativeHardwareInfo.getCPUInfo()`; `hardware` + `maxFreqMhz` are distinct fields kept separate from the coalesced chipset.
 
 ---
 
@@ -131,42 +117,41 @@ ok/error ─ensureRules (stale, TTL 24h)→ fetching
 
 | Field | Single writer |
 | --- | --- |
-| `DeviceRulesStore.rules/rulesVersion/fetchedAt/fetchState` | `ensureRules` |
-| `DeviceRulesStore.deviceSignals` | read-once via `signals.ts` |
-| `DeviceRulesStore.deviceTier` | `classify()` result in `resolveTier` |
-| `ModelSuggestion[]` (device-rules) | `DeviceRulesProducer.getSuggestions` |
-| suggestion → `Model` (download) | `resolveHFModelForDownload → hfAsModel → downloadHFModel` |
-| bundled snapshot content | build-time generator (jest fixture-test) |
+| `ModelStore.deviceTier` | `classify()` result in `resolvePresets` |
+| `ModelStore.rulesVersion` | fetch/bundle selection in `resolvePresets` |
+| `ModelStore.models` (rule entries) | reconcile path (merges `rules.tiers[tier].models` via `hfAsModel`) |
+| device signals | `readDeviceSignals` (read-once) |
+| model download | existing `checkSpaceAndDownload` |
 | Lookie default model | `LOOKIE_DEFAULT_MODEL` constant |
-| `ModelStore.version` / re-merge gate | `ModelStore.initializeStore` (gate `version < MODEL_LIST_VERSION`) |
+| `ModelStore.version` / re-merge gate | `initializeStore` (gate `version < MODEL_LIST_VERSION`) |
 
-Cross-store reads: picker reads `DeviceRulesStore.{deviceTier, tierSuggestions}` and `ModelStore.models` (dedup). HF token via `hfStore.shouldUseToken ? hfStore.hfToken : undefined`.
+Cross-store reads: download URLs are public `/resolve/main` — no HF token needed.
+
+**Deferred cleanups (out of scope):** unify iOS/Android signal reads behind one native call; periodic background rules refresh beyond the init gate; CI step to refresh the committed bundled JSON; migrating the hosted advisory JSON to the new `models[]` schema (app works via the bundled floor until then).
 
 ---
 
 ## 6. Migration policy (C)
 
-On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once:
+On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once; preset resolution + reconcile run every init:
 
 1. Keep every `isDownloaded` model regardless of origin (incl. legacy PRESET).
-2. Drop non-downloaded PRESET stubs.
-3. HF/LOCAL models keep customizations (chatTemplate/stopWords merged with refreshed defaults).
-4. No static re-inject — the default list is data-driven.
-5. Kept downloads reconcile to suggestions by `{hf_repo, hf_filename}`, not raw id, at render-time dedup → no duplicate/orphan (D14).
-6. `MODEL_LIST_VERSION` lives in `ModelStore.ts` (moved off the deleted file).
+2. Drop non-downloaded PRESET stubs (re-derivable from rules).
+3. No static re-inject — the list is the `flatMap` expansion of `rules.tiers[deviceTier].models`.
+4. **Reconcile presets by `{repo, filename}` across origins** (NOT `id && origin`): a kept legacy downloaded PRESET and a new `origin: HF` rule entry share `{repo,filename}` but differ in origin. The reconcile suppresses the rule stub when a downloaded model with the same `{repo,filename}` exists at **any** origin, keeping the downloaded record (and its `models/preset/...` file). This covers Case A (legacy PRESET downloaded), Case B (HF downloaded), and Case C (not downloaded → resolves as `origin: HF`).
+5. `MODEL_LIST_VERSION` lives in `ModelStore.ts` (single 14→15 bump).
 
 ---
 
-## 7. Canonical scenarios (C)
+## 7. Cutover — the 3 `defaultModels.ts` consumers (C)
 
-- **A. Online mid-tier Android** — socModel → tier; render-complete rules → suggestions; tap → download.
-- **B. Offline fresh install** — fetch fails, no cache → classify via bundled classifier → bundled tier suggestions (informational); a tap can't resolve offline → "connect to download" message, no queueing (D19).
-- **C. Online fail, cache present** — cached tier; no error UI.
-- **D. Upgrade w/ downloaded legacy PRESET** — keep downloaded, drop stubs; reconcile by `{repo,filename}`; suppressed from suggestions; still usable.
-- **E. iPad unknown to classifier** — `device_family_fallback` → tier (totality).
-- **F. Unknown device** — last-resort floor → `low`.
-- **G. Lookie offline init** — `LOOKIE_DEFAULT_MODEL`, no network.
-- **H. Rules on `1.0.0-draft`** — online resolves via HF; offline degrades to name-only, `fitsDevice=true`.
+`defaultModels.ts` is removed with zero references; its consumers are re-sourced:
+
+| # | Consumer | Re-sourced to |
+| --- | --- | --- |
+| 1 | `createBasicModelFromReference` (`PalStore.ts`, degraded fallback) | generic `chatTemplates.default` + `defaultCompletionParams` (D17) |
+| 2 | `getOriginalModelName` (`formatters.ts`) | `getDisplayNameFromFilename`; no `defaultModels` lookup (D18) |
+| 3 | `initializeLookiePal` (`PalStore.ts`) | `LOOKIE_DEFAULT_MODEL` offline constant in `builtinPalModels.ts` (D15) |
 
 ---
 
@@ -174,24 +159,19 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once:
 
 | ID | Decision | Rationale |
 | --- | --- | --- |
-| D1 | Rules JSON stays functionally thin (no template/stop/vision) | GGUF-embedded / runtime-detected |
-| D1b | Add `size_bytes`/`params` (and `sha256`, ignored — D20); rules repo ships first, app tolerates draft | Render-complete offline; no mutual block |
-| D2 | Remote = online override, snapshot = offline floor | Easy online, rich offline |
-| D3 | `mergeModelLists` data-driven; drop static re-inject | Replaces hand-maintained list |
-| D7 | Tolerate unknown/absent fields | Lets the draft format evolve |
-| D8 | Re-fetch on first-open if cache older than 24h TTL | Freshness without per-render network |
-| D9 | Offline-while-fetching shows snapshot, no blocking spinner | Picker never empty |
-| D10 | Fetch error with cache/snapshot shows no error UI | Degrade silently |
-| D11 | `minRamGb` drives `fitsDevice`; never blocks download | Replaces ×1.2 for cards |
-| D14 | Reconcile kept downloads by `{repo,filename}`, not raw id | hfAsModel id may differ from curated id |
+| D1 | Reuse `hfAsModel`; rule entry = its cached `{hfModel,modelFile}` input subset | Zero new transform LOC; identical to HF-browser add |
+| D1b | Schema owned in `a-ghorbani/pocketpal-device-rules`; bake the HF subset there | App imports/fetches, never resolves per model |
+| D2 | Optional curated `name`; else `hfAsModel`-derived | Honors "users won't notice" without app-side name map |
+| D3 | No app/CI generator; commit JSON, statically import as floor | Out-of-tree one-off bake owns the HF fetch |
+| D4 | Keep only the classifier-parsing half of `parse.ts` | Entries feed `hfAsModel` directly |
+| D5 | No `DeviceRulesStore`; fold fetch+classify+map+merge into `ModelStore` | Minimum moving parts; it is just the merge path |
+| D6 | Migration: keep downloaded any-origin; reconcile by `{repo,filename}` across origins | Legacy=PRESET, new=HF; that key is origin-spanning |
+| D7 | Drop static re-inject; single 14→15 `MODEL_LIST_VERSION` bump | Data-driven list |
+| D8 | Reconcile must NOT use `id && origin`; suppress HF stub vs any-origin download | Else legacy PRESET + new HF dup-card and re-download |
+| D9 | Skip malformed entries; require only the fields `hfAsModel` needs; fetch falls to floor on empty/old-schema | Lets the JSON evolve without app breakage |
 | D15 | Lookie default = offline constant, not network resolve | Vision model outside tiers |
-| D16 | Suggestion view-model + card are source-agnostic | New producers are additive |
 | D17 | `createBasicModelFromReference` fallback → `defaultCompletionParams` + default chat template | Generic params suffice (degraded path) |
-| D18 | `getOriginalModelName` drops the PRESET branch (filename-derived for all) | Display-name reset |
-| D19 | No offline download-queue this slice; tap requires online resolve, offline shows "connect to download" | Snapshot carries no `downloadUrl`/LFS oid; resolve is always live; queueing would need baked oids (out of scope) |
-| D20 | `sha256` dropped from the consumed wire schema/types/snapshot | Parsed-but-unverified hash is false assurance; `RNFS.hash` is documented unreliable/expensive (integrity uses file-size). Re-add only when verification is enforced |
-| D-persist | `DeviceRulesStore` persists via AsyncStorage (mobx-persist-store), not MMKV | Matches every other store |
-| D-schema | On rehydration, drop persisted `rules` whose `schemaVersion` ≠ bundled `BUNDLED_SCHEMA_VERSION`; `tierSuggestions` falls back to the bundled tier when a cached tier map is shaped unexpectedly | A stale-schema cache must not crash the picker or render a mismatched shape |
+| D18 | `getOriginalModelName` is filename-derived for all | No `defaultModels` dependency |
 
 ---
 
@@ -199,18 +179,20 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once:
 
 | ID | Edge case | Behaviour |
 | --- | --- | --- |
-| 9a | Offline fresh install | bundled snapshot tier (informational); tap can't resolve → "connect to download", no queueing (D19) |
-| 9b | Fetch 404/timeout, cache present | use cache, no error UI |
-| 9f | Malformed/partial rules JSON | parse-guard → cache then bundled; never crash |
-| 9j | Two tiers list same `{repo,filename}` | dedup at build; first wins |
-| 9k | `min_ram_gb` absent | `fitsDevice` defaults true |
-| 9l | Downloaded legacy id ≠ generated id | matched by `{repo,filename}` → suppressed, no dup/orphan |
-| 9m | Rules `1.0.0-draft` (render fields absent) | online via HF; offline degrades, `fitsDevice=true` |
-| 9n | Lookie pal init offline | `LOOKIE_DEFAULT_MODEL`, no network |
-| 9o | Future PalsHub-pal producer added | new producer file + registry entry; card untouched |
+| 9a | Offline / fetch fails | imported bundled rules → list renders (I7) |
+| 9b | Malformed fetched JSON | parse throws in `fetchRules` → `null` → bundled floor; never crash |
+| 9c | Old `candidates[]` hosted JSON | parses to empty tiers → `fetchRules` returns `null` → bundled floor |
+| 9d | Entry missing a required field | skip that entry; rest render |
+| 9e | `platform` mismatches `Platform.OS` | fetched rules treated invalid → bundled floor |
+| 9f | Device unknown to classifier | last-resort floor → `low` tier (I2) |
+| 9g | Legacy downloaded PRESET same `{repo,filename}` as a rule entry | reconcile keeps PRESET download, suppresses HF stub; PRESET file still found |
+| 9h | Already-downloaded HF model also in rule list | same id+origin → reconcile keeps download, suppresses stub |
+| 9i | Two tiers list the same `{repo,filename}` | dedup by `{repo,filename}` at resolve; first wins |
+| 9j | Vision rule entry | baked `hfModel.siblings` → entry expands `addHFModel`-style; LLM + mmproj sibling Models both pushed; projection resolvable for download (I8) |
+| 9k | Lookie pal init offline | `LOOKIE_DEFAULT_MODEL` constant, no network |
 
 ---
 
 ## Cross-repo ordering
 
-`size_bytes`/`params` are owned in `a-ghorbani/pocketpal-device-rules` (the repo may also carry `sha256`, which the app ignores — D20). Order: the rules repo ships them first (forward-compatible bump); both remote rules and the bundled snapshot must carry them for a render-complete offline floor. The app tolerates the current draft throughout, so neither repo blocks the other.
+The `rules.<platform>.json` schema (`models[]` of baked `{hfModel, modelFile}` pairs) is owned in `a-ghorbani/pocketpal-device-rules`. The app ships the committed bundled floor and tolerates the hosted JSON still being the old `candidates[]` schema (falls to the floor), so neither repo blocks the other. The hosted-JSON migration to the new schema is a separate, user-owned step.
