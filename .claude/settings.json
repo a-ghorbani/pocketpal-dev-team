@@ -46,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/tools/block-commit-to-main.sh"
+            "command": "${CLAUDE_PROJECT_DIR}/tools/block-commit-to-main.sh"
           }
         ]
       },
@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/tools/guard-submodule-edit.sh"
+            "command": "${CLAUDE_PROJECT_DIR}/tools/guard-submodule-edit.sh"
           }
         ]
       },
@@ -64,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/tools/guard-submodule-edit.sh"
+            "command": "${CLAUDE_PROJECT_DIR}/tools/guard-submodule-edit.sh"
           }
         ]
       },
@@ -73,11 +73,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/tools/guard-worktree-ops.sh"
+            "command": "${CLAUDE_PROJECT_DIR}/tools/guard-worktree-ops.sh"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/tools/guard-submodule-git.sh"
+            "command": "${CLAUDE_PROJECT_DIR}/tools/guard-submodule-git.sh"
           }
         ]
       }
@@ -88,7 +88,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/tools/post-worktree-copy-env.sh"
+            "command": "${CLAUDE_PROJECT_DIR}/tools/post-worktree-copy-env.sh"
           }
         ]
       }
