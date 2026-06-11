@@ -48,7 +48,7 @@ Persisted: `ModelStore.{models, version, deviceTier, rulesVersion, …}` via the
 
 ### 1b. External wire shape (`rules.<platform>.json`)
 
-Read-only consumption. Required: `platform`, `rules_version`, `schema_version`, `classifier.{ram_bands, tier_matrix}` + platform classifier maps, and per entry `tiers[T].models[].{hfModel:{id,author,url}, modelFile:{rfilename,url}}`. Optional: `name` (curated display name), `hfModel.specs.gguf.{total,bos_token,eos_token}`, `hfModel.siblings[{rfilename,size?,oid?,lfs?}]` (vision repos only — mmproj pairing), `modelFile.{size, oid, lfs:{oid,size,pointerSize}}`. Baking `oid`+`lfs` makes the resolved Model identical to an HF-browser add and the offline integrity check self-contained. Unknown fields ignored; an entry missing a required field is skipped. (C, D9)
+Read-only consumption. Required: `platform`, `rules_version`, `schema_version`, `classifier.{ram_bands, tier_matrix}` + platform classifier maps, and per entry `tiers[T].models[].{hfModel:{id,author,url}, modelFile:{rfilename,url}}`. Required for vision: `hfModel.siblings[].{rfilename, url}` — each mmproj sibling is materialized into its own downloadable Model (`hfAsModel` sets its `downloadUrl` from `sibling.url`), so without `url` the projection's `downloadUrl` is empty and `checkSpaceAndDownload` early-returns (`ModelStore.ts:1056`), i.e. vision never gets its mmproj. Optional: `name` (curated display name), `hfModel.specs.gguf.{total,bos_token,eos_token}`, `hfModel.siblings[].{size, oid, lfs}` (vision only — integrity parity), `modelFile.{size, oid, lfs:{oid,size,pointerSize}}`. Baking `oid`+`lfs` makes the resolved Model identical to an HF-browser add and the offline integrity check self-contained. Unknown fields ignored; an entry missing a required field is skipped. (C, D9)
 
 The schema is owned cross-repo in `a-ghorbani/pocketpal-device-rules` — out of the app's diff. (D1b)
 
@@ -188,7 +188,7 @@ On `version < MODEL_LIST_VERSION` (bumped to 15), `mergeModelLists` runs once; p
 | 9g | Legacy downloaded PRESET same `{repo,filename}` as a rule entry | reconcile keeps PRESET download, suppresses HF stub; PRESET file still found |
 | 9h | Already-downloaded HF model also in rule list | same id+origin → reconcile keeps download, suppresses stub |
 | 9i | Two tiers list the same `{repo,filename}` | dedup by `{repo,filename}` at resolve; first wins |
-| 9j | Vision rule entry | baked `hfModel.siblings` → entry expands `addHFModel`-style; LLM + mmproj sibling Models both pushed; projection resolvable for download (I8) |
+| 9j | Vision rule entry | baked `hfModel.siblings[].{rfilename,url,…}` → entry expands `addHFModel`-style; LLM + mmproj sibling Models both pushed; projection resolvable AND downloadable (mmproj `downloadUrl` from `sibling.url`; empty `url` → `checkSpaceAndDownload` early-returns, I8) |
 | 9k | Lookie pal init offline | `LOOKIE_DEFAULT_MODEL` constant, no network |
 
 ---
