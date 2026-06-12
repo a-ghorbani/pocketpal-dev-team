@@ -99,22 +99,24 @@ UIStore (C, persisted)
 
 ### 1b. PalStore additions
 
-A new seeded system pal `Pip`, mirroring the existing `Lookie` seeding pattern (`src/store/PalStore.ts:739` `initializeLookiePal`).
+Five onboarding pals are exposed via `ONBOARDING_PALS` (Pip / Codie / Sage / Echo / Muse) in `src/store/onboarding/onboardingPals.ts`, mapped to `TopicKey` via `TOPIC_TO_PAL` and resolved on screen 6 by `resolvePalForTopic`. Pip is auto-seeded by `PalStore.initializePipPal()` (idempotent, mirrors `initializeLookiePal` at `src/store/PalStore.ts:739`); Codie / Sage / Echo / Muse are materialised on Finish via `palStore.createPal` only when the user picks a model on screen 6.
 
 ```
-SystemPip (C)
+OnboardingPal (C)
   type        : 'local'
-  name        : 'Pip'
-  description : <designer-owned copy>
-  systemPrompt: <designer-owned starter prompt — friendly general-assistant tone>
-  defaultModel: <Model — the small default model in ModelStore.defaultModels;
-                 chosen below from the closed RECOMMENDED_PAL_MODEL_SET — D2>
-  capabilities: {}                           // no video, no special
-  color       : [<P: designer palette>]
+  name        : 'Pip' | 'Codie' | 'Sage' | 'Echo' | 'Muse'
+  description : <baked in onboardingPals.ts>
+  systemPrompt: <baked in onboardingPals.ts>
+  defaultModel: <Model — sourced per entry.origin>
+  capabilities: {}
+  color       : [string, string]
   source      : 'local'
 ```
 
-Pip is created idempotently from `PalStore.initialize()` after the database is loaded, by a private `initializePipPal()` paired with the existing `initializeLookiePal()` (matches the Lookie precedent — see Suggestion 1 resolution in Review History).
+`Pal.defaultModel` is sourced from the entry the user picked on screen 6:
+
+- `entry.origin === 'preset'` (Pip tier triple + Codie quick): resolved via `defaultModels.find(m => m.id === entry.id)`.
+- `entry.origin === 'hf'` (curated POC-24 picks for Codie balanced/best, Sage, Echo, Muse): the `Model` is returned by `ModelStore.registerOnboardingPalModel(entry)`, which synthesizes the minimal `{hfModel, modelFile}` pair and delegates to `addHFModel` for idempotent insertion.
 
 ### 1c. Glossary
 
@@ -122,10 +124,10 @@ Pip is created idempotently from `PalStore.initialize()` after the database is l
 - **Brand splash** (this slice) — the **post-hydration** branded screen at Figma `884:28349`. Rendered as the initial route of the Onboarding stack when `hasCompletedOnboarding === false`. Transitions to Onboarding-1 after a fixed minimum dwell (D6).
 - **Stepper** — the 4-dot progress indicator on screens 1–4 (Figma `896:29130`-band). Note: screens 5 and 6 do NOT show a stepper in the Figma frames (screen 5 has a fullwidth header; screen 6 has the recommended-pal header). The stepper is therefore visually 1-of-4, 2-of-4, 3-of-4, 4-of-4 across screens 1–4 only.
 - **Topic** — a category the user picks on screen 5. Closed union of 6 keys (`TopicKey`), single-select. Tapping a chip auto-advances to screen 6; there is no Continue button on screen 5.
-- **Recommended tier** — the middle (Balanced / Q4_K_M) model card on screen 6. Renders with a peach-tinted background (`theme.colors.accent.peach`) and a "Recommended" pill badge per Figma.
+- **Recommended tier** — the Balanced row in the resolved pal's tier triple; the entry carries `recommended: true` per `onboardingPals.ts` data. Renders with a peach-tinted background (`theme.colors.accent.peach`) and a "Recommended" pill badge per Figma.
 - **Audio button** — a 40×40 IconButton (speaker / headphones glyph) in the top-right of screens 5 and 6 (in the same slot that screens 1–4 use for Skip). On tap, the screen's title + body text is announced via `AccessibilityInfo.announceForAccessibility(text)`. Side-effect only; no app state.
 - **HighlightText** — a Text primitive that renders one or more inline phrases against a peach pill background. Used inline within screen 2 / 3 / 4 body copy.
-- **Recommended pal** — the system-seeded `Pip` shown on screen 6.
+- **Recommended pal** — the pal resolved from the topic chosen on screen 5 via `resolvePalForTopic`. Pip is the fallback for `topic === 'smartchat' | 'else' | null`; `coding` → Codie, `education` → Sage, `roleplay` → Echo, `creative_writing` → Muse.
 
 ---
 
@@ -263,15 +265,28 @@ This component is the only DS-layer addition. Per theming.md §4g, it MUST:
 - Not import `src/components/*` legacy.
 - Be subject to the visual-parity snapshot strategy (§4k.2): `variant × size × {default, disabled} × {light, dark}` reduces to `{2-step, 3-step, 4-step, 5-step} × 1 × {default} × {light, dark}` because there is no variant or disabled state; emit 8 snapshots.
 
-### 4d. The `Pip` seeded pal
+### 4d. Pal materialisation on Finish
 
-(C) `PalStore.initializePipPal()` is a private method, called from `PalStore.initialize()` after `initializeLookiePal()`. Idempotent: looks up `{ name: 'Pip', source: 'local' }`; if present, returns; if absent, creates with the data shape in §1b.
+(C) `PalStore.initializePipPal()` is a private method, called from `PalStore.initialize()` after `initializeLookiePal()`. Idempotent: looks up `{ name: 'Pip', source: 'local' }`; if present, returns; if absent, creates with the data shape in §1b. Codie / Sage / Echo / Muse are NOT seeded at boot; they are materialised on Finish via `palStore.createPal` only when the user picks a model on screen 6 and the resolved topic maps to them.
 
-(C) The recommended model on screen 6 is the user-pickable model from `RECOMMENDED_PAL_MODEL_SET` (D2). Once picked, the model is registered in `ModelStore` (using existing model registration paths) AND its `id` is written to `Pip.defaultModel.id`. (Pip then "knows" which model to use.)
+(C) Screen 6 renders the resolved pal's three tier rows (Quick / Balanced / Best) from `OnboardingPalDef.models`. Each entry is self-describing: `repo`, `filename`, `displayName`, `sizeBytes`, `params`, and `origin: 'preset' | 'hf'`. The Recommended badge tracks `entry.recommended` (always the Balanced row today). The picker reads display fields directly from the entry (I4), so all three rows render identically pre- and post-registration. Per-pal picks come from `src/store/onboarding/onboardingPals.ts` (transcribed from `onboarding-pals.v1.json`); the per-pal table is the curated POC-24 set:
 
-(C) The user-picked download is enqueued via `modelStore.checkSpaceAndDownload(modelId)` (existing public API; signature confirmed against `src/store/ModelStore.ts:990` and call sites `ModelCard.tsx:415`, `ChatPalModelPickerSheet.tsx:62`, `ProjectionModelSelector.tsx:108`, `ModelNotAvailable.tsx:52`). It accepts the model `id` string and resolves space/auth/destination internally. Onboarding does NOT block on the download completing; the user lands on Homepage with the download in-flight (visible via the existing Models screen).
+| Pal   | quick                              | balanced (recommended)              | best                                |
+| ----- | ---------------------------------- | ----------------------------------- | ----------------------------------- |
+| Pip   | Llama-3.2-1B (Q2_K) — preset       | Llama-3.2-1B (Q4_K_M) — preset      | Llama-3.2-3B (Q6_K) — preset        |
+| Codie | Qwen2.5 Coder 0.5B (Q8_0) — preset | Qwen3.5 2B (Q4_K_M) — hf            | Qwen3.5 4B (Q4_K_M) — hf            |
+| Sage  | LFM2.5 1.2B (Q4_K_M) — hf          | Gemma 3 1B (Q8_0) — hf              | Gemma 3 4B (Q4_K_M) — hf            |
+| Echo  | Gemma 3 1B (Q4_K_M) — hf           | Gemma 3 1B (Q8_0) — hf              | Gemma 3 4B (Q4_K_M) — hf            |
+| Muse  | LFM2.5 1.2B (Q4_K_M) — hf          | Qwen3.5 2B (Q4_K_M) — hf            | Qwen3.5 4B (Q4_K_M) — hf            |
 
-(C) If the user picks no model (Skip path on any of screens 2–6, or screen 6 Skip), Pip exists with `defaultModel=undefined`; the user must pick a model later via the Models screen. This matches the existing post-install state of the app. Screen 6 Finish before picking is disabled (D8), so the only no-model completion paths are the Skip buttons.
+(C) Once the user taps Finish, `useOnboardingHandlers.finish` resolves the picked entry from `palDef.models` and splits on `entry.origin`:
+
+- `'preset'` (Pip tier triple + Codie quick): `picked = defaultModels.find(m => m.id === entry.id)` — unchanged from the pre-curated path.
+- `'hf'` (curated POC-24 picks): `picked = await modelStore.registerOnboardingPalModel(entry)`, which synthesizes the minimal `{hfModel, modelFile}` per §0c of `model-loading.md` and delegates to `ModelStore.addHFModel`. The synthesized `hfModel.siblings` is `undefined` so `isVisionRepo` short-circuits to `false` and no projection model materialises (text-only by design — POC-28 explicitly defers vision).
+
+The resolved `Model` is then bound to `Pal.defaultModel` via `palStore.createPal` (first-time topic-resolved pal) or `palStore.updatePal` (replay / already-existing Pip). The user-picked download is enqueued via `modelStore.checkSpaceAndDownload(picked.id)` (existing public API; signature confirmed against `src/store/ModelStore.ts:990` and call sites `ModelCard.tsx:415`, `ChatPalModelPickerSheet.tsx:62`, `ProjectionModelSelector.tsx:108`, `ModelNotAvailable.tsx:52`). It accepts the model `id` string and resolves space/auth/destination internally. Onboarding does NOT block on the download completing; the user lands on Homepage with the download in-flight (visible via the existing Models screen).
+
+(C) If the user picks no model (Skip path on any of screens 2–6), Pip remains seeded with `defaultModel=undefined`; the topic-resolved pal (Codie / Sage / Echo / Muse) is NOT materialised. The user must pick a model later via the Models screen. Screen 6 has no Skip per Round-3; the only no-model completion paths are the Skip buttons on screens 2–5.
 
 ### 4e. Onboarding-skipped invariants
 
@@ -294,6 +309,7 @@ This component is the only DS-layer addition. Per theming.md §4g, it MUST:
 - **I_OB9 (RTL + non-Latin verified per slice)**: On `language ∈ {he, fa}`, screen layout mirrors (RN `I18nManager` already enabled — verified by FOU-114) AND headlines fall back to Inter per theming.md §4d.2.
 - **I_OB10 (no telemetry / no auth)**: No network call originates from any onboarding screen.
 - **I_OB11 (`spacing.xxl = 40` cross-cite handshake)**: Figma uses `Spacing/XXL=40` for onboarding screens. The token addition in `src/theme/tokens/spacing.ts` and the architecture-doc amendment to `context/architecture/theming.md` §1a live in **different repos** (linked by submodule), so literal same-PR atomicity is structurally impossible. Instead, per the I_UI8 analogue established by FOU-115 (theming.md §4 I_UI8): the app PR cites the dev-team-repo commit SHA that amends theming.md §1a in its description; the dev-team-repo commit cites the app PR URL. Splitting them across review cycles is forbidden. The pipeline-reviewer enforces both citations before approving the draft PR.
+- **I_OB15 (lazy onboarding-pal HF registration)**: `ModelStore.registerOnboardingPalModel` is the single writer that inserts onboarding-pal HF-origin `Model`s into `modelStore.models`, and it is only invoked from `useOnboardingHandlers.finish` — never from a boot path. Skip / no-pick / cancel paths do not register. Consequence: a user who installs the app, sees Onboarding6, and never finishes never has an HF-origin onboarding-pal entry in their Models tab.
 
 ### 4g. What each component / module renders
 
@@ -377,10 +393,9 @@ onboarding.screen5.cta                   // "Continue"
 onboarding.screen5.topic.<key>           // 6 entries (one per TopicKey)
 onboarding.screen6.eyebrow               // "Pip"
 onboarding.screen6.title                 // "We found a perfect pal for you…"
-onboarding.screen6.body                  // "Pip thinks using a small AI model on your phone — pick one that fits."
 onboarding.screen6.cta                   // "Finish"
-onboarding.screen6.model.<modelKey>.title       // 3 entries (one per RECOMMENDED_PAL_MODEL_SET member)
-onboarding.screen6.model.<modelKey>.subtitle    // size + RAM hint
+onboarding.screen6.pal.<key>.body        // 5 entries (one per OnboardingPalKey: pip/codie/sage/echo/muse)
+onboarding.screen6.modelTier.{quick,balanced,best}  // 3 tier labels rendered as the radio title
 onboarding.back                          // accessibility label for the back IconButton
 onboarding.skip                          // visible label + accessibility label for Skip
 ```
@@ -415,6 +430,7 @@ The new `Stepper` DS component DOES ship the standard variant×size×state×mode
 | `uiStore.onboardingState.selectedModelId` | `uiStore.setOnboardingModelId(modelId)` (C). |
 | `palStore.pals` (Pip entry) | `PalStore.initializePipPal()` (C) — idempotent create. Pip is otherwise edited like any user pal via `PalSheet` (existing path; out of scope here). |
 | `modelStore.models` / `modelStore.downloads` | Existing single-writers in `ModelStore`. Onboarding only **calls** `modelStore.checkSpaceAndDownload(modelId)` (existing public API). |
+| `modelStore.models` (onboarding-pal HF entries) | `ModelStore.registerOnboardingPalModel` → delegates to `ModelStore.addHFModel`. Sole entry-point for inserting onboarding-pal HF-origin `Model`s; called only from `useOnboardingHandlers.finish` (I_OB15). |
 
 `completeOnboarding({topics, modelId})` signature (C): `topics: TopicKey[]` (possibly empty), `modelId: string | null`. The screen-side caller is responsible for invoking `palStore.initializePipPal()` (idempotent — already called from `PalStore.initialize`) and, when `modelId !== null`, `modelStore.checkSpaceAndDownload(modelId)`. UIStore writes only its own fields.
 
@@ -521,16 +537,27 @@ This is a deliberate design call (D5): mid-flow state does not persist. The flow
 ### G. User reaches screen 6, picks model, completes; download proceeds in background
 
 ```
-1. User taps Finish on screen 6 with selectedModelId='gemma-3-1b'.
-2. Screen handler runs:
-   - uiStore.completeOnboarding({topics: <whatever was picked>, modelId: 'gemma-3-1b'})
-   - palStore.initializePipPal() (idempotent)
-   - modelStore.checkSpaceAndDownload('gemma-3-1b') begins (existing API; resolves
-     destination/auth internally).
-3. <SwitchPoint> swaps to Drawer.Navigator; user lands on Chat. Chat shows the existing empty state.
-4. User opens Models drawer item → sees the chosen model in 'downloading' state.
-5. When download completes, Pip is usable in Chat (selected via the existing
+1. User reaches screen 6 with topic='smartchat' (or null/'else'). Resolved pal: Pip.
+   Recommended (Balanced) pre-selected: selectedModelId =
+   'bartowski/Llama-3.2-1B-Instruct-GGUF/Llama-3.2-1B-Instruct-Q4_K_M.gguf'.
+2. User taps Finish. Screen handler resolves the entry from Pip.models;
+   entry.origin === 'preset'. picked = defaultModels.find(m => m.id === entry.id).
+3. uiStore.completeOnboarding({topic: 'smartchat', modelId: picked.id}) flips
+   hasCompletedOnboarding := true and snapshots the topic.
+4. palStore.updatePal(Pip.id, {defaultModel: picked}) rebinds Pip.
+5. modelStore.checkSpaceAndDownload(picked.id) begins (existing API; resolves
+   destination/auth internally).
+6. <SwitchPoint> swaps to Drawer.Navigator; user lands on Chat. Chat shows the
+   existing empty state.
+7. User opens Models drawer item → sees the chosen model in 'downloading' state.
+8. When download completes, Pip is usable in Chat (selected via the existing
    pal/model selection flows — out of scope here).
+
+For HF-origin entries (e.g. Sage / Balanced = Gemma 3 1B Q8_0), Step 2 instead
+runs picked = await modelStore.registerOnboardingPalModel(entry); the synthesizer
+delegates to addHFModel which inserts the Model into modelStore.models with
+origin: HF and supportsMultimodal: false (siblings: undefined). The rest of the
+flow is identical.
 ```
 
 ### G'. User skips on screen 6 after seeing the recommended-pal picker (no model picked)
@@ -581,7 +608,7 @@ Screens 5 + 6: NO Stepper rendered (per Figma).
 ## 8. Decisions
 
 - **D1 (Onboarding switch is INSIDE `<App/>`, below the providers, branching `OnboardingStack` vs `Drawer.Navigator`)**: Keeps the entire provider tree (`PaperProvider`, `NavigationContainer`, `L10nContext`, `BottomSheetModalProvider`, `MarkdownProvider`, `KeyboardProvider`, `SafeAreaProvider`, `GestureHandlerRootView`) single-instance and shared between onboarding and the rest of the app. Avoids leaking onboarding into `headerLeft` / `SidebarContent` / drawer screen options (the branch is a navigator-choice, not a Drawer screen). Trivially satisfies I_OB6 since `Drawer.Navigator` simply isn't rendered while onboarding is active. Rejected alternative (Interp A — switch at `AppWithMigrationWrapper`): would require either pushing all providers up out of `<App/>` (cross-cutting refactor) or duplicating them on the onboarding side (two `PaperProvider`s, two `NavigationContainer`s — fragile and wrong).
-- **D2 (`RECOMMENDED_PAL_MODEL_SET` = closed list of 3 small models)**: Engineering picks 3 small-RAM-budget models from `ModelStore.defaultModels` (e.g. one ~500MB tier, one ~1GB tier, one ~2GB tier). The exact list is HOW-time work (the architect doesn't pick model IDs from a moving catalogue; the planner sees the latest defaults). Constraint: every member MUST exist in `defaultModels` at HOW time, with a stable `id`. Adding a recommendation later is a delta WHAT against `onboarding.md`.
+- **D2 (per-pal tier triple, mixed origin allowed)**: Each of the five onboarding pals (Pip / Codie / Sage / Echo / Muse) carries three self-describing `OnboardingPalModelEntry` rows (`quick` / `balanced` / `best`), hand-edited in `src/store/onboarding/onboardingPals.ts`. Per POC-28, entries are either `origin: 'preset'` (resolved via `defaultModels.find`) or `origin: 'hf'` (lazy-registered at Finish via `ModelStore.registerOnboardingPalModel`); a single pal may mix origins across its tiers (e.g. Codie: quick = preset, balanced = hf, best = hf). Curated picks come from the POC-24 eval (`onboarding-pals.v1.json`). Adding a recommendation or rebalancing the tier triple later is a delta WHAT against `onboarding.md`.
 - **D3 (Pip seeded by `PalStore.initialize`, not by onboarding completion)**: Mirrors the existing Lookie precedent (`initializeLookiePal` at `src/store/PalStore.ts:739`). Pip exists on every install (independent of onboarding) so the post-skip state is sane. The method is named `initializePipPal` (matching the Lookie precedent), not `ensurePipPal` — see Suggestion 1 resolution in Review History.
 - **D4 (Topic selection captured but not used to alter recommendation)**: The recommended pal is always Pip in this slice. Per-topic recommendations are a future FOU work item. Capturing the snapshot now means FOU-117 has the data when it lands. Alternative considered: hide screen 5 entirely until topic-driven recs exist. Rejected because screen 5 is in the canonical Figma frames and is part of the locked "first flow slice".
 - **D5 (Mid-flow state does NOT persist across launches)**: `onboardingState` is in-memory. Rationale: flow is short, partial-progress surfaces are not in Figma, and recovering from kill at exactly the right step is more code than worth.
@@ -626,9 +653,9 @@ Onboarding1 has NO Back button per Figma. Pressing system back (Android) is inte
 
 `PalStore.initialize` is called once in the store constructor; idempotency check (`pals.find(p => p.name === 'Pip' && p.source === 'local')`) ensures a re-entry does not double-seed. I_OB7.
 
-### 9h. User reaches screen 6 before the canonical `RECOMMENDED_PAL_MODEL_SET` is loaded into `ModelStore`
+### 9h. User reaches screen 6 before any model is loaded into `ModelStore`
 
-`ModelStore.defaultModels` is a static const (`src/store/defaultModels.ts`) — present in memory from app start. No async dependency. The three model rows render synchronously.
+Entries are self-describing (`displayName`, `sizeBytes`, `params`, derived `id`) and live in `src/store/onboarding/onboardingPals.ts`, so the three radio rows render synchronously with no dependency on `modelStore.models`. PRESET entries (Pip + Codie quick) resolve via `defaultModels.find` only at Finish; HF entries register at Finish via `ModelStore.registerOnboardingPalModel`. I4.
 
 ### 9i. RTL: stepper dot order
 
@@ -661,7 +688,7 @@ Stepper is exported from the DS barrel. Tree-shaking should remove it from the b
 - Not an implementation plan — file layout, refactor order, asset wiring live in `how.md`.
 - Not a designer hand-off — Figma is the design source.
 - Not a Homepage / Chat specification — those are FOU-117 scope. This doc references the first-time Homepage only as the destination state.
-- Not a model-catalogue specification — the `RECOMMENDED_PAL_MODEL_SET` membership is HOW-time work against the current `defaultModels` content (D2).
+- Not a model-catalogue specification — the per-pal tier triple is hand-edited in `src/store/onboarding/onboardingPals.ts` (POC-28; D2). Curated HF picks come from `onboarding-pals.v1.json`.
 - Not a designer-copy spec — onboarding copy is ported verbatim from Figma in HOW. Empty slots are designer asks, not engineering invention (§9m).
 - Not a Phase 4 cleanup plan — Stepper does not need a non-onboarding consumer to exist in DS, and the Paper-import blocklist is not extended by this slice.
 
@@ -683,7 +710,7 @@ The Round-1/2 wireframe shipped in PR #747 was a token-faithful skeleton; the us
 | A | Skip presence | Skip on screens 1–4 ONLY. Screens 5 + 6 replace the slot with an Audio button (`onboarding-audio` testID). |
 | B | Screen-6 Skip | DELETED. Screen 6 has no Skip; the only forward path is pick + download. |
 | C | Topic union + selection | `selectedTopic: TopicKey \| null` (single-select); chip-tap auto-advances to screen 6 (no Continue). Keys: `smartchat / coding / education / roleplay / creative_writing / else`. Setter renamed `setOnboardingTopic`. Persisted snapshot stays `TopicKey[]` (FOU-117 headroom). |
-| D | `RECOMMENDED_PAL_MODEL_SET` | Three quants of one base model (Llama-3.2-1B Q2_K / Q4_K_M / Q8_0) rendered as Quick / Balanced / Best. Balanced carries the Recommended badge + peach-tinted card. Typed shape (`RecommendedPalModelEntry[]`). |
+| D | Per-pal tier triple | Round-3's single-pal three-quant Pip mock was superseded in code by a topic-resolved pal set (Pip / Codie / Sage / Echo / Muse) with a Quick / Balanced / Best triple per pal. POC-28 layers HF-origin lazy registration on top: HF-origin entries are inserted into `modelStore.models` only on Finish, via `ModelStore.registerOnboardingPalModel`. Balanced still carries the Recommended badge + peach-tinted card. Entry shape `OnboardingPalModelEntry` (§1a). |
 | E | Audio button | New 40×40 IconButton on screens 5+6 top-right; `AccessibilityInfo.announceForAccessibility(title + body)` on press. Side-effect only. |
 | F | Italic title accents | Each title has a Fraunces-Italic accent fragment (screen 1 "*pals*", screen 3 "*Smaller,*", screen 4 "*leaves*") or is fully italic (screen 2, screen 6 "*Pip*"). |
 | G | Peach pill highlights | `HighlightText` primitive wraps the per-screen highlighted phrases (screen 2 "No internet, no signal", screen 3 "quick and private", screen 4 "No accounts. No cloud. No tracking.") against `theme.colors.accent.peach`. |
