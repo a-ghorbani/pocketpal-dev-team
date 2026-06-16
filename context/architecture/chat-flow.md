@@ -1101,3 +1101,93 @@ the ping-pong.
 Future stories that touch this flow should add their cleanup reminders here
 and remove them as they land. Drift policy: see
 `context/architecture/README.md` § Drift prevention.
+
+---
+
+## 11. Keyboard, insets, and scroll-into-view
+
+How the chat surface stays readable when the soft keyboard opens. The bug
+this section was written for: on Android 10 / API 29 the newest assistant
+turn was hidden behind the input + keyboard and could not be scrolled into
+view (scrolling forcibly dismissed the keyboard). Not reproducible on API 30+
+or iOS. (C)
+
+### Layout shape (C)
+
+- The chat list is an **inverted** `FlatList`; newest content is at offset 0
+  (visual bottom). The input is `position:absolute; bottom:0` and translates
+  up when the keyboard opens (`inputContainerAnimatedStyle`, `ChatView.tsx`).
+- The list reserves `marginBottom: bottomComponentHeight` (input height) and
+  compensates for keyboard occlusion with an animated `ListHeaderComponent`
+  spacer (`headerStyle`). Because the list is inverted, that spacer renders at
+  the visual bottom and pushes the newest turn up above the input.
+- Edge-to-edge is on (`WindowCompat.enableEdgeToEdge`, `MainActivity.kt`;
+  `KeyboardProvider statusBarTranslucent navigationBarTranslucent`, `App.tsx`)
+  with `windowSoftInputMode="adjustResize"`. Keyboard height comes from
+  `useReanimatedKeyboardAnimation()` (`react-native-keyboard-controller`,
+  pinned 1.19.6).
+
+### One reconciled occlusion value (C)
+
+`keyboard.height.value` the library reports is the IME inset bottom (it spans
+the navigation bar because the provider is `navigationBarTranslucent`), and is
+negative while the keyboard is up. The space the keyboard actually steals from
+the chat surface, above the input's resting position, is:
+
+```
+keyboardOcclusion = max(0, abs(keyboard.height) - insets.bottom)
+```
+
+This single `useDerivedValue` drives ALL THREE consumers — the input translate
+(`inputContainerAnimatedStyle`), the suggested-prompts overlay
+(`suggestedPromptsAnimatedStyle`), and the inverted-list bottom spacer
+(`headerStyle`) — so they can never disagree. The spacer is no longer gated on
+an in-flight "keyboard is moving" flag; it follows the occlusion value, which
+holds while the keyboard is settled-open and returns to 0 only when the
+keyboard closes. The previous in-flight gate dropped the spacer too early on
+API ≤ 29, leaving the newest turn behind the input.
+
+### Scroll while keyboard open (C)
+
+`keyboardDismissMode` is `'interactive'` on iOS (drag-to-dismiss preserved) and
+`'none'` on Android. On Android, `'interactive'` made a drag dismiss the
+keyboard as the only outcome, so the list could never be scrolled to reveal
+hidden content; `'none'` lets a drag scroll the list with the input still
+focused. Tap-to-dismiss on send is preserved via `Keyboard.dismiss()` in
+`wrappedOnSendPress`.
+
+### Invariants
+
+- **I-K1 (single occlusion source)**: the input's vertical offset, the
+  suggested-prompts overlay, and the inverted-list bottom spacer all derive
+  from the one `keyboardOcclusion` value. No second, independently-computed
+  height for the same concept. (C)
+- **I-K2 (no version fork in layout math)**: the reserved-space formula is one
+  expression correct across API levels via reconciled inputs (insets + reported
+  keyboard height + the `max(0, …)` clamp), not a `Platform.Version`-selected
+  pair of formulas. The `Platform.OS` switch on `keyboardDismissMode` is a
+  gesture-affordance choice, not layout math, and is permitted. (D-K3)
+- **I-K3 (resting visibility)**: at rest with the keyboard open, the newest
+  turn's last line sits above the input's top edge on every supported Android
+  version and iOS. This is the testable acceptance invariant; verified by
+  visual capture (Pixel 9 API 29, an API 30+ device, and iOS). (C, acceptance)
+
+### Decisions
+
+| ID | Decision | Rationale |
+| --- | --- | --- |
+| D-K1 | Fix in JS by reconciling one occlusion value | Smallest blast radius; respects the 1.19.6 pin |
+| D-K3 | No `Platform.Version` fork in layout math | Forked layout is a drift trap (I-K2) |
+| D-K4 | Correct API ≤ 29 to match iOS / API 30+, not vice versa | Working platforms are the reference behaviour; iOS keyboardDismissMode and the API 30+ resting geometry stay unchanged |
+
+### Edge cases (C)
+
+- Empty chat: the spacer is gated on `chatMessages.length > 0`, so an empty
+  chat with the keyboard open lays out the input + placeholder without a
+  phantom spacer.
+- Suggested-prompts overlay: shares the same occlusion value as the input, so
+  the chips and input rise together with no new gap.
+- Streaming while keyboard open: `maintainVisibleContentPosition` keeps the
+  newest tokens in view; the reserved space composes with it.
+- Landscape / split-screen on API 29: out of the acceptance scope; must not
+  crash, but resting-visibility is asserted for portrait only.
