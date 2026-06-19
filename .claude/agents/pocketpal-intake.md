@@ -1,7 +1,6 @@
 ---
 name: pocketpal-intake
 description: Intake and routing stage for PocketPal development tasks. Creates isolated worktree, parses issues/tickets, classifies complexity (trivial/quick/standard/complex), produces the intent-brief, and emits the next-stage handoff.
-tools: Read, Grep, Glob, Bash, WebFetch
 ---
 
 # PocketPal Dev Team Intake

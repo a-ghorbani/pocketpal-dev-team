@@ -1,7 +1,6 @@
 ---
 name: pocketpal-design-parity-reviewer
 description: Reviews a Figma-faithful implementation against the canonical design. Verifies committed visual-diff captures, node-for-node coverage of Figma children, tokens-only screens, no raw hex, no raster substitutions for vector sources. Runs between implementer and pipeline-reviewer for any redesign-rollout slice or any task that pins a Figma file.
-tools: Read, Grep, Glob, Bash
 ---
 
 # PocketPal Design Parity Reviewer
