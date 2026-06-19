@@ -202,6 +202,12 @@ Cross-store reads: Home reads `palStore.pals`, `chatSessionStore.sessions`,
 1. Delete dead `SidebarContent` + drawer-only files → POC-13.
 2. Re-home Models / Benchmark / Pals / App Info under their conceptual tab →
    POC-10 / POC-11.
+   - Interim shim: the Settings screen carries an "Advanced" list section with
+     rows that navigate to Benchmark, App Info, and Dev Tools (Dev Tools gated
+     on `__DEV__`). This keeps those screens user-reachable now that the drawer
+     is unmounted; it is superseded by the Settings reskin that re-homes them
+     (POC-10). `Home` reaches Pals (Add affordance) and Models (Chat
+     empty-state); Settings is its own tab.
 3. Explore tab content → POC-11; Settings reskin → POC-10.
 4. Migrate the remaining Appium specs and page helpers (DrawerPage,
    `model-actions`, `SettingsPage`, the per-feature specs) off the drawer
