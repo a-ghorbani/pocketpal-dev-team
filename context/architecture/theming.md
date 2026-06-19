@@ -412,7 +412,7 @@ Per-family decisions:
 | `Chip` (canonical `890:29153`) | Rebuild | D16, D8 |
 | `Card` / `CardList` | Rebuild (View + tokens) | D17 |
 | `Tabs` (canonical `764:27807`) | Rebuild | D18, D9 |
-| `BottomNavBar` (canonical `143:4685`) | Rebuild — presentational shell only | D19, D10 |
+| `BottomNavBar` (canonical `143:4685`) | Rebuild — presentational shell only; `variant: 'default' \| 'floating'` | D19, D10, D36 |
 | `Label` (Informational + Status) | Rebuild | D23 |
 | `CategoryBadge` | Rebuild | D24 |
 | `Dropdown` | Wrap Paper `Menu` directly; trigger rebuilt against tokens | D25 |
@@ -602,6 +602,7 @@ Prior session: `uiStore.setLanguage('ja')` was called and persisted. App restart
 - **D17** (`Card`/`CardList`, rebuild): Pure visual primitive: surface + radius + padding + optional border. Paper's `Card.Title`/`Card.Content` slots don't match the DS shape.
 - **D18** (`Tabs`, rebuild): Custom underline / state-layer behaviour. Paper's `SegmentedButtons` doesn't reach the Figma look.
 - **D19** (`BottomNavBar`, rebuild): Custom icon-label stack + state-layer indicator. Presentational shell — navigation wiring happens in Phase 3.
+- **D36** (`BottomNavBar` `floating` variant, additive — POC-30): The app shell (`context/architecture/app-shell.md`) needs the canonical peach-pill floating bar. `BottomNavBar` gained a `variant: 'default' | 'floating'` axis. `default` is byte-identical to the pre-POC-30 rendering (bordered top-line bar, active = `theme.colors.primary` text) and its snapshot is frozen (I_UI5). `floating` = rounded floating container (drop shadow via `theme.colors.shadow`, `theme.radius.xxl`) with the active item on a `theme.colors.accent.peach` pill (mode-aware: light `#FCE7CF` / dark `#7A4A1F`); tokens-only, no store import. The floating variant ships its own additive snapshot cells (`floating-m-*`). The app shell picks `floating` as canonical (I_UI7); `default` remains for existing consumers.
 - **D20** (`RadioButton`+`RadioSection`, wrap Paper + composite): A11y-heavy form control. Paper's `RadioButton` handles `accessibilityRole="radio"`, group state, pressed/focused atomically. RadioSection is the composite layout rebuilt on top of the wrapped RadioButton.
 - **D21** (`Checkbox`, wrap Paper): Same rationale as RadioButton.
 - **D22** (`Switch`, wrap Paper): Paper's `Switch` handles `accessibilityRole="switch"`, value semantics, platform-specific iOS/Android thumb-track.
@@ -623,7 +624,7 @@ Prior session: `uiStore.setLanguage('ja')` was called and persisted. App restart
 
 - **D8 → Chip×3** (FOU-115): Canonical = `890:29153` (the standalone Chip definition). `768:29722` is the Chip-as-rendered-in-input-context variant; deferred Phase 4 designer ask.
 - **D9 → Tabs×3** (FOU-115): Canonical = `764:27807`. `408:11226` is an older Tabs render preserved as legacy reference; deferred.
-- **D10 → BottomNavBar×2** (FOU-115): Canonical = `143:4685`. `764:28530` mirrors with cosmetic icon swaps; structural shape identical. Cosmetic variant is a Phase 3 designer-spec call.
+- **D10 → BottomNavBar×2** (FOU-115): Canonical = `143:4685`. `764:28530` mirrors with cosmetic icon swaps; structural shape identical. Cosmetic variant is a Phase 3 designer-spec call. POC-30 update (D36): the app shell's canonical render is the `floating` variant (peach-pill floating bar, Figma `888:33854`); the bordered `default` variant is retained for any non-shell consumer.
 
 ### Phase 2 representative bespoke sheet (D7 / FOU-115)
 

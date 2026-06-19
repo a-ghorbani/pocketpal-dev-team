@@ -14,6 +14,7 @@ Out of scope (not implemented): the `huggingface.js` Local-App registration (ext
 - Android prod has **no native deep-link bridge**. Cross-platform prod delivery for the hub/run route uses RN `Linking` (cold `getInitialURL` + warm `'url'` event), an always-on effect in `useDeepLinking`.
 - A separate `__E2E__`-gated `Linking` effect routes the benchmark deep link (`pocketpal://e2e/benchmark`). It is untouched by the hub/run flow; the two never overlap because `parseHubRunURL` returns `null` for benchmark URLs.
 - `MainActivity` is `launchMode="singleTask"` and overrides `onNewIntent` to `setIntent(intent)` so RN's warm `'url'` event fires on warm launch (D9).
+- **Navigator hosting the targets (C).** Deep-link handlers resolve targets via `navigation.navigate(ROUTES.*)` against flat route names. POC-30 replaced the top-level `@react-navigation/drawer` with a root Stack hosting a bottom-tab navigator (`context/architecture/app-shell.md`); `ROUTES.CHAT` and `ROUTES.BENCHMARK_RUNNER` are now flat sibling routes on that root Stack. The route-name strings and all handler logic are unchanged, so chat (`pocketpal://chat`), hub/run, and benchmark (`pocketpal://e2e/benchmark`) deep links resolve identically to the pre-migration drawer. `BENCHMARK_RUNNER` is registered on the root Stack only in `__E2E__` builds (injected by `App.tsx`).
 
 ---
 
