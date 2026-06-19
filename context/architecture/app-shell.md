@@ -42,8 +42,9 @@ navigator's state, never stored.
   the tab bar (Chat, Models, etc.).
 - **Home** — the Chats-tab root screen (`src/screens/HomeScreen`): serif title,
   pal carousel, composer, model chip, chat-history list.
-- **Floating BottomNavBar** — the canonical peach-pill tab bar; the
-  `variant='floating'` value on the DS `BottomNavBar` (see theming.md).
+- **Floating BottomNavBar** — the canonical floating tab bar with a yellow
+  active-item pill; the `variant='floating'` value on the DS `BottomNavBar`
+  (see theming.md).
 - **start-chat handoff** — the nav contract from Home's composer / history row
   INTO the Chat flow (POC-7), reusing the pending-message + active-pal mechanism.
 
@@ -83,7 +84,7 @@ No new lifecycle. Tab focus is owned by `@react-navigation/bottom-tabs`.
 
 | State | User-visible feedback |
 | --- | --- |
-| ChatsTab focused, no pushed route | Home screen + floating tab bar; Chats item = peach pill |
+| ChatsTab focused, no pushed route | Home screen + floating tab bar; Chats item = yellow pill |
 | pushed route on top (e.g. Chat) | full-bleed screen with its own header/back; tab bar NOT shown |
 | return from pushed route | lands back on the previously-focused tab (Stack pop) |
 
@@ -106,7 +107,8 @@ No new lifecycle. Tab focus is owned by `@react-navigation/bottom-tabs`.
    items=[Chats,Explore,Settings] selectedValue={focusedTab} onSelect={navigate}
    />`. The native tab bar is off. Items left→right: Chats (chat-bubble),
    Explore (compass), Settings (gear). The floating bar reads
-   `theme.colors.accent.peach` for the active-item pill (see theming.md).
+   `theme.colors.accent.yellowSubtle` (fill) + `theme.colors.accent.yellowMute`
+   (border) for the active-item pill (see theming.md).
 4. **Non-tab destinations are pushed routes on the root Stack (D4).** `Chat`,
    `Models`, `Pals (experimental)`, `Benchmark`, `App Info`, `Dev Tools`
    (debug-only), `BenchmarkRunner` (E2E-only) are sibling Stack routes above
@@ -167,8 +169,9 @@ No new lifecycle. Tab focus is owned by `@react-navigation/bottom-tabs`.
   `models-menu-button` keep theirs. Appium specs that relied on the hamburger
   are updated in the same PR.
 - **I8 — Tokens-only DS.** The floating variant reads only
-  `theme.colors.accent.peach`, `theme.colors.shadow`, `theme.radius.*`,
-  `theme.spacing.*`, `theme.stroke.*`; `BottomNavBar` imports no store.
+  `theme.colors.accent.yellowSubtle` / `theme.colors.accent.yellowMute`,
+  `theme.colors.shadow`, `theme.radius.*`, `theme.spacing.*`,
+  `theme.stroke.*`; `BottomNavBar` imports no store.
 
 ### 4c. Component renders
 
@@ -176,8 +179,8 @@ No new lifecycle. Tab focus is owned by `@react-navigation/bottom-tabs`.
 | --- | --- | --- |
 | `RootStack` | `MainTabs` + full-bleed pushed routes (Chat, Models, Pals, Benchmark, App Info, Dev Tools, BenchmarkRunner) | a drawer; chat conversation UI |
 | `MainTabs` | three tab roots (Home, Explore-placeholder, Settings) + floating `BottomNavBar` | native tab bar; pushed-route content |
-| `BottomNavBar` floating variant | rounded floating bar; active item on `theme.colors.accent.peach` pill (mode-aware: light `#FCE7CF` / dark `#7A4A1F`); icon + label | change to the `default` variant's snapshot |
-| `HomeScreen` | serif title "Chat with your pals", pal carousel (`palStore.pals` + Add affordance), composer entry, model chip, chat-history list (`chatSessionStore.sessions`) or empty hint | chat conversation UI; Explore/Settings content; new persistence |
+| `BottomNavBar` floating variant | rounded floating bar; active item on a yellow pill (`accent.yellowSubtle` fill `#f5dbbc` + `accent.yellowMute` border `#f8f1e2`); icon + label | change to the `default` variant's snapshot |
+| `HomeScreen` | bottom-anchored hero: two-line serif title "Chat / with your pals", pal carousel (rounded-rect image cards, active card yellow-bordered; `palStore.pals` + Add affordance), composer card (boxed attach + mic + gradient send), two-tone model chip, then chat-history (search header + white rows with pal avatar / clock / time / more) or empty hint; bottom gradient fade | chat conversation UI; Explore/Settings content; new persistence |
 | `ExploreScreen` (placeholder) | a scaffold placeholder | PalsHub Explore content (POC-11) |
 | Pushed routes (reused) | each screen's existing UI with a Stack header/back | the tab bar |
 
