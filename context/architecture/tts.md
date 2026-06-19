@@ -252,16 +252,20 @@ Verified safety of running these on a low-memory device:
 
 | Component | Renders | Does NOT render |
 | --- | --- | --- |
-| `HeroRow` (Supertonic, ready) | A language `Dropdown` inside `heroQualityBlock`, alongside the diffusion-steps control. 32 options: "Auto" (=`na`) first and default, then 31 languages by display name. Value = `ttsStore.supertonicLanguage`; change calls `setSupertonicLanguage`. | The picker for non-Supertonic voices or while Supertonic is not `ready` (gated by the existing `showSupertonicQuality` condition). |
+| `HeroRow` (Supertonic, ready) | A language picker trigger (`Pressable` showing the current selection label + chevron, ≥44pt) inside `heroQualityBlock`, alongside the diffusion-steps control. Tapping it opens a searchable bottom-sheet (`SearchableSelectSheet`) with 32 options: "Auto" (=`na`) first and default, then 31 languages by display name. Selecting a row calls `setSupertonicLanguage` and closes the sheet. | The picker for non-Supertonic voices or while Supertonic is not `ready` (gated by the existing `showSupertonicQuality` condition). |
 
-1. (C) The picker is the DS `Dropdown` (Paper `Menu`-backed); the steps
-   control stays `SegmentedButtons` (D6 — 32 options don't fit segmented
-   buttons).
+1. (C) The picker is a searchable bottom-sheet (`SearchableSelectSheet`, built
+   on the DS `Sheet` so it stacks above the TTS Setup Sheet via gorhom
+   `stackBehavior="push"`); the steps control stays `SegmentedButtons` (D6 — 32
+   options overflow both segmented buttons and an anchored menu). The sheet has a
+   search field that filters options case-insensitively by display label; the
+   active value row is marked (check icon). An anchored `Dropdown`/`Menu` was
+   rejected: with Auto + 31 languages it renders full-screen and overflows.
 2. (C) Option order: "Auto" (`na`) first, then 31 languages sorted by display
    name.
-3. (C) A persisted code outside the 2.5.0 union shows the "Auto" placeholder
-   LABEL without rewriting the stored value (the `Dropdown` `onChange` fires
-   only on user selection; the placeholder fallback is label-only).
+3. (C) A persisted code outside the 2.5.0 union shows the "Auto" LABEL on the
+   trigger without rewriting the stored value (the trigger label is a lookup
+   fallback; `setSupertonicLanguage` fires only on user selection in the sheet).
 
 ---
 
@@ -425,7 +429,7 @@ Overlap check: `isTTSAvailable` is fully derived from the other two — no redun
 - **D11**: Detect a stale v2 install via a version-sentinel file, not by parsing model internals. Rationale: filenames are identical; the sentinel is deterministic and disk-local.
 - **D12**: Reuse the Kokoro forced-re-download path (reclaim + voice-restore) for the migration. Rationale: proven machinery; no new state or single-writer surface.
 - **D13**: Keep install truth on disk; no persisted migration flag. Rationale: disk-as-truth invariant; a persisted flag can desync.
-- **D14**: The language picker is a DS `Dropdown`; the steps control stays `SegmentedButtons`. Rationale: 32 options don't fit segmented buttons; `Dropdown` is the existing pattern.
+- **D14**: The language picker is a searchable bottom-sheet (`SearchableSelectSheet`); the steps control stays `SegmentedButtons`. Rationale: with Auto + 31 languages an anchored `Dropdown`/`Menu` renders full-screen and overflows; a sheet with live search scales to 32 options. The sheet stacks above the TTS Setup Sheet via gorhom `stackBehavior="push"` (the DS `Sheet` already sets it).
 - **D15**: en.json only for the 31 names + "Auto" + label; Weblate handles other locales. Rationale: matches the established l10n workflow.
 
 ---
@@ -471,7 +475,7 @@ Stays not-installed until they next try to use it; no background work. The force
 
 ### 9i. Persisted `supertonicLanguage` from a future build with a code not in 2.5.0's union
 
-Treated as-is by the library; the UI picker shows it if listed, else falls back to the "Auto" placeholder label without rewriting the stored value (§4i.3).
+Treated as-is by the library; the picker trigger shows the language label if the code is listed, else falls back to the "Auto" label without rewriting the stored value (§4i.3).
 
 ### 9j. Disk too low for ~380 MB after v2 reclaim
 
