@@ -1079,6 +1079,112 @@ declarative hint that powers (a) the pal-load snackbar trigger and
 
 ---
 
+## 9g. Reasoning / thinking capability
+
+How PocketPal decides whether to show the thinking pill, what state the pill
+cycles through, and what it sends to the model — decoupled from auto-detection.
+
+### Data model — two axes
+
+A single value object (`src/utils/reasoningCapability.ts`) holds two
+independent axes with independent provenance:
+
+```
+ReasoningCapability
+  isReasoning : 'yes' | 'no' | 'unknown'           // axis 1: does it reason at all
+  source      : 'user' | 'learned' | 'detected' | 'unknown'   // axis-1 provenance
+  supportsEffort : boolean                          // axis 2: graded effort?
+  effortValues   : string[]                         // e.g. ['low','medium','high']
+  effortSource   : 'user' | 'detected' | 'none'     // axis-2 provenance
+```
+
+Homes:
+- **local** models — `Model.reasoning` (persisted with the model in
+  `ModelStore.models`). The deprecated `Model.supportsThinking` boolean is kept
+  only as a fail-open fallback for old records (see Cleanup below).
+- **remote** models — `ServerStore.remoteReasoning[modelId]`, a persisted map
+  keyed by the full `${serverId}/${remoteModelId}` id (remote Models are rebuilt
+  each launch and not persisted, so their capability lives on the server store).
+
+### Resolver — single source of truth
+
+`resolveReasoningCapability(model, remoteReasoning)` is a pure function and the
+ONLY place the effective capability is computed. No component reads
+`supportsThinking` directly. Precedence: **user > learned > detected**, with the
+legacy `supportsThinking` boolean as the fail-open fallback (`true` → 'yes',
+`false` → 'no', absent → 'unknown'). Axis-2 is reported only when axis-1 ≠ 'no'.
+
+### Learn-from-stream
+
+In the `useChatSession` token handler, the first reasoning token of a run for a
+model the resolver does not already know reasons calls
+`modelStore.recordReasoningObserved(activeModel.id)`. That writer flips axis-1 to
+`{isReasoning:'yes', source:'learned'}` (routing remote ids to
+`ServerStore.recordRemoteReasoningObserved`). It is idempotent, monotonic, and
+never downgrades a `source:'user'` or an existing `'yes'`. The pill becomes
+reachable on the next render (reactive MobX read of the resolver).
+
+### Pill state machine
+
+The single pill in `ChatInput` cycles axis-aware states:
+
+```
+[off] ─tap→ [on]                                        (effortless: 2-state)
+[off] ─tap→ [low] ─tap→ [medium] ─tap→ [high] ─tap→ [off]  (graded, value-set order)
+hidden                                                  (resolver isReasoning === 'no')
+```
+
+`ChatScreen` reads the resolver and passes the graded props to `ChatInput`;
+`ChatScreen` owns the cycle logic and persists the chosen on/off + effort onto
+the session completion settings (`enable_thinking` + the `reasoning` carrier).
+
+### Wire hints — local
+
+`useChatSession` extends the local completion-params block:
+- axis-1 ON → `reasoning_format: 'auto'`.
+- axis-1 OFF → `reasoning_format: 'none'` + `chat_template_kwargs.enable_thinking: false`.
+- axis-2 effort → `chat_template_kwargs.reasoning_effort: <value>` (gpt-oss-style).
+
+`chat_template_kwargs` is new plumbing on the local path. The remote per-server
+wire shape lives in `remote-servers.md` (§7).
+
+### Hard invariants
+
+- **I-R1 (no strip — LOCKED)**: "Off" is a best-effort HINT only. PocketPal never
+  strips, hides, or post-filters reasoning the server/model actually returned
+  from the **displayed** message. Returned reasoning is always rendered by
+  `ReasoningBlock`. (The TTS speech-feed stripper in
+  `src/services/tts/thinkingStripper.ts` is an orthogonal audio concern — it
+  strips what is spoken aloud, not what is displayed.)
+- **I-R2 (include_thinking unchanged)**: `include_thinking_in_context` (app-only,
+  request-payload context exclusion, §I3 above) is unchanged and orthogonal to
+  axis-1 off. It governs what prior `<think>` we SEND, not what we DISPLAY.
+- **I-R3 (resolver is the single reader)**: the effective capability is computed
+  only by `resolveReasoningCapability`. No component reads `supportsThinking`.
+- **I-R4 (independent axes)**: axis-2 may be present only when axis-1 ≠ 'no';
+  setting axis-1 'no' hides the pill regardless of axis-2.
+- **I-R5 (provenance arbiter)**: `recordReasoningObserved` is idempotent and never
+  overrides `source:'user'`; learned never downgrades a 'yes' to 'no'.
+
+### Single-writer rule (reasoning fields)
+
+| Field | Single writer |
+| --- | --- |
+| `Model.reasoning` (local) | `ModelStore` — detection at load + `recordReasoningObserved` + `setReasoningOverride` |
+| `ServerStore.remoteReasoning[id]` (remote) | `ServerStore` — `recordRemoteReasoningObserved` + `setRemoteReasoningOverride` (routed from `ModelStore` by origin) |
+| effective `ReasoningCapability` | pure resolver (read-only) |
+| `reasoning` carrier on `ApiCompletionParams` / `StreamChatParams` | store/hook layer, from the resolver output |
+
+### Manual override
+
+The model card (`ModelSettingsSheet`) exposes axis-1 "is reasoning model" and
+axis-2 "supports graded effort" + an editable value set, for both local and
+remote models. Saving sets `source`/`effortSource` to `'user'` (top of
+precedence) and routes through `modelStore.setReasoningOverride` (remote →
+`ServerStore`, local → `Model`).
+
+---
+
 ## 10. What this doc is NOT
 
 - not a TODO list
@@ -1097,6 +1203,10 @@ the ping-pong.
   `agentUiState.status` instead. `ChatView` already does this for the
   PendingIndicator visibility gate (`isPending`); the remaining flags are
   read by ChatScreen and model-load screens and have not been migrated.
+- **Cleanup-DEFERRED (reasoning)** — the deprecated `Model.supportsThinking`
+  boolean is to be removed after all readers use the resolver (§9g). Also
+  deferred: inline-`<think>` separation for no-parser servers, and numeric
+  thinking budgets (Qwen `thinking_budget`, Nemotron `reasoning_budget`).
 
 Future stories that touch this flow should add their cleanup reminders here
 and remove them as they land. Drift policy: see

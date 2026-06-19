@@ -24,7 +24,20 @@ ServerConfig                          // src/utils/types.ts
   url: string                         // (C) base URL, e.g. "http://192.168.1.100:1234"
   lastConnected?: number              // (C) timestamp
   requestTimeoutMs?: number           // (C) per-server network timeout, whole ms; undefined = use API default
+  serverType?: string                 // (C) user-selectable; gates the reasoning wire payload; undefined = unknown
+
+ServerStore                           // src/store/ServerStore.ts
+  remoteReasoning: Record<modelId, ReasoningCapability>  // (C) remote reasoning caps,
+                                      //   keyed by `${serverId}/${remoteModelId}`; persisted
 ```
+
+`serverType` is one of `{llama.cpp, LM Studio, Ollama, OpenAI, vLLM, unknown}`.
+`detectServerType` (+ an `api.openai.com → OpenAI` host heuristic) only **seeds**
+it on the server sheet; the user's selection wins, and the persisted value (never
+live detection) gates the payload. Both `serverType` and `remoteReasoning` ride
+the existing `ServerStore` persisted properties — no migration. The reasoning
+capability model itself lives in `chat-flow.md` §9g (resolver, two axes,
+learn-from-stream, single-writer); this doc covers only the remote wire side.
 
 Persisted: `requestTimeoutMs` is part of the already-persisted `ServerConfig`
 inside `ServerStore.servers` (mobx-persist-store → AsyncStorage, key
@@ -210,3 +223,50 @@ handleServerChipPress reads server.requestTimeoutMs → passes 600000 ms to fetc
 | D8 | Edit-time probe uses the in-edit timeout | The probe is the same symptom; it must not red-X early. |
 | D9 | Render an add-path timeout input in `RemoteModelSheet` | A new slow server's probe must honor an in-edit value. |
 | D10 | Chip-press probe reads the saved server's `requestTimeoutMs` | Same symptom on an already-saved slow server. |
+
+---
+
+## 7. Reasoning wire gating
+
+`src/api/openai.ts` is the single owner of the reasoning wire shape. The
+reasoning **intent** (on/off + optional effort) is carried internally on
+`StreamChatParams.reasoning` (mirrored on `ApiCompletionParams.reasoning`);
+`OpenAICompletionEngine` forwards both the carrier and its constructed
+`serverType` into `streamChatCompletion`, which calls the pure
+`buildReasoningPayload(serverType, reasoning)` to produce the per-server body.
+The engine forwards intent; `openai.ts` decides the wire shape. There is no
+universal payload — each server family has a different 400 posture, so gating is
+mandatory and keyed on the persisted `serverType`.
+
+| serverType (persisted) | axis-1 OFF → wire | axis-1 ON → wire | axis-2 effort → wire | posture |
+| --- | --- | --- | --- | --- |
+| llama.cpp | `chat_template_kwargs:{enable_thinking:false}` + `reasoning_format:'none'` | `reasoning_format:'auto'` | (none; not standardized) | ignores unknown → safe |
+| LM Studio / vLLM (modern) | `chat_template_kwargs:{enable_thinking:false}` | (omit) | (omit) | ignores unknown → safe |
+| Ollama (/v1) | `reasoning_effort:'none'` (safe no-op) | (omit; never `think:true`) | (omit — deferred) | hard-400 on `think:true` / non-`none` effort to a non-thinking model |
+| OpenAI | (omit) | (omit) | `reasoning_effort:<value>` only when axis-2 known for the model id | 400 on any misapplied param |
+| unknown / old vLLM | (omit everything) | (omit) | (omit) | 400 on extras → send nothing |
+
+### Invariants
+
+- **I-RS1**: gating is keyed on the PERSISTED `serverType`, never live detection.
+- **I-RS2**: an unknown / strict server receives NO reasoning controls — omit
+  beats a 400.
+- **I-RS3 (Ollama)**: never send `think:true` or a non-`'none'` `reasoning_effort`
+  to Ollama. OFF sends only `reasoning_effort:'none'` (a safe no-op even for a
+  non-thinking model); ON sends nothing.
+
+### Decisions
+
+| ID | Decision | Rationale |
+| --- | --- | --- |
+| D11 | `serverType` user-selectable; `detectServerType` only seeds it | Detection can't classify OpenAI / vLLM; user override is the escape hatch. |
+| D12 | Wire payload gated in `openai.ts` by `serverType`; intent carried on `reasoning` | Single wire-shape owner; co-locate the per-server 400 postures. |
+| D13 | Ollama graded-effort path deferred; OFF = `reasoning_effort:'none'` only | No `/api/show` capability probe yet; `'none'` is a safe no-op, never a 400. |
+
+### Edge cases
+
+| Edge case | Behaviour |
+| --- | --- |
+| Old persisted server without `serverType` | Treated as unknown → omits all reasoning controls (I-RS2). No migration. |
+| Old persisted server / model without reasoning fields | Resolver fails open via `supportsThinking` / `'unknown'`; no crash (see chat-flow §9g). |
+| Ollama OFF `reasoning_effort:'none'` rejected by some non-thinking model | On-device flag: if it 400s, omit `'none'` entirely (omit beats 400). |
