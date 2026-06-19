@@ -31,7 +31,8 @@ ServerStore                           // src/store/ServerStore.ts
                                       //   keyed by `${serverId}/${remoteModelId}`; persisted
 ```
 
-`serverType` is one of `{llama.cpp, LM Studio, Ollama, OpenAI, vLLM, unknown}`.
+`serverType` is one of `{llama.cpp, LM Studio, Ollama, OpenAI, vLLM, unknown}`,
+chosen via a compact dropdown on both the add-remote and server-details sheets.
 `detectServerType` (+ an `api.openai.com → OpenAI` host heuristic) only **seeds**
 it on the server sheet; the user's selection wins, and the persisted value (never
 live detection) gates the payload. Both `serverType` and `remoteReasoning` ride

@@ -1178,10 +1178,14 @@ wire shape lives in `remote-servers.md` (§7).
 ### Manual override
 
 The model card (`ModelSettingsSheet`) exposes axis-1 "is reasoning model" and
-axis-2 "supports graded effort" + an editable value set, for both local and
-remote models. Saving sets `source`/`effortSource` to `'user'` (top of
-precedence) and routes through `modelStore.setReasoningOverride` (remote →
-`ServerStore`, local → `Model`).
+axis-2 "supports graded effort" + a value-set picker, for both local and
+remote models. The value set is chosen from the canonical `low`/`medium`/`high`
+chips (multi-select; a model may support a subset) and is always persisted
+ordered low→medium→high so the pill cycle stays consistent — `effortValues`
+stays typed `string[]`, but values outside that set are no longer user-enterable.
+Saving sets `source`/`effortSource` to `'user'` (top of precedence) and routes
+through `modelStore.setReasoningOverride` (remote → `ServerStore`, local →
+`Model`).
 
 ---
 
