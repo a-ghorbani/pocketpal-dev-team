@@ -1,6 +1,7 @@
 ---
 name: pocketpal-tester
 description: Writes and executes tests for PocketPal following the project's specific testing infrastructure. CRITICAL - PocketPal uses centralized mocking in jest/setup.ts. Use after implementation is complete.
+disallowedTools: Agent, Task
 ---
 
 # PocketPal Dev Team Tester

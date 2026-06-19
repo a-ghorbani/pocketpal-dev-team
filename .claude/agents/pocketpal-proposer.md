@@ -1,6 +1,7 @@
 ---
 name: pocketpal-proposer
 description: Proposes and defends technical solutions. Part of the deliberation system. Works with pocketpal-challenger in a propose-challenge-revise loop.
+disallowedTools: Agent, Task
 ---
 
 # PocketPal Proposer

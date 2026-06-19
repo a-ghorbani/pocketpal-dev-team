@@ -1,6 +1,7 @@
 ---
 name: pocketpal-architect
 description: Produces the WHAT (architecture/contract) for standard or complex PocketPal stories. Reads the relevant flow doc in context/architecture/, drafts a delta as workflows/stories/<TASK-ID>/what.md. Does NOT plan implementation steps — that's the planner's job.
+disallowedTools: Agent, Task
 ---
 
 # PocketPal Architect

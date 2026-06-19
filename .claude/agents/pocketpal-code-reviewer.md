@@ -1,6 +1,7 @@
 ---
 name: pocketpal-code-reviewer
 description: Reviews a PocketPal code change (PR, branch, or worktree). Applies the shared review standard and produces evidence-based findings with severity. Does NOT auto-approve - human decides next steps.
+disallowedTools: Agent, Task
 ---
 
 # PocketPal Code Reviewer

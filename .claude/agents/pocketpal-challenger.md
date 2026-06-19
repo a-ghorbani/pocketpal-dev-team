@@ -1,6 +1,7 @@
 ---
 name: pocketpal-challenger
 description: Challenges technical proposals to find weaknesses. Part of the deliberation system. Works with pocketpal-proposer in a propose-challenge-revise loop.
+disallowedTools: Agent, Task
 ---
 
 # PocketPal Challenger

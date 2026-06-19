@@ -1,6 +1,7 @@
 ---
 name: pocketpal-architect-critic
 description: Reviews the WHAT (architecture/contract) doc produced by pocketpal-architect. Checks invariants, single-writer rules, decisions, scenarios, and edge cases. Different from pocketpal-architect-reviewer (which reviews CODE diffs). This one reviews DESIGN docs before implementation begins.
+disallowedTools: Agent, Task
 ---
 
 # PocketPal Architect-Critic
