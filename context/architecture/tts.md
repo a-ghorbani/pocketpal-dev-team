@@ -1,11 +1,14 @@
 # TTS Flow
 
-**Purpose**: cumulative architecture truth for the text-to-speech subsystem,
-scoped narrowly to the **TTS availability gate** — the boolean every
-TTS-aware surface reads to decide whether the feature exists at all.
-Bootstrapped from TASK-20260506-1518. Other parts of the TTS subsystem
-(engines, downloads, streaming, AppState handling, thinking-stripper) are
-intentionally absent and will be added by future stories that touch them.
+**Purpose**: cumulative architecture truth for the text-to-speech subsystem.
+Originally scoped to the **TTS availability gate** — the boolean every
+TTS-aware surface reads to decide whether the feature exists at all — and
+extended to cover the **Supertonic engine model wire** (download origin +
+estimated bytes), the **v2→v3 forced re-download** (version sentinel), and
+the **`supertonicLanguage`** selection (persisted field + language picker).
+Other parts of the TTS subsystem (other engines' downloads, streaming,
+AppState handling, thinking-stripper) are intentionally absent and will be
+added by future stories that touch them.
 
 Convention used in this doc:
 
@@ -29,9 +32,56 @@ TTSStore
 
 **Persisted to `AsyncStorage` under name `TTSStore`**: existing
 `['autoSpeakEnabled', 'currentVoice', 'supertonicSteps']` plus (C)
-`userTTSOverride`.
+`userTTSOverride` plus (C) `supertonicLanguage`.
 
 **Computed at runtime, NOT persisted**: `isTTSAvailable`, `deviceMeetsMemory`.
+
+### 1a-bis. Supertonic language field
+
+```
+TTSStore
+  supertonicLanguage: SupertonicLanguage     // (C) persisted; default 'na' ("Auto"); manual user selection
+```
+
+- (C) Type is the library union `SupertonicLanguage = 'na' | <31 ISO codes>`
+  from `@pocketpalai/react-native-speech@2.5.0`.
+- (C) Persisted via the existing `makePersistable` `properties` array — the
+  same mechanism `supertonicSteps` uses. No data migration: existing users
+  have no persisted key, so hydration leaves the field at its initial `'na'`.
+- (C) Read at every Supertonic synthesis entry point (`play`, `preview`,
+  `onAssistantMessageStart`) and passed explicitly as the `language` option,
+  so the store value — not the engine default — governs synthesis.
+
+### 1a-ter. Supertonic engine model wire (constants)
+
+```
+SUPERTONIC_MODEL_BASE_URL              // (C) https://huggingface.co/Supertone/supertonic-3/resolve/main
+SUPERTONIC_MODEL_ESTIMATED_BYTES       // (C) 398_352_949 (~380 MB) — exact summed size of the 5 v3 files
+ENGINE_META.supertonic.sizeMb          // (C) 380 — same verified total in MB (kept in sync with the bytes constant)
+SUPERTONIC_MODEL_VERSION               // (C) 3 — the on-disk model generation this app expects
+SUPERTONIC_VERSION_SENTINEL_FILENAME   // (C) 'model-version.json'
+```
+
+- (C) `SUPERTONIC_MODEL_ESTIMATED_BYTES` feeds the disk-space preflight
+  (`estimated * 1.2`), so it is the **exact** HuggingFace byte total of the 5
+  downloaded files (4 onnx + `unicode_indexer.json`), not a rounded label.
+  `ENGINE_META.supertonic.sizeMb` (UI footprint label) is derived from the
+  same total and the two MUST stay in sync.
+- (C) The 5-file manifest (`SUPERTONIC_MODEL_FILES`) and the locally
+  synthesized `voices-manifest.json` are unchanged in name and count for v3.
+- (C) The 10 Supertonic voices are unchanged and language-agnostic — no
+  voice↔language coupling.
+
+**Glossary additions**
+
+- **`na` (Auto)** — a trained `<na>…</na>` tag present only in supertonic-3;
+  on v2 it coerced to `<en>`. Surfaced in UI as "Auto". App store default.
+- **v2 / v3** — the Supertonic model bundle generation. v3 adds all 31
+  languages + the trained `na` tag. Filenames are identical across v2/v3.
+- **Version sentinel** — a small local JSON file (`model-version.json`)
+  written after a successful v3 download recording the installed version; the
+  discriminator that lets `isInstalled()` distinguish a stale v2 install from
+  v3 despite identical model filenames.
 
 ### 1b. Glossary
 
@@ -45,7 +95,14 @@ TTSStore
 
 ## 1c. External shape
 
-No external / wire-format changes. TTS availability is purely an internal store concern.
+TTS availability is purely an internal store concern. For Supertonic the only
+wire change is the **download origin**: `SUPERTONIC_MODEL_BASE_URL` host path
+moves from `supertonic-2` to `supertonic-3`; relative `urlPath`s are unchanged
+(`onnx/*.onnx`, `onnx/unicode_indexer.json`, `voice_styles/<id>.json`). No
+PocketPal-served API — HuggingFace static files only. Library call surface:
+`Speech.speak(text, voiceId, {language, inferenceSteps?})` where `language`
+now accepts the full `SupertonicLanguage` union; the native layer is unchanged
+(language applied in TS, ONNX receives pre-tagged text).
 
 ---
 
@@ -135,6 +192,77 @@ Verified safety of running these on a low-memory device:
 
 (See I8 for the corresponding invariant.)
 
+### 4f. Supertonic language selection and threading
+
+1. (C) `supertonicLanguage` defaults to `'na'` ("Auto") for new and existing
+   users. The value is read at every Supertonic synthesis entry point and
+   passed explicitly as the `language` option to `SupertonicEngine.play` /
+   `playStreaming`: `play()` (replay), `preview()` (audition), and
+   `onAssistantMessageStart()` (auto-speak streaming).
+2. (C) `SupertonicEngine`'s `DEFAULT_SUPERTONIC_LANGUAGE` is `'na'` — an
+   engine-level fallback only; the app always passes the store value, so the
+   engine default never governs in practice. One canonical default, no drift.
+3. (C) Language applies only to the `supertonic` engine. Other engines
+   (`kokoro`, `kitten`, `system`) ignore it; their call sites pass no
+   `language`.
+
+### 4g. Supertonic v2→v3 forced re-download (migration)
+
+1. (C) After a successful v3 download, `SupertonicEngine.downloadModel()`
+   writes the version sentinel (`{version: SUPERTONIC_MODEL_VERSION}`) as its
+   **final** disk write, after `voices-manifest.json`.
+2. (C) `SupertonicEngine.isInstalled()` returns `true` only when the 5 model
+   files **and** `voices-manifest.json` **and** the sentinel-at-current-version
+   are all present. A v2 install (no sentinel, or an older version, or an
+   unparseable sentinel) reports `false`.
+3. (C) On next boot `init()` derives `supertonicDownloadState = not_installed`
+   from `isInstalled() === false`, and the existing currentVoice reconciliation
+   (§4e) stashes the Supertonic voice id in `pendingVoiceRestore['supertonic']`
+   before nulling `currentVoice`.
+4. (C) `SupertonicEngine.reclaimLegacySpace()` (invoked before the disk-space
+   preflight, §9g) deletes the **entire stale model directory** — v2/v3
+   filenames are identical, so per-file reclaim is impossible. Idempotent and
+   safe when the dir is absent or already at the current version.
+5. (C) On re-download completion, `currentVoice` is restored from
+   `pendingVoiceRestore['supertonic']` when the id still exists in the
+   (unchanged) voice list, else falls back to `voices[0]`.
+6. (C) User-visible: a legacy v2 user sees Supertonic as not-installed on next
+   launch; one tap re-downloads ~380 MB; their voice and steps preference are
+   preserved; `supertonicLanguage` defaults to `'na'`. No silent background
+   download; no separate migration UI. Identical machinery to the Kokoro
+   forced re-download (§9g).
+
+### 4h. Supertonic hard invariants
+
+- **I-L1**: `supertonicLanguage` has exactly one writer — `setSupertonicLanguage`
+  invoked by the language picker (plus `mobx-persist-store` hydration, the same
+  single-equivalent-writer pattern as `supertonicSteps`). No internal path flips it.
+- **I-L2**: The app passes `supertonicLanguage` explicitly to every Supertonic
+  synthesis call; behaviour must not depend on the engine-level default.
+- **I-M1**: Supertonic install truth stays **on disk** — `isInstalled()` is the
+  single source of truth. No persisted store flag mirrors the model version.
+- **I-M2**: The version sentinel is written **only** as the final step of a
+  successful `downloadModel()`, so an interrupted download never looks installed.
+- **I-M3**: `reclaimLegacySpace()` is idempotent and deletes only within the
+  Supertonic model dir; it runs before the disk-space preflight.
+- **I-M4**: The 10 voices and the 5-file manifest are unchanged across v2→v3;
+  the migration changes only the download origin and adds the sentinel.
+
+### 4i. Supertonic language picker (UI contract)
+
+| Component | Renders | Does NOT render |
+| --- | --- | --- |
+| `HeroRow` (Supertonic, ready) | A language `Dropdown` inside `heroQualityBlock`, alongside the diffusion-steps control. 32 options: "Auto" (=`na`) first and default, then 31 languages by display name. Value = `ttsStore.supertonicLanguage`; change calls `setSupertonicLanguage`. | The picker for non-Supertonic voices or while Supertonic is not `ready` (gated by the existing `showSupertonicQuality` condition). |
+
+1. (C) The picker is the DS `Dropdown` (Paper `Menu`-backed); the steps
+   control stays `SegmentedButtons` (D6 — 32 options don't fit segmented
+   buttons).
+2. (C) Option order: "Auto" (`na`) first, then 31 languages sorted by display
+   name.
+3. (C) A persisted code outside the 2.5.0 union shows the "Auto" placeholder
+   LABEL without rewriting the stored value (the `Dropdown` `onChange` fires
+   only on user selection; the placeholder fallback is label-only).
+
 ---
 
 ## 5. Layer ownership (single-writer rule)
@@ -144,6 +272,8 @@ Verified safety of running these on a low-memory device:
 | `deviceMeetsMemory`      | (C) `TTSStore.init()` — one assignment per session, derived from `DeviceInfo.getTotalMemory()`.                                          |
 | `userTTSOverride`        | (C) The public store action invoked by the Settings toggle (`setUserTTSOverride(value: boolean)`). Hydrated by `mobx-persist-store` on construction; that hydration counts as a single equivalent writer (the same pattern `autoSpeakEnabled` already uses). |
 | `isTTSAvailable`         | (C) **No writer**. It is a derived value (MobX `get` / computed) defined per the formula in §4a.1.                                       |
+| `supertonicLanguage`     | (C) `TTSStore.setSupertonicLanguage(value)` invoked by the HeroRow language picker. Hydrated by `mobx-persist-store` (single equivalent writer, same as `supertonicSteps`). See I-L1. |
+| Supertonic install/version truth | (C) The file system, read by `SupertonicEngine.isInstalled()` (5 files + manifest + sentinel@v3). No store field mirrors it. See I-M1. |
 
 Recent bugs / past pain related to multi-writer races: none for these fields specifically. Single-writer discipline is preserved by collapsing the writer set to two underlying fields, each with one canonical writer, and turning the public-facing field into a pure derivation.
 
@@ -273,6 +403,8 @@ Observable:
 | `isTTSAvailable`    | derived (no writer)                                   | `PlayButton`, `VoiceChip`, internal store guards    | `userTTSOverride === true` OR (`userTTSOverride == null` AND `deviceMeetsMemory`) |
 | `deviceMeetsMemory` | `TTSStore.init()` once per session                    | `SettingsScreen` (helper-line visibility, toggle default), `isTTSAvailable` derivation | `getTotalMemory() >= TTS_MIN_RAM_BYTES`                                    |
 | `userTTSOverride`   | `setUserTTSOverride(...)` from Settings toggle        | `SettingsScreen` (toggle value), `isTTSAvailable` derivation | persisted user choice                                                      |
+| `supertonicLanguage` | `setSupertonicLanguage(...)` from HeroRow picker; hydration | `play`, `preview`, `onAssistantMessageStart` (Supertonic branch); HeroRow picker value | = persisted choice; `'na'` until the user changes it |
+| Supertonic `isInstalled` | file system (5 files + manifest + sentinel@v3) | `init()` → `supertonicDownloadState`; `play`/`preview` install guard | all required files incl. current-version sentinel present |
 
 Overlap check: `isTTSAvailable` is fully derived from the other two — no redundancy. The Settings toggle reads two signals (override and `deviceMeetsMemory`) only because it must distinguish "user hasn't chosen" from the device default; that's necessary, not duplication.
 
@@ -288,6 +420,13 @@ Overlap check: `isTTSAvailable` is fully derived from the other two — no redun
 - **D6**: `setUserTTSOverride(false)` triggers the same stop-and-release path as `setAutoSpeak(false)` (§4a.5 / I6). Rationale: opting out should free engine RAM immediately for the same reasons disabling auto-speak does.
 - **D7**: Use `mobx-persist-store` (the existing mechanism) rather than introducing a new store / new storage layer. Rationale: `autoSpeakEnabled` is already persisted the same way. Adding `userTTSOverride` to the `properties` array is the smallest possible change.
 - **D8**: `init()` runs its full lifecycle work unconditionally; gating moves entirely to call-site guards. Rationale: low-memory users who opt in mid-session need the AppState listener and session reaction in place before they ever touch the toggle. Skipping them at `init()` and trying to register them lazily on first opt-in would require either a reaction watching `userTTSOverride` (more state) or coupling the toggle action to lifecycle setup (more code paths). Running them unconditionally is cheap (the listener is dormant until `play()` actually runs an engine) and removes a class of latent bugs. See §4e and I8.
+- **D9**: Replace the Supertonic v2 model with v3 for all users (single ~380 MB model, not an opt-in language pack). Rationale: one model is simpler than a language-pack matrix.
+- **D10**: Store default `supertonicLanguage = 'na'`; engine default also `'na'`. Rationale: one canonical default, no store-vs-engine drift.
+- **D11**: Detect a stale v2 install via a version-sentinel file, not by parsing model internals. Rationale: filenames are identical; the sentinel is deterministic and disk-local.
+- **D12**: Reuse the Kokoro forced-re-download path (reclaim + voice-restore) for the migration. Rationale: proven machinery; no new state or single-writer surface.
+- **D13**: Keep install truth on disk; no persisted migration flag. Rationale: disk-as-truth invariant; a persisted flag can desync.
+- **D14**: The language picker is a DS `Dropdown`; the steps control stays `SegmentedButtons`. Rationale: 32 options don't fit segmented buttons; `Dropdown` is the existing pattern.
+- **D15**: en.json only for the 31 names + "Auto" + label; Weblate handles other locales. Rationale: matches the established l10n workflow.
 
 ---
 
@@ -323,6 +462,32 @@ When an engine changes its on-disk file layout (e.g. Kokoro renamed its weight f
 
 1. **Voice restore** — `init()` stashes the cleared `currentVoice.id` in `pendingVoiceRestore[engineId]` before nulling it; the next successful download restores that voice when still present in the new voice list, else falls back to `voices[0]`. Persisted selection survives the forced re-download.
 2. **Legacy disk reclaim before the gate** — engines that implement the optional `reclaimLegacySpace()` hook have it invoked by `downloadNeuralEngine()` **before** the disk-space preflight, so any space the migration is about to free counts toward the buffered threshold. Borderline devices upgrading from a smaller legacy footprint to a larger new one are not wrongly blocked. The reclaim is idempotent and safe when there is nothing to free.
+
+Supertonic is a concrete instance of this pattern: its `reclaimLegacySpace()` deletes the whole stale model dir (v2/v3 filenames are identical), and the version sentinel is the discriminator that makes `isInstalled()` report a v2 install as not-installed.
+
+### 9h. Existing v2 user never reopens Supertonic
+
+Stays not-installed until they next try to use it; no background work. The forced re-download only triggers when they tap Install in the setup sheet.
+
+### 9i. Persisted `supertonicLanguage` from a future build with a code not in 2.5.0's union
+
+Treated as-is by the library; the UI picker shows it if listed, else falls back to the "Auto" placeholder label without rewriting the stored value (§4i.3).
+
+### 9j. Disk too low for ~380 MB after v2 reclaim
+
+The existing disk preflight blocks; reclaim-before-gate (I-M3) maximizes available space first (§9g).
+
+### 9k. User changes language mid-playback
+
+No auto-restart; the next utterance uses the new language (mirrors steps behaviour).
+
+### 9l. v3 download interrupted before the sentinel write
+
+Next boot: `isInstalled() === false` (sentinel missing) → `not_installed` → one extra clean re-download (I-M2).
+
+### 9m. Auto (`na`) on a stale v2 model (user plays before re-download)
+
+The install guard throws "not installed"; `play()` early-returns/logs. After re-download, `na` resolves to the trained tag on v3.
 
 ---
 
