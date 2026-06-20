@@ -1095,7 +1095,7 @@ ReasoningCapability
   isReasoning : 'yes' | 'no' | 'unknown'           // axis 1: does it reason at all
   source      : 'user' | 'learned' | 'detected' | 'unknown'   // axis-1 provenance
   supportsEffort : boolean                          // axis 2: graded effort?
-  effortValues   : string[]                         // e.g. ['low','medium','high']
+  effortValues   : string[]                         // subset of EFFORT_LEVELS, e.g. ['low','high']
   effortSource   : 'user' | 'detected' | 'none'     // axis-2 provenance
 ```
 
@@ -1131,9 +1131,13 @@ The single pill in `ChatInput` cycles axis-aware states:
 
 ```
 [off] ─tap→ [on]                                        (effortless: 2-state)
-[off] ─tap→ [low] ─tap→ [medium] ─tap→ [high] ─tap→ [off]  (graded, value-set order)
+[off] ─tap→ [<lvl₀>] ─tap→ … ─tap→ [<lvlₙ>] ─tap→ [off]   (graded, cycles the model's effortValues in order)
 hidden                                                  (resolver isReasoning === 'no')
 ```
+
+The graded cycle iterates whatever subset of `EFFORT_LEVELS` the model
+supports (canonical order `minimal→low→medium→high→xhigh→max`); the cycle
+logic in `ChatScreen` has no hardcoded level count.
 
 `ChatScreen` reads the resolver and passes the graded props to `ChatInput`;
 `ChatScreen` owns the cycle logic and persists the chosen on/off + effort onto
@@ -1180,13 +1184,16 @@ wire shape lives in `remote-servers.md` (§7).
 
 The model card (`ModelSettingsSheet`) exposes axis-1 "is reasoning model" and
 axis-2 "supports graded effort" + a value-set picker, for both local and
-remote models. The value set is chosen from the canonical `low`/`medium`/`high`
-chips (multi-select; a model may support a subset) and is always persisted
-ordered low→medium→high so the pill cycle stays consistent — `effortValues`
-stays typed `string[]`, but values outside that set are no longer user-enterable.
-Saving sets `source`/`effortSource` to `'user'` (top of precedence) and routes
-through `modelStore.setReasoningOverride` (remote → `ServerStore`, local →
-`Model`).
+remote models. The sheet is reachable for remote models via a settings gear on
+the remote model card; for remote models the local-only chat-template /
+stop-words / token block (and the reset button) is hidden — only the reasoning
+override applies. The value set is chosen from the canonical six
+`minimal`/`low`/`medium`/`high`/`xhigh`/`max` chips (multi-select; a model may
+support a subset) and is always persisted in that canonical order so the pill
+cycle stays consistent — `effortValues` stays typed `string[]`, but values
+outside that set are no longer user-enterable. Saving sets
+`source`/`effortSource` to `'user'` (top of precedence) and routes through
+`modelStore.setReasoningOverride` (remote → `ServerStore`, local → `Model`).
 
 ---
 

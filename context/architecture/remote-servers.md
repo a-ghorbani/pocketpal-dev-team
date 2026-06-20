@@ -239,10 +239,14 @@ The engine forwards intent; `openai.ts` decides the wire shape. There is no
 universal payload — each server family has a different 400 posture, so gating is
 mandatory and keyed on the persisted `serverType`.
 
-| serverType (persisted) | axis-1 OFF → wire | axis-1 ON → wire | axis-2 effort → wire | posture |
+Effort is graded on the servers that read it (llama.cpp, vLLM, OpenAI). When
+ON with an effort the effort cell **replaces** the plain ON cell.
+
+| serverType (persisted) | axis-1 OFF → wire | axis-1 ON → wire | axis-2 ON+effort → wire | posture |
 | --- | --- | --- | --- | --- |
-| llama.cpp | `chat_template_kwargs:{enable_thinking:false}` + `reasoning_format:'none'` | `reasoning_format:'auto'` | (none; not standardized) | ignores unknown → safe |
-| LM Studio / vLLM (modern) | `chat_template_kwargs:{enable_thinking:false}` | (omit) | (omit) | ignores unknown → safe |
+| llama.cpp | `chat_template_kwargs:{enable_thinking:false}` + `reasoning_format:'none'` | `reasoning_format:'auto'` | `reasoning_format:'auto'` + `chat_template_kwargs:{reasoning_effort:<lvl>}` | ignores unknown → safe |
+| vLLM (modern) | `chat_template_kwargs:{enable_thinking:false}` | (omit) | `chat_template_kwargs:{reasoning_effort:<lvl>}` | ignores unknown → safe |
+| LM Studio | `chat_template_kwargs:{enable_thinking:false}` | (omit) | (none; its chat API ignores `reasoning_effort`) | ignores unknown → safe |
 | Ollama (/v1) | `reasoning_effort:'none'` (safe no-op) | (omit; never `think:true`) | (omit — deferred) | hard-400 on `think:true` / non-`none` effort to a non-thinking model |
 | OpenAI | (omit) | (omit) | `reasoning_effort:<value>` only when axis-2 known for the model id | 400 on any misapplied param |
 | unknown / old vLLM | (omit everything) | (omit) | (omit) | 400 on extras → send nothing |
