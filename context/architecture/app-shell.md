@@ -117,13 +117,29 @@ No new lifecycle. Tab focus is owned by `@react-navigation/bottom-tabs`.
    (the only module allowed to import from `src/__automation__/`) via the
    `renderAutomationScreens` prop.
 5. **Start-chat handoff reuses the existing prefill contract (D5).** Home's
-   start-chat entry points (composer send, history-row tap) do NOT implement
-   chat UI. Composer send: optionally `deepLinkStore.setPendingMessage(text)`,
-   then `await chatSessionStore.setActivePal(palId)`, then
-   `navigation.navigate(ROUTES.CHAT)`. History row:
-   `await chatSessionStore.setActiveSession(id)` then `navigate(ROUTES.CHAT)`.
-   `ChatScreen` consumes `pendingMessage → initialInputText`. POC-7 owns
-   everything inside `ChatScreen`.
+   start-chat entry points (composer launcher, history-row tap) do NOT implement
+   chat UI. They `await chatSessionStore.setActivePal(palId)` (or
+   `setActiveSession(id)`), then `navigation.navigate(ROUTES.CHAT)`. POC-7 owns
+   everything inside `ChatScreen`; the keyboard only ever opens on Chat.
+   - **Composer is a launcher, not an editable field (D11).** The Home composer
+     card (`testID="home-composer-input"`) is a `Pressable`, not a `TextInput`.
+     It shows the placeholder ("Start messaging with <pal>…") as static text plus
+     the attach / mic / send affordances, but accepts no text and never raises a
+     keyboard on Home. Tapping anywhere on the card (including the send
+     affordance, `testID="home-composer-send"`) calls
+     `setActivePal(activePal?.id)` then `navigate(ROUTES.CHAT)` with **no**
+     message. There is no composer-prefill path from Home anymore (deep links
+     still use `setPendingMessage`).
+   - **Auto-focus the Chat input on launcher arrival (D12).** A one-shot
+     `deepLinkStore.autoFocusChat` flag (mirrors the `pendingMessage` pattern)
+     is set by the composer launcher **only**, and only when a model is loaded
+     (`modelStore.engine`). `ChatScreen` reads and clears it once on mount; if it
+     was set (and a model is loaded) it focuses the chat input after the screen
+     `transitionEnd` (via `ChatInput`'s `autoFocusSignal` prop deferred through
+     `InteractionManager`, so the keyboard is never raised mid-transition).
+     History-row taps and deep-link entries never set the flag, so they never
+     auto-focus. No model loaded ⇒ no auto-focus (Chat lands on its
+     model-not-loaded state).
 6. **Model chip picker (D6).** The Home model chip opens the existing
    `ChatPalModelPickerSheet` (conditionally mounted, like ChatView). Selecting a
    model sets the active model via the sheet's existing `modelStore.selectModel`
@@ -180,7 +196,7 @@ No new lifecycle. Tab focus is owned by `@react-navigation/bottom-tabs`.
 | `RootStack` | `MainTabs` + full-bleed pushed routes (Chat, Models, Pals, Benchmark, App Info, Dev Tools, BenchmarkRunner) | a drawer; chat conversation UI |
 | `MainTabs` | three tab roots (Home, Explore-placeholder, Settings) + floating `BottomNavBar` | native tab bar; pushed-route content |
 | `BottomNavBar` floating variant | rounded floating bar; active item on a yellow pill (`accent.yellowSubtle` fill `#f5dbbc` + `accent.yellowMute` border `#f8f1e2`); icon + label | change to the `default` variant's snapshot |
-| `HomeScreen` | bottom-anchored hero: two-line serif title "Chat / with your pals", pal carousel (rounded-rect image cards, active card yellow-bordered; `palStore.pals` + Add affordance), composer card (boxed attach + mic + gradient send), two-tone model chip, then chat-history (search header + white rows with pal avatar / clock / time / more) or empty hint; bottom gradient fade | chat conversation UI; Explore/Settings content; new persistence |
+| `HomeScreen` | bottom-anchored hero: two-line serif title "Chat / with your pals", pal carousel (rounded-rect image cards, active card yellow-bordered; `palStore.pals` + Add affordance), composer **launcher** card (`Pressable`; static placeholder text + boxed attach + mic + resting-tone gradient send — no `TextInput`, no Home keyboard), two-tone model chip, then chat-history (search header + white rows with pal avatar / clock / time / more) or empty hint; bottom gradient fade | chat conversation UI; an editable composer / Home keyboard; Explore/Settings content; new persistence |
 | `ExploreScreen` (placeholder) | a scaffold placeholder | PalsHub Explore content (POC-11) |
 | Pushed routes (reused) | each screen's existing UI with a Stack header/back | the tab bar |
 
@@ -194,7 +210,8 @@ No new lifecycle. Tab focus is owned by `@react-navigation/bottom-tabs`.
 | `BottomNavBar.selectedValue` | derived read of the focused tab route (no writer) |
 | active pal for start-chat | `chatSessionStore.setActivePal` (existing) |
 | active session for history open | `chatSessionStore.setActiveSession` (existing) |
-| chat prefill text | `deepLinkStore.setPendingMessage` (existing — reused by Home composer) |
+| chat prefill text | `deepLinkStore.setPendingMessage` (existing — deep links only; the Home composer is a launcher and no longer prefills) |
+| chat auto-focus request | `deepLinkStore.setAutoFocusChat` — set by the Home composer launcher only; consumed/cleared once by `ChatScreen` |
 | active model | existing `modelStore` selection path (via `ChatPalModelPickerSheet`) |
 
 Cross-store reads: Home reads `palStore.pals`, `chatSessionStore.sessions`,
@@ -227,11 +244,12 @@ On Home (ChatsTab) → tap "Settings" tab item
 → navigate(SettingsTab) → Settings screen shown; Settings item = peach pill
 ```
 
-### B. Start chat from composer
+### B. Launch chat from the composer
 ```
-Home composer: type "hi", active pal = Lunabot, tap send
-→ setPendingMessage("hi") + setActivePal(Lunabot) → navigate(ROUTES.CHAT)
-→ ChatScreen opens full-bleed (no tab bar), input prefilled "hi"  (Chat UI = POC-7)
+Home composer card tapped, active pal = Lunabot (model loaded)
+→ setAutoFocusChat(true) + setActivePal(Lunabot) → navigate(ROUTES.CHAT)
+→ ChatScreen opens full-bleed (no tab bar); after transitionEnd the chat input
+  focuses and the keyboard opens  (Chat UI = POC-7). No model loaded ⇒ no focus.
 ```
 
 ### C. Open chat from history row
@@ -272,7 +290,8 @@ pocketpal://e2e/benchmark (e2e build)
 | Signal | Set by | Read by | True when |
 | --- | --- | --- | --- |
 | focused tab route | `@react-navigation` Tabs | `BottomNavBar.selectedValue`, Home | that tab is active |
-| `deepLinkStore.pendingMessage` | `setPendingMessage` (deep link OR Home composer) | `ChatScreen` via `usePendingMessage` | a chat prefill is awaiting consumption |
+| `deepLinkStore.pendingMessage` | `setPendingMessage` (deep link only) | `ChatScreen` via `usePendingMessage` | a chat prefill is awaiting consumption |
+| `deepLinkStore.autoFocusChat` | `setAutoFocusChat` (Home composer launcher, model loaded) | `ChatScreen` (consumed once on mount) | a one-shot focus request is awaiting the next Chat arrival |
 
 ---
 
@@ -290,6 +309,8 @@ pocketpal://e2e/benchmark (e2e build)
 | D8 | Home wires only existing data; placeholders elsewhere | Foundation slice; sibling slices own their content |
 | D9 | Add `@react-navigation/bottom-tabs` (pinned `7.4.9`); reuse existing `stack` | Only the tab lib is new; pinned to match installed `native@7.1.26` peer (≥7.5 needs native ≥7.3.3) |
 | D10 | Floating variant is additive; `default` snapshot frozen | Honors theming I_UI5 DS-snapshot invariant |
+| D11 | Home composer is a launcher (`Pressable`), not a `TextInput` | Keyboard only on Chat; resting card stays pixel-identical; deletes the Home keyboard-occlusion machinery |
+| D12 | Auto-focus Chat input via one-shot `autoFocusChat`, gated on model loaded, fired after `transitionEnd` | Scopes focus to the launcher only; avoids dropping the keyboard mid-transition (Android) and focusing an unsendable field |
 
 ---
 
@@ -298,7 +319,8 @@ pocketpal://e2e/benchmark (e2e build)
 | ID | Edge case | Behaviour |
 | --- | --- | --- |
 | 9a | Deep-link chat while a pushed route is already on top | `navigate(ROUTES.CHAT)` resolves on root Stack regardless of focused tab |
-| 9b | No active model when composer "start chat" tapped | Existing no-model handling applies; navigation contract unchanged (Chat UX = POC-7) |
+| 9b | No model loaded when composer launcher tapped | Navigates to Chat (model-not-loaded state); auto-focus is suppressed (guarded on `modelStore.engine`) so an unsendable input is never focused |
+| 9i | Settings tab text field (e.g. context size) raises the keyboard | The floating tab bar's hide-on-keyboard remains (it is a general tab behavior, not Home-specific) so the keyboard never overlaps the bar on a tab root |
 | 9c | `Dev Tools` route in release build | Pushed route registered debug-only; absent in release |
 | 9d | RTL locale (he/fa) | Tab order and pill follow RN `I18nManager` start/end; tokens carry no directional values |
 | 9e | Non-Latin serif title | "Chat with your pals" falls back Fraunces→Inter via the theme builder (no per-screen handling) |

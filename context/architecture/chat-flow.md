@@ -1270,6 +1270,19 @@ hidden content; `'none'` lets a drag scroll the list with the input still
 focused. Tap-to-dismiss on send is preserved via `Keyboard.dismiss()` in
 `wrappedOnSendPress`.
 
+### Auto-focus on launcher arrival (C)
+
+`ChatInput` accepts an `autoFocusSignal: number` prop (threaded from
+`ChatScreen` through `ChatView`). When it bumps to a positive value the input
+focuses itself via `InteractionManager.runAfterInteractions`, so focus lands
+after the screen-push transition settles rather than mid-transition (which
+drops the keyboard on Android). `ChatScreen` bumps the signal on the
+navigation `transitionEnd` event, and only when the one-shot
+`deepLinkStore.autoFocusChat` flag was set by the Home composer launcher and a
+model is loaded (`modelStore.engine`). Other Chat entries (history rows, deep
+links) never set the flag, so they never auto-focus. See `app-shell.md §4a`
+(D11/D12) for the launcher side of this contract.
+
 ### Invariants
 
 - **I-K1 (single occlusion source)**: the input's vertical offset, the
