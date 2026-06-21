@@ -103,6 +103,10 @@ malformed JSON (returns `undefined` on parse failure).
   registered (only `render_html` today) and **text-only** when only an engine
   is (`calculate`, `datetime`).
 
+> UI-surface note: PalsHub pals are now also discoverable via the **Explore**
+> tab (`explore-tab.md`) in addition to PalsScreen. PalsScreen's local "my-pals"
+> path is unchanged. Pal config/talent dispatch (this doc) is unaffected.
+
 ---
 
 ## 2. Registries

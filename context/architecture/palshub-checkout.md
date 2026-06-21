@@ -629,6 +629,13 @@ submission. EU checkout + return is a separate future slice.
 
 ## 11. Cross-references
 
+- **`explore-tab.md`** — the PalsHub discovery surface (Explore tab) is a second
+  entry point into this checkout. It opens the **same** `PalDetailSheet`
+  (reskinned in place; still a `Sheet`, not promoted to a page) and the same
+  buy/download/owned actions — checkout behaviour is preserved verbatim. The
+  pre-existing `handleBuyPress` Android web-buy branch (`Platform.OS !== 'ios'` →
+  `Linking.openURL(getPalBuyUrl)`) remains the **drift vs this doc's §5/I1′**
+  un-branched description; it is preserved, not reconciled (checkout-flow owner).
 - **`pals-and-talents.md`** — Pal config surface (PACT/greeting); ownership-gated
   content rendering is `shouldShowPalContent` (C, `palshub-display.ts:120`).
 - **`SyncService.ts`** — library cache; the deferred-ownership / app-kill backstop
