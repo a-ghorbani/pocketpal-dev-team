@@ -446,6 +446,12 @@ Each DS component ships a Jest snapshot test using `@testing-library/react-nativ
 #### 4k.3 Wrap-Paper families (Switch/Checkbox/RadioButton/Dropdown)
 Restricted matrix: `variant × {default, disabled} × {light, dark} × value={true, false}` for the trio (`Switch`/`Checkbox`/`RadioButton`) — `size` axis dropped because Paper owns sizing and the DS layer does not widen it; the trio's public `size` prop is also dropped accordingly. `Dropdown` keeps the `size` axis (its rebuilt trigger has a size variant). **Pressed/focused are NOT snapshotted** — they are Paper internals; testing them would test Paper, not the DS layer.
 
+`Switch` binds `ios_backgroundColor: theme.colors.surfaceVariant` (mode-aware) on the
+wrapped Paper switch. Paper sets only `trackColor.false`, which iOS ignores in favour of
+`ios_backgroundColor`; without this the off-state iOS track is near-invisible in light mode.
+The off-state snapshot delta this produces lands as its own intentional DS commit, separate
+from any screen-swap commit (I_UI5).
+
 #### 4k.4 Theme construction in tests
 Each snapshot renders against a real `Theme` from `themeFixtures.byMode(mode).byLocale(language)` (D33 — `jest/fixtures/theme.ts` extended with the `byMode().byLocale()` factory).
 

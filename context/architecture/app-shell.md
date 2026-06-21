@@ -20,13 +20,15 @@ RootStackParamList  (src/utils/types.ts)   (C)
   'Pals (experimental)': undefined   // pushed above tabs
   Benchmark: undefined         // pushed above tabs
   Settings: undefined          // served by SettingsTab (not registered as a pushed screen)
+  Preferences: undefined       // pushed above tabs (settings.md owns)
+  'App Settings': undefined    // pushed above tabs (settings.md owns)
   'App Info': undefined        // pushed above tabs
   'Dev Tools': undefined       // debug-only, pushed above tabs
   BenchmarkRunner: undefined   // E2E-only, pushed above tabs (deep-link target)
 
 MainTabParamList   (C)
   ChatsTab: undefined          // root = Home screen
-  ExploreTab: undefined        // root = Explore placeholder (POC-11 scaffold)
+  ExploreTab: undefined        // root = Explore screen (PalsHub discovery; explore-tab.md)
   SettingsTab: undefined       // root = existing Settings screen (POC-10 owns reskin)
 ```
 
@@ -36,8 +38,7 @@ navigator's state, never stored.
 **Glossary:**
 - **App shell** — the root navigation container: `NavigationContainer →
   BottomSheetModalProvider → SwitchPoint → RootStack → MainTabs`.
-- **Tab root** — the screen at the base of a tab (Home / Explore-placeholder /
-  Settings).
+- **Tab root** — the screen at the base of a tab (Home / Explore / Settings).
 - **Pushed route** — a sibling route on the root Stack rendered full-bleed above
   the tab bar (Chat, Models, etc.).
 - **Home** — the Chats-tab root screen (`src/screens/HomeScreen`): serif title,
@@ -152,6 +153,11 @@ No new lifecycle. Tab focus is owned by `@react-navigation/bottom-tabs`.
    `models-menu-button`. The collision that previously had two `menu-button`
    elements is gone, so the e2e generation-settings helper taps `menu-button`
    directly.
+   - **Chat header re-skin (POC-7)**: `ChatHeader` was visually re-skinned to the
+     redesign language (a centered cluster of pal avatar + online dot + pal
+     name + model line on the muted surface, with a chat-plus new-chat
+     button). Topology, handlers, and the D11/D12 launcher contract are
+     unchanged — see `chat-flow.md §4e`. No app-shell contract delta.
 8. **Home data wiring (D8).** Home wires only existing data: pal carousel ←
    `palStore.pals`; chat-history list ← `chatSessionStore.sessions`; model chip
    ← `modelStore.activeModel`. Sibling-slice areas render placeholders. No new
@@ -193,12 +199,13 @@ No new lifecycle. Tab focus is owned by `@react-navigation/bottom-tabs`.
 
 | Component | Renders | Does NOT render |
 | --- | --- | --- |
-| `RootStack` | `MainTabs` + full-bleed pushed routes (Chat, Models, Pals, Benchmark, App Info, Dev Tools, BenchmarkRunner) | a drawer; chat conversation UI |
-| `MainTabs` | three tab roots (Home, Explore-placeholder, Settings) + floating `BottomNavBar` | native tab bar; pushed-route content |
+| `RootStack` | `MainTabs` + full-bleed pushed routes (Chat, Models, Pals, Preferences, App Settings, Benchmark, App Info, Dev Tools, BenchmarkRunner) | a drawer; chat conversation UI |
+| `MainTabs` | three tab roots (Home, Explore, Settings) + floating `BottomNavBar` | native tab bar; pushed-route content |
 | `BottomNavBar` floating variant | rounded floating bar; active item on a yellow pill (`accent.yellowSubtle` fill `#f5dbbc` + `accent.yellowMute` border `#f8f1e2`); icon + label | change to the `default` variant's snapshot |
 | `HomeScreen` | bottom-anchored hero: two-line serif title "Chat / with your pals", pal carousel (rounded-rect image cards, active card yellow-bordered; `palStore.pals` + Add affordance), composer **launcher** card (`Pressable`; static placeholder text + boxed attach + mic + resting-tone gradient send — no `TextInput`, no Home keyboard), two-tone model chip, then chat-history (search header + white rows with pal avatar / clock / time / more) or empty hint; bottom gradient fade | chat conversation UI; an editable composer / Home keyboard; Explore/Settings content; new persistence |
-| `ExploreScreen` (placeholder) | a scaffold placeholder | PalsHub Explore content (POC-11) |
+| `ExploreScreen` | header + sign-in promo card + pill `[Pals \| Models]` sub-tabs; Pals is the PalsHub discovery surface, Models is a disabled stub (see `explore-tab.md`) | model discovery/management; nav topology |
 | Pushed routes (reused) | each screen's existing UI with a Stack header/back | the tab bar |
+| Pushed routes (new — Settings) | `Preferences` + `App Settings` sub-screens with a Stack header/back (`settings.md` owns their contract) | the tab bar; account rows |
 
 ---
 
@@ -221,15 +228,12 @@ Cross-store reads: Home reads `palStore.pals`, `chatSessionStore.sessions`,
 
 1. Delete dead `SidebarContent` + drawer-only files → POC-13.
 2. Re-home Models / Benchmark / Pals / App Info under their conceptual tab →
-   POC-10 / POC-11.
-   - Interim shim: the Settings screen carries an "Advanced" list section with
-     rows that navigate to Benchmark, App Info, and Dev Tools (Dev Tools gated
-     on `__DEV__`). This keeps those screens user-reachable now that the drawer
-     is unmounted; it is superseded by the Settings reskin that re-homes them
-     (POC-10). `Home` reaches Pals (Add affordance) and Models (Chat
-     empty-state); Settings is its own tab.
-3. Explore tab content → POC-11; Settings reskin → POC-10.
-4. Migrate the remaining Appium specs and page helpers (DrawerPage,
+   POC-8 / POC-9 / POC-11. The Settings launcher now hosts canonical rows that
+   reach Benchmark, App Info, and Dev Tools (`__DEV__`-gated), so the interim
+   "Advanced" shim is absorbed; `Home` reaches Pals (Add affordance) and Models
+   (Chat empty-state). The Models / Pals destination screens are reskinned by
+   their owning slices; the Settings launcher reskins only the rows.
+3. Migrate the remaining Appium specs and page helpers (DrawerPage,
    `model-actions`, `SettingsPage`, the per-feature specs) off the drawer
    navigation model to the tab/Home model. Only `quick-smoke` was migrated in
    POC-30; `ChatPage.openDrawer` is retained but deprecated.
@@ -241,7 +245,7 @@ Cross-store reads: Home reads `palStore.pals`, `chatSessionStore.sessions`,
 ### A. Tab switch
 ```
 On Home (ChatsTab) → tap "Settings" tab item
-→ navigate(SettingsTab) → Settings screen shown; Settings item = peach pill
+→ navigate(SettingsTab) → Settings screen shown; Settings item = yellow pill
 ```
 
 ### B. Launch chat from the composer
@@ -301,7 +305,7 @@ pocketpal://e2e/benchmark (e2e build)
 | --- | --- | --- |
 | D1 | Root Stack hosts the Tab navigator (candidate B) | Keeps flat routes; chat/detail render full-bleed |
 | D2 | Remove `@react-navigation/drawer` outright | Locked product decision; not coexistence |
-| D3 | Floating peach-pill tab bar via DS `BottomNavBar` `tabBar` | Canonical Figma; DS is presentational, caller wires it |
+| D3 | Floating yellow-pill tab bar via DS `BottomNavBar` `tabBar` (mode-aware: light `yellowSubtle`, dark `#a86c34`) | Canonical Figma; DS is presentational, caller wires it |
 | D4 | Non-tab destinations = sibling pushed routes, names unchanged | Preserves deep links + existing screen headers |
 | D5 | Start-chat reuses `setActivePal`/`setActiveSession` + `setPendingMessage` + `navigate(CHAT)` | Existing prefill contract; no new chat coupling |
 | D6 | Model chip opens existing picker sheet, no navigation | Sheet already does pal/model selection; reuse |
