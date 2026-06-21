@@ -103,9 +103,18 @@ malformed JSON (returns `undefined` on parse failure).
   registered (only `render_html` today) and **text-only** when only an engine
   is (`calculate`, `datetime`).
 
-> UI-surface note: PalsHub pals are now also discoverable via the **Explore**
-> tab (`explore-tab.md`) in addition to PalsScreen. PalsScreen's local "my-pals"
-> path is unchanged. Pal config/talent dispatch (this doc) is unaffected.
+> UI-surface note: PalsHub **discovery** lives in the **Explore** tab
+> (`explore-tab.md`). `PalsScreen` is now the local-only **My Pals** surface —
+> a serif header (back + "+ Create Pal"), **Downloaded | Created-by-me** tabs
+> (`source==='palshub'` vs `source==='local'`), and single-column cards with a
+> per-card overflow menu (edit / share / delete). The former unified
+> local+library+hub grid, filter chips, search, auth bars, and bottom action
+> bar were dropped; Explore owns hub discovery. The create/modify form
+> (`PalSheet`) is a full-height Sheet with **General | Generation** tabs — the
+> former standalone `PalGenerationSettingsSheet` is folded into the Generation
+> tab. Pal config/talent dispatch (this doc) is unaffected: the write path
+> (`PalSheet.onSubmit → PalStore.create/updatePal`) and PACT/greeting editors
+> are unchanged.
 
 ---
 
@@ -304,6 +313,7 @@ shutdown). Aborted runs therefore land in `done`, not a dedicated status.
 | `talentUIRegistry` entries   | (C) `registerDefaultTalents()`.                                                                     |
 | `pal.pact`                   | (C) `PalStore` create/update flows, edited via `TalentSection` in `PalSheet`.                       |
 | `pal.greeting`               | (C) `PalStore` create/update flows, edited via `PalSheet` → `GreetingSection` (in-app editor); also sourced from `createLocalPalFromPalsHub` on PalsHub download. |
+| `pal.completionSettings`     | (C) `PalStore` create/update via the `PalSheet` form field; edited in the **Generation tab** (was the standalone `PalGenerationSettingsSheet`). Reset/Clear mutate in-form state only; persistence still happens on form Save. |
 | `local_pals.pact` (DB)       | (C) `PalRepository` (writes JSON-stringified value).                                                |
 | `resolvedSettings.tools`     | (C) `ChatSessionStore.resolveCompletionSettings()` only.                                            |
 
@@ -500,7 +510,9 @@ Source of truth in code: `src/types/pal.ts`, `src/services/talents/`,
 `src/store/ChatSessionStore.ts:1340-1397`, `src/database/models/LocalPal.ts`,
 `src/hooks/useChatSession.ts` (`talentLookup` wiring), `src/components/TalentSurface/`,
 `src/components/PalsSheets/PalSheet.tsx` (in-app editor — `TalentSection`
-nested inside).
+nested inside; tabbed General | Generation form, the latter via
+`src/components/PalsSheets/GenerationSettings.tsx`),
+`src/screens/PalsScreen/PalsScreen.tsx` (local-only My Pals surface).
 
 When this doc and the code disagree, the code wins; the same PR that lands
 the change updates this file.
