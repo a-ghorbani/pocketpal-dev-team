@@ -89,6 +89,28 @@ owned by `palshub-checkout.md` (unchanged).
 | login-required | "Create an Account" modal on a gated action while unauthenticated |
 | models sub-tab | disabled segment; tap is a no-op; panel shows a "coming soon" placeholder |
 
+### Search overlay body (C)
+
+When `searchExpanded`, `ExplorePalsPanel` renders a Portal-mounted search
+overlay over the dimmed discovery grid. The overlay body is selected from
+existing signals (`debouncedQuery`, `isLoadingPalsHub`, `items.length`);
+`items` is shared with the grid behind the scrim, so the prompt body is keyed on
+`debouncedQuery === ''`, not on `items.length`.
+
+| Overlay body | Selected when | User-visible feedback |
+| --- | --- | --- |
+| prompt | `debouncedQuery === ''` | centered "Start typing" + "Enter pal name and view available options" |
+| loading | query set, `isLoadingPalsHub` | in-overlay spinner |
+| 0-results | query set, `items.length === 0`, not loading | "No Results for **{query}**" (query in accent) + helper + "Explore Pals" CTA |
+| results | query set, `items.length > 0` | "Search results" header + result rows (avatar + name + `pal.description` subtitle + chevron) |
+| closed | `!searchExpanded` | overlay unmounted; discovery grid visible |
+
+A result-row tap **closes the overlay before opening `PalDetailSheet`**: it runs
+the shared close-and-clear (`setSearchExpanded(false)` + clear `searchInput`),
+then `handleCardPress`. The overlay is a paper `Portal` painted above the
+`@gorhom/bottom-sheet` host, so opening the sheet while the overlay is still
+mounted would render it under the scrim and the scrim would swallow its touches.
+
 ---
 
 ## 4. Contract
@@ -147,6 +169,44 @@ owned by `palshub-checkout.md` (unchanged).
 - **no local-path dismantling**: PalsScreen's local my-pals path and its
   `PalDetailSheet` call remain intact and reachable.
 
+### 4c. Search overlay (C)
+
+- **Overlay owned by `ExplorePalsPanel`, gated on `searchExpanded`.** A
+  Portal-mounted card sheet (`explore-search-overlay`) over a tap-to-dismiss
+  scrim; the panel's filter row, "Available Pals" header, discovery list, and
+  footer states stay mounted behind it. The header `ExploreSearchToggle`
+  (`explore-search-toggle`) opens it.
+- **Inline search input removed from the panel body.** The overlay owns the
+  focused input (`explore-search-input`) — a DS `Input` (leading `SearchIcon`,
+  trailing clear `explore-search-clear` shown when non-empty) inside a
+  token-styled wrapper: rounded accent border (`primary` on focus, `outline`
+  otherwise), mode-aware `secondaryDefault` fill, the DS Input bottom divider
+  tucked so there is no double divider. No raw hex; no shared DS-Input edit.
+- **Behaviour byte-preserved.** `searchInput`/`debouncedQuery`, the 300ms
+  debounce, `buildQuery`, `searchPalsHubPals`, and the `seqRef`/`pageRef`
+  last-query-wins guard are unchanged; the overlay only re-presents that state.
+- **Result-row tap closes the overlay, then reuses `handleCardPress`** — it
+  first runs the shared close-and-clear (so the paper `Portal` overlay/scrim is
+  gone), then opens `PalDetailSheet` via the same premium/unauth gate as a
+  discovery card. Close-before-open is required because the overlay Portal paints
+  above the `@gorhom/bottom-sheet` host. Subtitle binds `pal.description`
+  (`numberOfLines={1}`, dropped when empty); no static literal, no l10n key.
+- **Accessibility labels are distinct per control** — the backdrop dismiss
+  Pressable (`explore-search-scrim`) is labelled `common.close`, the trailing
+  clear control (`explore-search-clear`) `common.clear`, and the focused input
+  (`explore-search-input`) `explore.searchLabel`; the clear control carries a
+  `hitSlop` to reach a ~44px touch target.
+- **"Explore Pals" CTA** (`explore-search-explore-cta`, 0-results) =
+  `setSearchExpanded(false)` + clear `searchInput` → overlay closes onto the
+  discovery grid. A real action, not a dead control; same dismiss-and-clear as
+  the scrim/close path.
+- New overlay testIDs are additive and screen-scoped:
+  `explore-search-overlay`, `explore-search-scrim`, `explore-search-clear`,
+  `explore-search-prompt`, `explore-search-no-results`,
+  `explore-search-explore-cta`, `explore-search-results-header`,
+  `explore-search-result-row-<pal.id>`. `explore-search-toggle` /
+  `explore-search-input` are preserved verbatim.
+
 ---
 
 ## 5. Single-writer rule
@@ -195,7 +255,7 @@ No new writers. All mutable shared state keeps its existing single writer.
 
 | Edge case | Behaviour |
 | --- | --- |
-| PalsHub not configured / search fails | `searchPalsHubPals` returns empty; empty state, no error UI |
+| PalsHub not configured / search fails | `searchPalsHubPals` swallows the failure and returns empty (sets `syncState: success`), so a failed fetch is indistinguishable from a genuine zero-results in the overlay 0-results body. Copy stays neutral rather than asserting "no matches"; an honest error/retry state needs a store-level error signal (follow-up) |
 | Non-US region, premium pal | detail sheet shows info text, no Buy button (preserved) |
 | Android premium buy | existing `Linking.openURL(getPalBuyUrl)` web path fires unchanged (drift note) |
 | Empty results after filter | "No Pals found" empty state; filters remain adjustable |
