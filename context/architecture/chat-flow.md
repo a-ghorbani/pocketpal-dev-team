@@ -455,6 +455,83 @@ The pending indicator's visual is a subtle dot-row (smaller dots than
 LoadingBubble, no card background, theme `onSurfaceVariant`), positioned below
 the latest turn — see D4.
 
+### 4e. Visual reskin (presentation/token delta — structure unchanged)
+
+The Chat surface is bound to the redesign token + typography surface. This is
+a **presentation delta**: it changes no data model, event flow, state machine,
+or single-writer. The §4a–§4d block order, ownership, and the §6 A–I scenarios
+are preserved; only the painting changes. All values bind to the token surface
+(`src/theme/tokens/colors.ts` + `typography.ts`) — no hardcoded hex on the chat
+screens.
+
+1. **Surfaces**: chat list + header read `background/muted`; the input bar reads
+   `background/card`, with a 20px rounded top and a soft drop shadow
+   (light mode only). Tokens added for this: `backgroundCard`, `redAccent`;
+   dark `mutedBackground`/`mutedLight` reconciled to the canonical file.
+2. **Assistant content**: borderless — `body/md` (Inter) directly on the
+   surface, `foreground/primary`. `Bubble` already painted assistant bg
+   `transparent`; the user bubble is the only shaped one.
+3. **User content**: grey bubble — bg `muted/light`, radius 16 with the
+   trailing-bottom corner squared to 2px as a tail (logical `borderEndEndRadius`
+   so it mirrors under RTL).
+4. **Header** (`ChatHeader` → `ChatHeaderTitle`): the title cluster is **centered**
+   between the leading back-chevron and the trailing new-chat button — active-pal
+   avatar (25, from `palStore` + `getFullThumbnailUri`, falls back to the pal
+   `color` tile) with an online dot, **active-pal name** (not the session title),
+   model name beneath (`caption/sm` `tertiary`). No pal-name chevron — the
+   pal/session switcher is deferred, so the dead affordance is omitted until it
+   is wired. The new-chat button
+   uses the chat-plus glyph (`ChatPlusIcon`). Topology, handlers, and the
+   `header-view`/`reset-button` testIDs are unchanged; `app-shell.md §4a` topology
+   + D11/D12 launcher contract frozen.
+5. **Input** (`ChatInput`): card surface, "Start messaging…" placeholder, a
+   boxed 40px `+` attach button (`secondary/default` bg, 0.5px `muted/light`
+   border, radius 12), mic on the right. Send/stop/voice behaviour,
+   `autoFocusSignal`, and the §11 keyboard-occlusion model are unchanged.
+6. **Advanced-detail rows** (render-only existing data):
+   - reasoning collapses to a compact `⊕ Reasoning ›` row (brain glyph + label
+     + chevron) that expands to the existing `ThinkingBubble` content. **No
+     metric suffix** (D14 — no per-reasoning metric exists). The §4a
+     auto-collapse rule is preserved verbatim.
+   - tool-used → `🔧 used <name> · N tokens · Ms` from `call.metrics`,
+     degrading to `used <name>` when metrics are absent. No trailing chevron
+     (non-interactive — no disclosure to imply).
+   - tool-failed → `⚠ <name> failed` on the first row, `red/accent`, with the
+     error message wrapping on its own line below (multi-line, not truncated).
+     No trailing chevron.
+7. **Action bar** (= reskinned `AssistantTurnFooter`, **stays always-visible**):
+   play · copy · regenerate · more · two compact clock chips `🕐 <n> tok/s` ·
+   `🕐 TTFT <n>ms` (each = `ClockIcon` + value, bullet-separated; `tok/s` is
+   `predicted_per_second.toFixed(1)`, ms/token is dropped from this surface).
+   The `footer-timing` row carries a single aggregated `accessibilityLabel`
+   (`"<n> tok/s · TTFT <n>ms"`) so assistive tech and the E2E timing extraction
+   read one combined label rather than per-chip nodes; the clock glyphs are
+   hidden from assistive tech. `regenerate`/`more` are labelled icon buttons
+   with `hitSlop` for a ≥44pt target. `regenerate` invokes the
+   existing try-again action (`handleTryAgain`); `more` opens the existing
+   long-press menu (`handleMessageLongPress`). Both are threaded as optional
+   `onRegenerate` / `onFooterMore` props through `Message` to **both** footer
+   render sites (the `assistant_turn` branch and the legacy text branch). No new
+   behaviour, no new persisted field. "Branch from here" stays OUT (D13).
+
+### 4f. Reskin invariants (additive to I1–I4)
+
+- **I5 (render preserved)**: markdown, custom-table (`react-native-render-html`
+  table-model registration), and thinking-bubble rendering must NOT regress.
+- **I6 (testID + a11y freeze)**: every testID survives the restructure —
+  `header-view`, `chat-input`, `user-message`, `ai-message`,
+  `assistant-turn-footer`, `footer-copy`, `footer-timing`,
+  `footer-interrupted-status`, `tool-used-chip`, `tool-error-block`,
+  `tool-error-block-message`, plus thinking-bubble + chat-smoke selectors. New
+  rows may ADD testIDs (`footer-regenerate`, `footer-more`); none are removed.
+- **I7 (no new data capture)**: the reorg writes/captures NO new field. The
+  reasoning token·duration suffix is dropped because no such metric exists
+  (D14); everything else renders from data already on `metadata` / `step`.
+- **I8 (RTL physical mirror)**: header status dot and the user-bubble tail use
+  logical inset / corner properties so they mirror under RTL (he, fa). The chat
+  body uses Inter typography only — no Fraunces accent on this surface, so the
+  non-Latin serif fallback does not apply here.
+
 ---
 
 ## 5. Layer ownership (single-writer rule)
@@ -568,7 +645,7 @@ human can grep the labels back to source.
 │       │ Hope this looks right.           │   [TextMessage] inside        │
 │       └──────────────────────────────────┘   [Bubble]                    │
 │                                                                          │
-│       ── 32ms/tok · 30 tok/s · 251ms TTFT · [copy] ──                    │
+│       ── [copy] · 🕐 30.0 tok/s · 🕐 TTFT 251ms ──                       │
 │                      [AssistantTurnFooter]  (I1 · exactly one per turn)  │
 │                                                                          │
 │   ▼ below the latest turn (during dead zones only)                       │
@@ -630,7 +707,7 @@ steps = [ { content: "Hi! How can I help?" } ]
 ─────────────────────────────────────────
   Hi! How can I help?
   ┌──────────────────────────────────┐
-  │  32ms/tok | 30 tok/s | 251ms TTFT │   ← footer (×1)
+  │  ▷ ⧉ ↻ ⋯ · 🕐 30.0 tok/s · 🕐 TTFT 251ms │   ← footer (×1)
   └──────────────────────────────────┘
 ```
 
@@ -893,6 +970,25 @@ rename when Cleanup-DEFERRED lands.
   cause of the duplicate-footer bug; keeping it for legacy Text rows would
   leave a drift trap.
 
+**Reskin decisions (POC-7, §4e/§4f):**
+
+- **D10**: Reskin = token-bind existing components; structure/ownership
+  unchanged. Smallest blast radius; honours the reskin-only scope.
+- **D11**: Assistant content is borderless; the user bubble keeps a grey 2px
+  trailing-tail. Extends the existing transparent-assistant style.
+- **D12**: Action bar stays always-visible (reskinned footer), NOT
+  tap-to-reveal. Preserves the footer-present E2E specs and the I6 freeze.
+- **D13**: `more` + `regenerate` reuse the existing long-press menu / try-again
+  action. "Branch from here" is net-new → OUT (deferred to a PM ticket).
+- **D14**: The reasoning row drops the token·duration suffix — `AgentStep`
+  carries `reasoningContent` only; no per-reasoning metric exists. Capturing one
+  would be net-new, so the suffix is OUT (the I7 tripwire result).
+- **D15**: Header avatar reads the active pal from `palStore` (same read already
+  used by `ChatInput`); it is render-only and persists nothing.
+- **D16**: Sheets/menus inherit the reconciled token palette (no separate code
+  delta). The new "Add to Chat" sheet, the bottom-sheet message-options layout,
+  and a global Sheet-base dark surface change are OUT (net-new / app-wide DS).
+
 ---
 
 ## 9. Edge cases
@@ -982,6 +1078,17 @@ Step₀ has two tool calls. The first succeeds, the second fails.
   in array order (I2).
 - The follow-up step proceeds normally; the model can apologise for B,
   proceed without it, or both.
+
+### 9h–9m. Reskin edge cases (POC-7, §4e)
+
+| ID | Edge case | Behaviour |
+| --- | --- | --- |
+| 9h | Tool call with metrics absent (old persisted) | Tool-used row degrades to `used <name>` (no suffix), per the `ToolUsedChip` fallback |
+| 9i | Aborted/interrupted turn | Action bar renders copy-only (no timing); `footer-interrupted-status` unchanged. Regenerate/more still render when their callbacks are present |
+| 9j | RTL (he, fa) | Header status dot + user-bubble tail mirror via logical `end` / `borderEndEndRadius` (I8) |
+| 9k | Non-Latin script | Chat body is Inter only — no Fraunces accent on this surface, so no serif fallback applies |
+| 9l | Pal with no thumbnail | Header avatar falls back to the pal `color[0]` tile (else `secondaryDefault`); no crash on a missing image |
+| 9m | Reasoning-row token·duration parity gap vs Figma | Accepted OUT (D14); no per-reasoning metric exists; not ship-blocking |
 
 ---
 
