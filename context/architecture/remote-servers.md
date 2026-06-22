@@ -244,7 +244,7 @@ ON with an effort the effort cell **replaces** the plain ON cell.
 
 | serverType (persisted) | axis-1 OFF → wire | axis-1 ON → wire | axis-2 ON+effort → wire | posture |
 | --- | --- | --- | --- | --- |
-| llama.cpp | `chat_template_kwargs:{enable_thinking:false}` + `reasoning_format:'none'` | `reasoning_format:'auto'` | `reasoning_format:'auto'` + `chat_template_kwargs:{reasoning_effort:<lvl>}` | ignores unknown → safe |
+| llama.cpp | `chat_template_kwargs:{enable_thinking:false}` + `reasoning_format:'auto'` | `reasoning_format:'auto'` | `reasoning_format:'auto'` + `chat_template_kwargs:{reasoning_effort:<lvl>}` | ignores unknown → safe |
 | vLLM (modern) | `chat_template_kwargs:{enable_thinking:false}` | (omit) | `chat_template_kwargs:{reasoning_effort:<lvl>}` | ignores unknown → safe |
 | LM Studio | `chat_template_kwargs:{enable_thinking:false}` | (omit) | (none; its chat API ignores `reasoning_effort`) | ignores unknown → safe |
 | Ollama (/v1) | `reasoning_effort:'none'` (safe no-op) | (omit; never `think:true`) | (omit — deferred) | hard-400 on `think:true` / non-`none` effort to a non-thinking model |
@@ -259,6 +259,12 @@ ON with an effort the effort cell **replaces** the plain ON cell.
 - **I-RS3 (Ollama)**: never send `think:true` or a non-`'none'` `reasoning_effort`
   to Ollama. OFF sends only `reasoning_effort:'none'` (a safe no-op even for a
   non-thinking model); ON sends nothing.
+- **I-RS4 (llama.cpp `reasoning_format`)**: always `'auto'`, including OFF — a
+  no-op for non-reasoning models and the value that extracts reasoning into
+  `reasoning_content`. `'none'` is never sent: it leaves the model's raw
+  channel/think markers inline in `content` (e.g. gemma-4 emits an empty
+  `<|channel>thought` block even when thinking is off), which leaks into the
+  rendered answer. On/off is carried solely by `enable_thinking`.
 
 ### Decisions
 

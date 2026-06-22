@@ -1253,8 +1253,8 @@ the session completion settings (`enable_thinking` + the `reasoning` carrier).
 ### Wire hints — local
 
 `useChatSession` extends the local completion-params block:
-- axis-1 ON → `reasoning_format: 'auto'`.
-- axis-1 OFF → `reasoning_format: 'none'` + `chat_template_kwargs.enable_thinking: false`.
+- `reasoning_format` is **always `'auto'`** (ON and OFF) — a no-op for non-reasoning models and the value that extracts reasoning into `reasoning_content` instead of leaking raw channel/think markers into content. `'none'` is never used (it leaks). On/off is carried solely by `enable_thinking`.
+- axis-1 OFF (reasoning-capable only) → also `chat_template_kwargs.enable_thinking: false`.
 - axis-2 effort → `chat_template_kwargs.reasoning_effort: <value>` (gpt-oss-style).
 
 `chat_template_kwargs` is new plumbing on the local path. The remote per-server
