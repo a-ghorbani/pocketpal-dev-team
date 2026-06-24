@@ -39,6 +39,12 @@ the Background Download row (§4). (C)
    weight-repacking), Model Loading (auto-offload / auto-navigate), API
    (HF token + use-HF-token), iOS Cache & Storage, and legacy Export. The
    Advanced accordion is dissolved into flat stacked containers. (D)
+   - Speculative decoding (global engine knobs: master toggle + draft K/V
+     cache-type menus gated on flash-attn compatibility) is a control group in
+     the same model-engine surface. It currently lives in the live monolithic
+     `SettingsScreen.tsx` Advanced accordion (the `PreferencesScreen` split is
+     redesign-track, not yet on main); folds into this surface on that cutover.
+     Contract in `model-loading.md`. (C)
 3. **App Settings sub-screen** (`AppSettingsScreen`, pushed route): Dark Mode,
    Background Download, Language, TTS availability, and (iOS-only) Display
    Memory Usage. (D)

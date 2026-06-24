@@ -57,3 +57,35 @@ The list above sources models; this section is the **UI lifecycle** a card (or C
 - **Hard failure** is an `initLlama`/load error caught in `proceedWithInitialization` and surfaced as `modelLoadError` (`context: 'modelInit'`). Renders on the reskinned `ErrorSnackbar` (single action) → **Report** opens `ModelErrorReportSheet` (same submit payload). The existing snackbar-vs-dialog mutual exclusion (download-with-modelId ⇒ `DownloadErrorDialog`, else snackbar) is preserved.
 
 **Crash-loop guard (do not regress).** A failed load sets `modelLoadError` exactly once and **rethrows without auto-retrying**. There is **no** auto-reload on failure and **no** snackbar Retry. Retry is **user-initiated only**: re-tap the card primary `load-button`, or Chat `ModelNotLoadedMessage` Load (both route back through `selectModel` → `initContext`). Metadata/details fetches keep swallowing failures and returning. No UI path may auto-call `selectModel`/`initContext` on failure. (Regression-gated by a `ModelStore` unit test asserting the failure path sets the error once and calls `initLlama` once.)
+
+## Speculative decoding / draft model (MTP)
+
+Speculative decoding is a global, opt-in extension of the model-load contract. It runs through the **same** `initContext` → `proceedWithInitialization` → `initLlama` path; it adds no new native-load entry point. (Consumes llama.rn PR #355 / b9769; built from source — see the build note below.)
+
+**Two modes, derived (never persisted as an enum):**
+
+- **Embedded / hybrid MTP** — a self-contained model carries draft layers; `model_draft` left unset, speculative just enabled.
+- **Separate-draft pairing** — a target + a distinct small draft model loaded together; `model_draft` = the draft file path.
+
+The mode is computed at load by `resolveDraftConfig(model)` (read-only, runs **outside the mutex**, mirrors `resolveMultimodalConfig`):
+
+- `speculativeEnabled` false → **off**: forward no `spec_draft_*`, no `model_draft`. Identical to pre-feature load.
+- a `defaultDraftModel` that resolves to a **downloaded** file → **paired**: `model_draft` = path, `is_model_draft_asset: false`.
+- speculative on, no resolvable paired draft → **embedded** (also the harmless no-op for a non-MTP model).
+
+`getEffectiveContextInitParams(filePath, draftConfig)` applies the mode as `?? user-value` fallbacks over the user's `contextInitParams` — **a mode default never overwrites an explicit user setting**. Paired defaults: `flash_attn_type 'off'`, `spec_draft_cache_type_k/v 'f16'`, `spec_draft_n_gpu_layers 99`. Embedded defaults: `flash_attn_type 'auto'`, `spec_draft_cache_type_k/v 'q8_0'`. The `spec_draft_n_max/n_min/p_min/p_split` tuning passes through verbatim in both speculative modes. Callers that pass no `draftConfig` (e.g. the benchmark runner) are unchanged.
+
+**Graceful degradation, never a hard fail.** A missing/incompatible draft, a draft with `isDownloaded === false`, or a device that can't support MTP drops `model_draft` and loads the target normally — it never blocks the target load and never surfaces `modelLoadError` *for the draft alone*. (The "speculative no-op" half — speculative on, non-MTP model, no draft → no native error — rests on the llama.rn #355 contract and is proven by an on-device verification step, not by unit tests.)
+
+**Draft authoring is cross-repo (NOT mmproj's same-repo pairing).** A draft is usually a *different* HF repo, so it cannot ride `hfAsModel`'s same-repo sibling pairing (which `§Vision` requires `mmproj.hf_repo === hf_repo`). It is authored as an explicit `draft.{hf_repo, hf_filename, size_bytes}` block on a device-rules candidate, parsed by `parseDraft` (mirrors `parseMmproj` but **omits** the same-repo and projector-name checks), and synthesized into its own download stub (`modelType: DRAFT`) with the target's `defaultDraftModel`/`compatibleDraftModels` pointing at it. The **same** parse-time path guard as model/`mmproj` applies (`isSafePathSegment` / two-part repo / `.gguf`) because untrusted device-rules JSON drives the draft download URL too — a malformed draft degrades to no-draft (drop the draft, keep the target).
+
+**State, single-writer, memory.**
+
+- `activeDraftModelId` (runtime only, not persisted) is written **only** by `proceedWithInitialization` (set to the paired draft id) and cleared at **every** context-release reset point in `_releaseContextInternal`, alongside `activeProjectionModelId`. Stale draft state on model-switch is the projection-class bug this mirrors.
+- `contextInitParams.speculativeEnabled` / `spec_draft_*` are written **only** by the new `modelStore.set*` setters (mirror `setCacheTypeK`/`setNGPULayers`); persisted with `contextInitParams`. `CURRENT_CONTEXT_INIT_PARAMS_VERSION` is `2.3` — the `2.2 → 2.3` migration sets `speculativeEnabled` false and leaves `spec_draft_*` undefined, so upgraded records keep pre-feature behaviour.
+- A paired draft is resident **alongside** any projection model at load, so the pre-load memory check **sums** target + projection + draft sizes (additive, not max): `getModelMemoryRequirement` and both `useMemoryCheck` chains gain an additive `draftModel?` slot; `checkMemoryAndConfirm` forwards the resolved draft.
+- Auto-download mirrors projection: `_downloadDraftModelIfNeeded` is best-effort (swallow-and-continue — a draft download failure never fails the target download) and gated on `speculativeEnabled`.
+
+**Settings.** The global speculative knobs live in the live `SettingsScreen.tsx` Advanced section (a master toggle + draft cache-type menus gated on the toggle and on flash-attn compatibility). A per-target draft picker is deferred. (`settings.md` notes this control group; no IA change.)
+
+**Build note.** llama.rn #355 is consumed as a committed source tarball and built from C++ source on both platforms (`rnllamaBuildFromSource=true` on Android; the Podfile defaults `RNLLAMA_BUILD_FROM_SOURCE=1` on iOS, since the tarball ships no xcframework). The tarball bundles a prebuilt Android arm64 OpenCL ICD stub and a Metal-embed assembly object the from-source podspec otherwise omits; the AppIntents `LlamaContextWrapper` includes are guarded for the flat from-source header layout.
