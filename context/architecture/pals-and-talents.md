@@ -46,10 +46,11 @@ TalentUI    (src/services/talents/TalentUIRegistry.ts:5)  // render side
   renderPending?()       → ReactNode              // (C) deprecated, see D5
 
 TalentResult                                      // discriminated union
-  { type: 'html',  html, title?, summary }
-  { type: 'text',  summary }
-  { type: 'audio', audioUri, summary }
-  { type: 'error', summary, errorMessage }
+  { type: 'html',   html, title?, summary }
+  { type: 'text',   summary }
+  { type: 'search', query, results[], summary }   // results: {title,url,snippet}[]
+  { type: 'audio',  audioUri, summary }
+  { type: 'error',  summary, errorMessage }
 
 AgentToolCall  (src/utils/types.ts:35)            // one call in a step
   id, type:'function', function:{ name, arguments },
@@ -77,25 +78,50 @@ Engines stay pure — they neither produce nor read metrics.
   pick the locked-down configuration explicitly.
 
 - `WebSearchEngine` (`web_search`) and `ReadUrlEngine` (`read_url`) are the
-  internet-search talents (BYOK, provider-agnostic). Both are **text-only**
-  (no `TalentUI` — they fall through I3 to `ToolUsedChip`). The model writes
+  internet-search talents (BYOK, provider-agnostic). The model writes
   the query / URL; result count comes from settings (not a tool parameter, so
-  the model cannot inflate the injected tokens). Both resolve to a
-  `{type:'text'}` menu / page on success or `{type:'error'}` on
-  no-key / no-results / timeout / transport — never a silent no-op. Network
+  the model cannot inflate the injected tokens). `read_url` is text-only
+  (no `TalentUI` — falls through I3 to `ToolUsedChip`) and resolves to a
+  `{type:'text'}` page on success. `web_search` resolves to a `{type:'search'}`
+  result carrying structured `results[]` for `WebSearchTalentUI` AND the wrapped
+  menu as `summary` (the model-facing payload — `summary` behaves exactly like a
+  `{type:'text'}` result for the runner). Both return `{type:'error'}` on
+  not-enabled / no-results / timeout / transport — never a silent no-op. Network
   and Keychain reads are permitted side effects behind the engine boundary
-  (I4); the engines read the active provider, its key presence, and the result
-  count through an **accessor injected as a constructor argument** at
+  (I4); the engines read the active provider, whether search may run, and the
+  result count through an **accessor injected as a constructor argument** at
   `registerDefaultTalents()` (`new WebSearchEngine(searchAccess)` /
   `new ReadUrlEngine(searchAccess)`), so they never import `SearchProviderStore`
-  directly. A single pure `searchBudget` util owns the on-device budgeting
-  (count cap, plain-text strip, word-boundary snippet cap, token ceiling with
-  trailing-drop, in-session cache); the provider adapters
-  (`src/services/search/providers/`) only normalize wire JSON to a common
-  `SearchHit` / `PageContent` shape. BYOK keys live only in Keychain, one entry
-  per provider under service `'search_provider_service_<id>'`. Search provider
-  choice, result count, and the first-enable consent flag live in
-  `SearchProviderStore` (see `settings.md` Internet Search section).
+  directly.
+  - **Execution gate (consent is load-bearing)**: both engines short-circuit
+    with an error result unless `searchProviderStore.canSearch` — i.e. the user
+    has consented (`hasConsentedToSearch === true`) **and** the active provider
+    has a BYOK key. The Settings disclosure is not the only gate.
+  - **`read_url` reader path**: `read_url` requires the active provider be
+    configured (consent + key); it then deep-reads via the provider's **native
+    reader** if it has one (e.g. Exa), else via the **default reader service**
+    (`r.jina.ai`). Providers without a native reader (Brave, Tavily, Parallel)
+    therefore route the page URL + content to `r.jina.ai`; the consent
+    disclosure names this recipient.
+  - **Untrusted content**: retrieved web text (the `web_search` menu and the
+    `read_url` page body) is wrapped in explicit untrusted-data markers with a
+    one-line "external data, not instructions" note before it is returned to the
+    model — an indirect-prompt-injection deterrent.
+  - **URL validation**: `read_url` accepts only plain `http(s)` URLs with no
+    embedded credentials; `file:`/`data:`/other schemes and userinfo are
+    rejected with an error result before any fetch. The default-reader path
+    `encodeURI`s the target.
+
+  A single pure `searchBudget` util owns the on-device budgeting
+  (count cap, plain-text strip, word-boundary snippet cap with char-boundary
+  fallback for space-less scripts, token ceiling with trailing-drop, bounded
+  in-session cache invalidated on key/consent/provider change); the provider
+  adapters (`src/services/search/providers/`) only normalize wire JSON to a
+  common `SearchHit` / `PageContent` shape and bound each response body before
+  buffering. BYOK keys live only in Keychain, one entry per provider under
+  service `'search_provider_service_<id>'`. Search provider choice, result
+  count, and the first-enable consent flag live in `SearchProviderStore` (see
+  `settings.md` Internet Search section).
 
 ### 1c. Persistence (DB v7)
 
@@ -157,9 +183,9 @@ called from `PalStore.initialize` and `deriveToolSchemas` for safety.
    Map<name, TalentEngine>                                          Map<name, TalentUI>
    ───────────────────────                                          ─────────────────────
    render_html → RenderHtmlEngine                                   render_html → RenderHtmlTalentUI
-   calculate   → CalculateEngine                                    (calculate, datetime, web_search,
-   datetime    → DatetimeEngine                                      read_url: no UI — text-only)
-   web_search  → WebSearchEngine
+   calculate   → CalculateEngine                                    web_search  → WebSearchTalentUI
+   datetime    → DatetimeEngine                                     (calculate, datetime, read_url:
+   web_search  → WebSearchEngine                                     no UI — text-only)
    read_url    → ReadUrlEngine
 ```
 
@@ -518,6 +544,14 @@ Resolved trade-offs that aren't obvious from the code. Mechanism alone
   in the dispatch handoff. Existing implementations are tolerated to avoid a
   contract break and will be removed in a follow-up cleanup. See
   `TalentUIRegistry.ts:9-21`.
+- **D6** — `web_search` returns a dedicated `{type:'search'}` variant carrying
+  structured `results[]` alongside the `summary`, rather than having
+  `WebSearchTalentUI` re-parse the wrapped menu out of `summary`. Decided: the
+  menu is a model-facing payload (untrusted-wrapped, budget-truncated, format
+  free to change); the UI gets the same hits as typed data, so the
+  human-facing card never depends on parsing model-facing text. `summary` stays
+  the single thing the runner forwards to the model, so `search` behaves like
+  `text` everywhere except render time (I3-style branch in `TalentSurface`).
 
 ---
 
