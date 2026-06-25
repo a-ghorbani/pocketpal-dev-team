@@ -693,7 +693,7 @@ low-prominence shapes are recognisable:
 | `[ToolErrorBlock]` | `src/components/ToolErrorBlock/` | Subtle inline error marker; rendered by TalentSurface for `result.type === 'error'` | I3, D2 |
 | `[ToolUsedChip]` | `src/components/ToolUsedChip/` | Subtle "used X" chip; TalentSurface fallback when no TalentUI is registered (carries inline metrics suffix) | I3, D8 |
 | `[ToolMetricsFooter]` | `src/components/ToolMetricsFooter/` | Sibling of talent UI: "N tokens · Ks" line for the per-call generation cost | §4a |
-| `[AssistantTurnFooter]` | `src/components/AssistantTurnFooter/AssistantTurnFooter.tsx` | Turn-level chrome: timings + copy (×1 per turn) | I1, D1, D7, D9 |
+| `[AssistantTurnFooter]` | `src/components/AssistantTurnFooter/AssistantTurnFooter.tsx` | Turn-level chrome: timings + copy + speculative draft acceptance (`message-draft-tokens`, only when `metadata.timings.draft_tokens > 0`) (×1 per turn) | I1, D1, D7, D9 |
 | `[PendingIndicator]` | `src/components/PendingIndicator/PendingIndicator.tsx` | Subtle dot-row + optional label / count / "Stopping…" — owned by ChatView | I4, D4 |
 
 Tests anchoring the layout: `Message.assistantTurn.test.tsx` (per-turn
