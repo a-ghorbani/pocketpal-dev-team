@@ -83,8 +83,12 @@ rendering it would be net-new behaviour plus a new persisted field. (D)
 - **I_S3 — testID + a11y-label freeze (inherits theming testID freeze).** Every
   existing settings testID survives the move, on the same control, with a stable
   accessibility label. New testIDs are additive at new leaves only.
-- **I_S4 — Single-writer preserved (§5).** No control gains a second writer; no
-  new store, no new persisted field.
+- **I_S4 — Single-writer preserved (§5).** No control gains a second writer; the
+  **reskin relocation slice** itself adds no store and no persisted field.
+  Net-new *feature* stores (e.g. `SearchProviderStore` for the Internet Search
+  section, §8) are permitted and follow the standard single-writer rule (§5);
+  the relocation slice still relocates existing controls verbatim without
+  introducing a store or field of its own.
 - **I_S5 — Tokens-only, mode-aware.** All colour/spacing/radius/type flow
   through `theme.*` tokens; no raw hex in screens or DS `styles.ts`.
 - **I_S6 — Auth deferred cleanly.** The launcher renders auth entry points
@@ -115,6 +119,10 @@ ctor default is unchanged. (C)
 | `iOSBackgroundDownloading` | `uiStore.setiOSBackgroundDownloading` (existing) |
 | `useHfToken` / token | `hfStore.setUseHfToken` / `HFTokenSheet` |
 | `userTTSOverride` | `ttsStore.setUserTTSOverride` |
+| search BYOK key per provider (Keychain) | `searchProviderStore.setKey/clearKey` |
+| `activeProviderId` | `searchProviderStore.setActiveProvider` |
+| search `resultCount` | `searchProviderStore.setResultCount` |
+| `hasConsentedToSearch` | `searchProviderStore.setConsent` |
 
 Cross-store reads: launcher and sub-screens read these fields as observers only;
 no new write coupling, no multi-writer.
@@ -166,3 +174,42 @@ directly are migrated in later slices.
 | D6 | New `settings.md` flow doc; app-shell stays nav-only | Settings is now a multi-screen flow |
 | D7 | Dissolve Advanced accordion into flat Preferences rows | Figma shows flat stacked containers |
 | D8 | Seed omitted | No store field/control exists; net-new behaviour + persistence |
+
+---
+
+## 9. Internet Search section
+
+A net-new feature surface (not part of the reskin relocation slice). On the
+current branch the launcher / sub-screen split does **not** exist — only the
+monolithic `src/screens/SettingsScreen/SettingsScreen.tsx`. The section is a new
+`Card` rendered **after** the App Settings card (`l10n.settings.appSettings`)
+and **before** the API Settings card (`l10n.settings.apiSettingsTitle`). It
+carries:
+
+- **Provider picker** — Tavily (default), Brave, Exa; Parallel is listed but
+  gated (not selectable as the active provider until its free-tier/PAYG terms
+  are confirmed). Active provider written by
+  `searchProviderStore.setActiveProvider`.
+- **Per-provider BYOK key entry** — `SearchProviderKeySheet` writes/clears the
+  active provider's key to Keychain via `searchProviderStore.setKey/clearKey`,
+  one entry per provider under service `'search_provider_service_<id>'`. Keys
+  never reach plain storage or the bundle.
+- **Result-count control** — slider (1–8, default 3) →
+  `searchProviderStore.setResultCount`; maps to the search budget `maxResults`.
+- **First-enable consent** — a disclosure that queries (and `read_url` targets)
+  leave the device to the chosen provider; gates key entry until accepted
+  (`searchProviderStore.setConsent` → `hasConsentedToSearch`).
+
+Non-secret prefs (`activeProviderId`, `resultCount`, `hasConsentedToSearch`)
+persist via `makePersistable`/AsyncStorage; BYOK keys persist only in Keychain.
+New testIDs are additive (`internet-search-card`, `internet-search-consent*`,
+`search-provider-selector-button`, `search-provider-option-*`,
+`search-provider-key-button`, `search-result-count-slider`,
+`search-provider-key-*`) — no frozen testID is touched (I_S3 intact). The talent
+side of this feature (the `web_search` / `read_url` engines, the provider
+adapters, and the `searchBudget` util) lives in `pals-and-talents.md`.
+
+**Relocation note**: when the reskin cutover lands (launcher +
+`AppSettingsScreen`), this section moves verbatim into the App Settings
+sub-screen as an app-level pref — same store, same writers, same testIDs, no
+behaviour change (I_S1).

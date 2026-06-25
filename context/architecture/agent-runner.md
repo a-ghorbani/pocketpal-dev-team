@@ -393,10 +393,22 @@ listener either way.
   per-call attribution, which would need the engine to demarcate calls in the
   stream — not feasible. Cost: rare overcount for multi-tool steps; documented.
 
-- **D3 (no mid-execution tool cancellation)**: abort honoured at turn
-  boundary, not inside `engine.execute`. Alternative was a cooperative
-  `AbortSignal` on `TalentEngine`. Decided: not worth per-talent plumbing
-  today; revisit when a long-running talent (web fetch) lands.
+- **D3 (timeout in talent, cancellation at turn boundary, errors are outcomes
+  not run failures)**: the network-bound `web_search` / `read_url` talents land
+  this previously-deferred decision.
+  - **Timeout** is owned by the **provider/talent**, not the runner: each
+    `search()` / `read()` enforces a per-call timeout (via `AbortController`)
+    and throws on expiry; `executeOne` wraps the throw into a `{type:'error'}`
+    outcome (`AgentRunner.ts` `executeOne` catch). No runner change.
+  - **Cancellation** stays at the turn boundary: a user abort during
+    `engine.execute` does **not** interrupt the in-flight fetch — the runner
+    awaits completion, emits `tool_call_finished`, then breaks (§6c).
+    Cooperative mid-fetch cancellation remains a deferred cleanup, not in this
+    story. The alternative (a cooperative `AbortSignal` on `TalentEngine`) is
+    still not worth the per-talent plumbing today.
+  - **Error semantics**: a thrown search error is a normal `{type:'error'}`
+    outcome — the loop continues to a follow-up turn (the model decides what to
+    do next); it does NOT become a `run_failed`.
 
 - **D4 (synthetic-then-reconciled tool-call ids)**: runner generates
   `call_<seed>_<idx>` ids in `normalizeToolCallIds` (`:105-117`) and attaches

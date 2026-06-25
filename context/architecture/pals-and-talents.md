@@ -76,6 +76,27 @@ Engines stay pure — they neither produce nor read metrics.
   sufficient on its own — engines that wrap untrusted input parsers MUST
   pick the locked-down configuration explicitly.
 
+- `WebSearchEngine` (`web_search`) and `ReadUrlEngine` (`read_url`) are the
+  internet-search talents (BYOK, provider-agnostic). Both are **text-only**
+  (no `TalentUI` — they fall through I3 to `ToolUsedChip`). The model writes
+  the query / URL; result count comes from settings (not a tool parameter, so
+  the model cannot inflate the injected tokens). Both resolve to a
+  `{type:'text'}` menu / page on success or `{type:'error'}` on
+  no-key / no-results / timeout / transport — never a silent no-op. Network
+  and Keychain reads are permitted side effects behind the engine boundary
+  (I4); the engines read the active provider, its key presence, and the result
+  count through an **accessor injected as a constructor argument** at
+  `registerDefaultTalents()` (`new WebSearchEngine(searchAccess)` /
+  `new ReadUrlEngine(searchAccess)`), so they never import `SearchProviderStore`
+  directly. A single pure `searchBudget` util owns the on-device budgeting
+  (count cap, plain-text strip, word-boundary snippet cap, token ceiling with
+  trailing-drop, in-session cache); the provider adapters
+  (`src/services/search/providers/`) only normalize wire JSON to a common
+  `SearchHit` / `PageContent` shape. BYOK keys live only in Keychain, one entry
+  per provider under service `'search_provider_service_<id>'`. Search provider
+  choice, result count, and the first-enable consent flag live in
+  `SearchProviderStore` (see `settings.md` Internet Search section).
+
 ### 1c. Persistence (DB v7)
 
 ```
@@ -136,8 +157,10 @@ called from `PalStore.initialize` and `deriveToolSchemas` for safety.
    Map<name, TalentEngine>                                          Map<name, TalentUI>
    ───────────────────────                                          ─────────────────────
    render_html → RenderHtmlEngine                                   render_html → RenderHtmlTalentUI
-   calculate   → CalculateEngine                                    (calculate, datetime: no UI — text-only)
-   datetime    → DatetimeEngine
+   calculate   → CalculateEngine                                    (calculate, datetime, web_search,
+   datetime    → DatetimeEngine                                      read_url: no UI — text-only)
+   web_search  → WebSearchEngine
+   read_url    → ReadUrlEngine
 ```
 
 **Why two registries.** A talent can have an engine without a UI (text-only
@@ -276,14 +299,20 @@ shutdown). Aborted runs therefore land in `done`, not a dedicated status.
   not shadow built-ins by accident. There is no diagnostic for collisions —
   treat unique names as an authoring contract.
 - **I8 (recommendedContextTokens is declarative)**: the optional
-  `TalentEngine.recommendedContextTokens` is read at exactly two sites —
-  the pal-load hint trigger (`usePalLoadHint`) and the heavy-talent
+  `TalentEngine.recommendedContextTokens` is read at exactly two **external**
+  sites — the pal-load hint trigger (`usePalLoadHint`) and the heavy-talent
   sub-copy lookup on the `context-full` banner
   (`BannerRow.deriveHeavyTalentName`, whose result is passed through the
   pure `resolveBannerVariant`). It never drives per-turn behaviour or the
   banner trigger threshold; engines without the field work unchanged.
-  `RenderHtmlEngine` declares `4096`; `CalculateEngine` and
-  `DatetimeEngine` omit. The pal-load hint predicate is focus-gated via
+  An engine reading its **own** declared `recommendedContextTokens` as an
+  internal budget ceiling inside `execute()` is a permitted **engine-internal**
+  read site and does not count against the "exactly two sites" rule (the
+  `web_search` / `read_url` engines do this via the shared `searchBudget` util);
+  the two external read sites stay unchanged.
+  `RenderHtmlEngine` declares `4096`; `WebSearchEngine` declares `1000` and
+  `ReadUrlEngine` `1200` (consumed internally as their result token ceiling);
+  `CalculateEngine` and `DatetimeEngine` omit. The pal-load hint predicate is focus-gated via
   `useIsFocused()` so it only evaluates while the chat surface is mounted
   and visible — the per-signature suppressor marker is set only after the
   predicate ran, so the hint can re-fire on the next focus event with the
@@ -368,11 +397,11 @@ Visible: ToolErrorBlock; model sees error summary as tool content next turn.
 ### C. Pal advertises a talent the registry doesn't know
 
 ```
-Pal.pact.talents = [{name: 'web_search', necessity: 'required'}]   ← engine unregistered
+Pal.pact.talents = [{name: 'future_talent', necessity: 'required'}]  ← engine unregistered
 
-deriveToolSchemas(['web_search'])  → []      ← filter drops unknowns
-resolvedSettings.tools             → undefined
-                                   → agent loop runs as plain chat
+deriveToolSchemas(['future_talent']) → []   ← filter drops unknowns
+resolvedSettings.tools               → undefined
+                                     → agent loop runs as plain chat
 ```
 
 Forward-compat: PACT can name talents not yet implemented in this build (e.g.,
