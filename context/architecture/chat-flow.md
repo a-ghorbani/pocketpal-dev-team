@@ -503,6 +503,12 @@ screens.
    play · copy · regenerate · more · two compact clock chips `🕐 <n> tok/s` ·
    `🕐 TTFT <n>ms` (each = `ClockIcon` + value, bullet-separated; `tok/s` is
    `predicted_per_second.toFixed(1)`, ms/token is dropped from this surface).
+   The `predicted_per_second` / `predicted_per_token_ms` pair is **native-first**:
+   llama.cpp's own rate when it counted ~all the generated tokens
+   (`predicted_n ≈ tokens_predicted`), else a wall-clock rate over the **last
+   agent step only** for MTP turns where the native counter mis-buckets verify
+   batches as prompt eval (see `model-loading.md` §MTP; last-step windowing also
+   fixes multi-step / tool-call under-reporting).
    The `footer-timing` row carries a single aggregated `accessibilityLabel`
    (`"<n> tok/s · TTFT <n>ms"`) so assistive tech and the E2E timing extraction
    read one combined label rather than per-chip nodes; the clock glyphs are
