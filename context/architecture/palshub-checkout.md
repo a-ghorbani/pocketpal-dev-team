@@ -7,8 +7,10 @@ The Pal *configuration* surface (PACT/talents/greeting) lives in
 `SyncService` / `PalStore`. This doc owns the **purchase** flow only.
 
 Status: **US iOS + US Android in-app checkout.** The authenticated in-app
-checkout runs on **both** platforms, region-gated on `palStore.isUSRegion` (no
-platform check). There is no `Linking.openURL` web buy path on either platform.
+checkout runs on **both** platforms, gated on `palStore.isCheckoutEligible` —
+real purchase eligibility derived per platform (iOS: StoreKit US storefront;
+Android: Play `EXTERNAL_CONTENT_LINK` program availability), **not** device
+locale. There is no `Linking.openURL` web buy path on either platform.
 The two platforms differ only in the in-app browser primitive and an Android-only
 native link-out prep: on Android the store calls Google Play **External Content
 Links** (`launchExternalLink`) before opening the Custom Tab, and **Google Play
@@ -49,7 +51,7 @@ registered, C `Info.plist:38-41`).
 
 ```
 PalDetailSheet "Buy" (US, premium, !owned)
-   │  (C gate: palStore.isUSRegion only — no platform check; PalDetailSheet.tsx:405-408)
+   │  (C gate: palStore.isCheckoutEligible — per-platform eligibility, not locale; PalDetailSheet.tsx:404-406)
    ▼
 auth guard (both platforms): !isAuthenticated → onSignInPress                  (C)
    ▼
@@ -235,8 +237,12 @@ slice reconciles via `checkPalOwnership` only (D9); a dedicated
 
 Buy-press rules (order matters):
 
-1. Buy button visibility unchanged: `palStore.isUSRegion && premium && !is_owned`
-   (C, `PalDetailSheet.tsx:405-408`). `handleBuyPress` is at
+1. Buy button renders iff `palStore.isCheckoutEligible && premium && !is_owned`
+   (`PalDetailSheet.tsx:404-406`); when premium + unowned but **not** eligible the
+   existing `getPremiumInfoText()` info text shows instead (no dead button).
+   `isCheckoutEligible` is platform-derived (iOS StoreKit storefront; Android Play
+   `EXTERNAL_CONTENT_LINK` availability) — the Android `Locale` path is **no
+   longer** consulted for the gate. `handleBuyPress` is at
    `PalDetailSheet.tsx:135-146`.
 2. On press, the auth guard runs first on **both** platforms
    (`authService.isAuthenticated` → `onSignInPress`). Then **both** platforms
@@ -262,10 +268,19 @@ Buy-press rules (order matters):
 
 ### 5a. Hard invariants
 
-- **I1′ (region-gated, both platforms in-app)**: the authenticated checkout flow
-  is entered on `palStore.isUSRegion` for **both** iOS and US Android. No
-  `Linking.openURL` checkout path remains on either platform. (Was I1: iOS-only
-  via `Platform.OS`.)
+- **I1″ (eligibility-gated buy button, per platform)**: the buy button is gated
+  on **real purchase eligibility**, not device locale — iOS on the StoreKit US
+  storefront (unchanged signal), Android on Play `EXTERNAL_CONTENT_LINK` program
+  availability. No `Locale`-based gate. The authenticated checkout flow is entered
+  on `palStore.isCheckoutEligible` for **both** iOS and Android, and no
+  `Linking.openURL` checkout path remains on either platform. (Was I1′: a single
+  locale-keyed flag, keyed off device `Locale` on Android; I1: iOS-only via
+  `Platform.OS`.)
+- **I-E1 (availability query is side-effect-free)**: the render-time eligibility
+  probe (`isExternalContentLinkAvailable`) never mints an external-transaction
+  token, never calls `launchExternalLink`, and never renders a Play disclosure —
+  it is read-only availability. Token mint + launch + disclosure stay exclusively
+  in `prepareExternalLink` (I-A3′).
 - **I-A1 (no parallel store)**: Android reuses `CheckoutFlowStore` (sole
   epoch-pinned writer) and `start()`/`reconcile()`/`reset()` as-is. No Android
   checkout store, no duplicate state. The new `linking` status and the prep call
@@ -318,11 +333,12 @@ Buy-press rules (order matters):
 
 | Component | Owns | Does NOT |
 | --- | --- | --- |
-| `PalDetailSheet` buy button | un-branched press: auth guard → `start` on both platforms; show creating/finalizing/result | render any disclosure sheet; open an anonymous browser; write ownership; keep the Android web path |
+| `PalDetailSheet` buy button | read `palStore.isCheckoutEligible` for visibility (Buy when eligible+premium+!owned, else `getPremiumInfoText()`); un-branched press: auth guard → `start` on both platforms; show creating/finalizing/result | render any disclosure sheet; open an anonymous browser; write ownership; keep the Android web path; read device locale or probe Play itself |
+| `PalStore` eligibility writer (`checkCheckoutEligibility`, init) | sole writer of `palStore.isCheckoutEligible`; branch iOS `isUSStorefront()` / Android `isExternalContentLinkAvailable()`; `__E2E__`→true; null Android module / thrown probe → false (fail-closed) | re-probe per render; write ownership; call `prepareExternalLink`; consult device locale on Android |
 | `CheckoutFlowStore` (C) | call createCheckoutSession; on Android call `prepareExternalLink` before the tab; call `openAuth`; parse path + purchase_id from the resolved callback; run reconcile; on `owned` (Android) fire best-effort report with the prep token | fork per platform; route via DeepLinkService; use a Universal Link; persist ownership; render a disclosure; let prep/report gate the outcome beyond the `'launched'` gate |
 | `PalsHubApiService.createCheckoutSession` (C) | POST /api/mobile/purchases with Bearer; map statuses | render; hold flow state |
 | `AuthSessionModule` (iOS Swift / Android Kotlin) | present `checkout_url`, capture the `pocketpal` callback, resolve/reject a promise | run eligibility/token/launch; parse purchase semantics; touch reconcile state; report to Play |
-| External Content Links module (Android, Kotlin) | `prepareExternalLink`: eligibility gate → mint fresh token → `launchExternalLink(LINK_TO_DIGITAL_CONTENT_OFFER, CALLER_WILL_LAUNCH_LINK)` (Play renders its disclosure); return verdict+token. `reportExternalContentLink(purchaseId, token)`: best-effort no-op-with-log today | open the Custom Tab; block/fail checkout; render a disclosure; exist on iOS |
+| External Content Links module (Android, Kotlin) | `prepareExternalLink`: eligibility gate → mint fresh token → `launchExternalLink(LINK_TO_DIGITAL_CONTENT_OFFER, CALLER_WILL_LAUNCH_LINK)` (Play renders its disclosure); return verdict+token. `reportExternalContentLink(purchaseId, token)`: best-effort no-op-with-log today. `isExternalContentLinkAvailable`: side-effect-free render-time probe — shared connect + `isBillingProgramAvailableAsync` → boolean → disconnect | open the Custom Tab; block/fail checkout; render a disclosure; exist on iOS; mint/launch/disclose or take `currentActivity` in the availability probe (I-E1) |
 | `SyncService.syncUserLibrary` | (C) library cache backstop for deferred ownership / app-kill recovery | drive checkout |
 
 The OS deep-link path (`useDeepLinking` / `DeepLinkService`) is **not** part of
@@ -369,7 +385,7 @@ a silent cancel (I5). No Expo tree; `expo-web-browser` was rejected (pulls
 | ownership (`is_owned`) | **server** — read via `getPal()`; never written client-side (I8) |
 | external-transaction token | native module (minted per link-out); held transiently by the store for the report only; never persisted |
 | library cache rows | (C) `SyncService.syncUserLibrary` (`SyncService.ts:102`) |
-| `palStore.isUSRegion` | (C) `PalStore.checkRegion` (`PalStore.ts:112-121`) |
+| `palStore.isCheckoutEligible` | `PalStore.checkCheckoutEligibility` (init; iOS `isUSStorefront()` / Android `isExternalContentLinkAvailable()`; `__E2E__`→true) |
 
 The only relevant race is webhook latency, handled by §4 reconcile — not a
 multi-writer race. No local ownership write exists, so none can drift. The
@@ -469,10 +485,11 @@ Buy → start → 200 → linking → isBillingProgramAvailableAsync != OK (or B
 launchExternalLink ERROR / transient → 'error' → error('network')
 ```
 
-### L. Non-US (either platform) — unchanged
+### L. Ineligible (either platform) — info text, no Buy button
 
 ```
-premium !owned, !isUSRegion → info text, no Buy button (region gate unchanged)
+premium !owned, !isCheckoutEligible → info text, no Buy button
+(iOS: non-US StoreKit storefront; Android: EXTERNAL_CONTENT_LINK unavailable — not locale)
 ```
 
 ---
@@ -562,7 +579,7 @@ premium !owned, !isUSRegion → info text, no Buy button (region gate unchanged)
 | 9g-A | Report throws / token absent | swallowed; never re-reported, never error UI, state stays `owned` (I-A3′) |
 | 9h-A | Reporting program inactive (today) | logged no-op; state stays `owned` (I-A3′, D-A8′, scenario K) |
 | 9i-A | 401/404/500 on create (Android) | same as iOS (9a/9b/9d); no prep, no browser, no report |
-| 9j-A | Non-US Android | info text only; region gate unchanged (I1′, scenario L) |
+| 9j-A | Android `EXTERNAL_CONTENT_LINK` unavailable / null module (any locale) | info text only; eligibility gate, not locale; fail-closed (I1″, I-E1, scenario L) |
 | 9k-A | `host=checkout` collides with `host=hub` HF deep link | distinct hosts; checkout return routes only to the auth module, not `DeepLinkService` |
 | 9l-A | External Content Links module unregistered (`TurboModuleRegistry.get` → null) | **build/registration DEFECT**: on US Android `prepareExternalLink` is unavailable; the store must not silently open the tab without prep. Caught by native-build wiring (`MainApplication.getPackages()`) + E2E Buy-press reaching the Play disclosure / Custom Tab — never a silent Buy dead-end |
 
@@ -591,8 +608,12 @@ premium !owned, !isUSRegion → info text, no Buy button (region gate unchanged)
   `createBillingProgramReportingDetailsAsync` (fresh token) →
   `launchExternalLink(LINK_TO_DIGITAL_CONTENT_OFFER, CALLER_WILL_LAUNCH_LINK)`
   (Play renders its disclosure) and returns a verdict+token;
-  `reportExternalContentLink` is best-effort, no-op-with-log today. Exposed as the
-  optional `NativeExternalContentLink` spec (null on iOS).
+  `reportExternalContentLink` is best-effort, no-op-with-log today.
+  `isExternalContentLinkAvailable` is a side-effect-free render-time eligibility
+  probe sharing the same connect + `isBillingProgramAvailableAsync` path but
+  resolving a boolean and disconnecting — no token, no `launchExternalLink`, no
+  disclosure, no `currentActivity` (I-E1); it drives the buy-button eligibility
+  gate. Exposed as the optional `NativeExternalContentLink` spec (null on iOS).
 - No new URL scheme: `pocketpal` is already a registered host-scoped deep link.
 
 **Removed by this revision (previously landed for the Universal-Link approach):**
