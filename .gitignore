@@ -8,6 +8,10 @@ workflows/reviews/*
 workflows/stories/*
 !workflows/stories/.gitkeep
 
+# Ad-hoc review/redesign working artifacts (montages, captures, briefs) — local only
+workflows/parity-pass/
+workflows/reconcile/
+
 # Environment and local settings
 .env
 .claude/settings.local.json
