@@ -44,7 +44,7 @@ Read: ${HOW}                   # if present
 For non-trivial tasks tests must cover the testable contract — find it in this order:
 
 1. **Canonical scenarios** in WHAT §6 (standard/complex) — at least one test or manual scenario per scenario.
-2. **Invariants** in WHAT §4c (standard/complex) — a regression test that would fail if the invariant were violated.
+2. **Invariants** in WHAT §4b (standard/complex) — a regression test that would fail if the invariant were violated.
 3. **Single-writer rules** in WHAT §5 (standard/complex) — a test that asserts only the canonical writer mutates the field (when feasible).
 4. **For quick tasks** (no WHAT) — the user-visible outcomes implied by the request in `intent-brief.md`, with HOW's mapping as the primary guide.
 
@@ -316,6 +316,7 @@ Use pocketpal-pipeline-reviewer to review TASK-{id}
 WORKTREE: ./worktrees/TASK-{id}
 BRANCH: feature/TASK-{id}
 TASK_ID: TASK-{id}
+NATIVE_CHANGES: YES | NO
 INTENT_BRIEF: ./workflows/stories/TASK-{id}/intent-brief.md
 WHAT: ./workflows/stories/TASK-{id}/what.md             # OMIT for quick / trivial
 HOW: ./workflows/stories/TASK-{id}/how.md               # OMIT for trivial

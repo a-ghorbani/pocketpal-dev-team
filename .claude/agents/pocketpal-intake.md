@@ -268,7 +268,7 @@ Use pocketpal-implementer to implement trivial change ${TASK_ID}
 WORKTREE: ./worktrees/${TASK_ID}
 BRANCH: feature/${TASK_ID}
 TASK_ID: ${TASK_ID}
-NATIVE_CHANGES: NO
+NATIVE_CHANGES: ${NATIVE_CHANGES}
 DESIGN_EXPLORATION: NO
 PLAN_EXPLORATION: NO
 INTENT_BRIEF: ./workflows/stories/${TASK_ID}/intent-brief.md

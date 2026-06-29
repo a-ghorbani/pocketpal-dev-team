@@ -134,7 +134,7 @@ LGTM | HAS_CONCERNS | HAS_BLOCKERS
 #### [BLOCKER|CONCERN|SUGGESTION] 1: [Title]
 
 - **What**: [issue]
-- **Where**: [WHAT section, e.g. §4c I3]
+- **Where**: [WHAT section, e.g. §4b I3]
 - **Why it matters**: [impact]
 - **Suggestion**: [how to fix; "consider alternative X" is a valid suggestion]
 

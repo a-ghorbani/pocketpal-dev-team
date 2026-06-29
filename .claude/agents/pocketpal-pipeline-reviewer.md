@@ -46,7 +46,7 @@ Beyond the standard lens review, you also:
 - verify none of the required story artifacts are still marked `needs-input`
 - verify pre-flight passed
 - verify implementation delivers the testable contract — canonical scenarios in WHAT §6 (standard/complex) or the user-visible outcomes implied by the request (quick/trivial)
-- verify implementation respects every invariant in WHAT §4c (no exceptions, standard/complex)
+- verify implementation respects every invariant in WHAT §4b (no exceptions, standard/complex)
 - verify the architecture-doc update step landed in this PR (drift prevention, standard/complex)
 - verify deferred items in WHAT did NOT silently land
 - run lint, typecheck, tests, and report results
@@ -66,6 +66,8 @@ yarn lint
 yarn typecheck
 yarn test --coverage
 ```
+
+**Re-derive `NATIVE_CHANGES` from the diff — do not trust the inbound flag** (it is not forwarded through every handoff). If `git diff --name-only main...HEAD` touches `package.json`, `ios/`, `android/`, any `Podfile`/`*.podspec`, or `build.gradle`, treat it as `NATIVE_CHANGES=YES` and run the native builds below even if the story says `NO`.
 
 For `NATIVE_CHANGES=YES`:
 

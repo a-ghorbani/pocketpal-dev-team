@@ -193,7 +193,6 @@ See [`AGENTS.md`](./AGENTS.md) for the full pipeline contract, critic-loop seman
 | --- | --- |
 | `pocketpal-code-reviewer` | Independent review of a branch or PR (`/review-pr`), separate from the pipeline |
 | Role reviewers | `architect-reviewer`, `qa-reviewer`, `security-reviewer`, `performance-reviewer`, `mobile-reviewer`, `data-reviewer`, `ux-reviewer`, `local-invariants-reviewer`, `design-parity-reviewer` — dimension-specific review lenses |
-| `pocketpal-proposer` / `pocketpal-challenger` | Propose / challenge technical solutions (used in `/deliberate`) |
 
 ## Native Changes
 

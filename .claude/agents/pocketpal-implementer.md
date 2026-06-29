@@ -74,7 +74,7 @@ For trivial tasks (no WHAT/HOW), work directly from `intent-brief.md` — the ch
 
 ### Invariant Stop Rule (CRITICAL)
 
-If at any point a step in HOW would violate an invariant in WHAT §4c (e.g. "exactly one footer per turn", "single writer for X"):
+If at any point a step in HOW would violate an invariant in WHAT §4b (e.g. "exactly one footer per turn", "single writer for X"):
 
 1. STOP. Do NOT write the code that would violate the invariant.
 2. Surface the conflict back to the planner (or the architect if the conflict is fundamental to WHAT itself).
@@ -132,7 +132,7 @@ Conventional commits enforced by commitlint. Format: `type(scope): subject` (max
 
 **Allowed types**: `feat`, `fix`, `docs`, `chore` — no others.
 
-See CLAUDE.md for GitHub conventions (no Co-Authored-By, etc.).
+See AGENTS.md for GitHub conventions (no Co-Authored-By, etc.).
 
 ## Output Format
 
@@ -214,38 +214,19 @@ complete | partial | blocked
 
 ## Progress Updates (CRITICAL)
 
-**After completing each step**, update the story file:
+**After completing each step**, update the HOW `## Progress` table (columns `Step | Status | Commit | Notes`):
 
-1. Mark the step's Status as `DONE`
-2. Add the commit hash
-3. Update the Checkpoints table
-4. Update the "Last Agent Handoff" section
+1. Set the step's Status to `DONE`
+2. Record the commit hash
+3. Note any deviation in Notes
 
-Example handoff update:
-
-```yaml
-from_agent: implementer
-to_agent: tester
-timestamp: 2025-01-15T14:30:00Z
-status: "Implementation complete, ready for tests"
-completed:
-  - Step 1: Updated package.json (commit abc123)
-  - Step 2: Ran pod install (commit def456)
-  - Step 3: Verified iOS build succeeds
-next_steps:
-  - Write unit tests for new functionality
-  - Run full test suite
-blockers: []
-context_for_next_agent: |
-  Native changes were made. Builds verified.
-  See Implementation Report section for details.
-```
+Keep the table current as you go — it is the durable record the tester and reviewer read.
 
 ## Routing to Tester
 
 When implementation complete:
 
-1. **Update HOW** Progress Tracking table (mark each step DONE with commit hash)
+1. **Update HOW** `## Progress` table (mark each step DONE with commit hash)
 2. **Verify the architecture-doc update step has been applied** — every doc in `${ARCHITECTURE_DOCS}` should now reflect the WHAT delta. If not, do this BEFORE routing to tester.
 3. **Commit** the HOW update + the architecture-doc update
 4. Route with:
@@ -255,6 +236,7 @@ Use pocketpal-tester to write tests for TASK-{id}
 WORKTREE: ./worktrees/TASK-{id}
 BRANCH: feature/TASK-{id}
 TASK_ID: TASK-{id}
+NATIVE_CHANGES: YES | NO
 INTENT_BRIEF: ./workflows/stories/TASK-{id}/intent-brief.md
 WHAT: ./workflows/stories/TASK-{id}/what.md             # OMIT for quick / trivial
 HOW: ./workflows/stories/TASK-{id}/how.md               # OMIT for trivial
