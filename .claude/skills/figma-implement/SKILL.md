@@ -31,6 +31,12 @@ The intent brief must contain:
 
 If any are missing, emit `NEEDS_INPUT:` with the exact unanswered questions and stop. Do not guess node IDs from the URL alone.
 
+## Step 0 — Load the Figma MCP tools
+
+The Figma MCP tools are **deferred** — they aren't in your tool list until you load their schemas, and a bare call fails with "tool not found." Load them first: run `ToolSearch` with the query `figma` to discover and load the Figma tools (you need *get-metadata*, *get-design-context*, *get-screenshot*, and *whoami*; read the exact names from the search result).
+
+Call the Figma `whoami` tool once to confirm you're authenticated, then work directly against the canonical file — pull metadata, design context, and screenshots yourself. If `whoami` genuinely errors (auth/transport), stop and report it as a real outage; do not improvise layout from a screenshot alone.
+
 ## Step 1 — Metadata first, then design context
 
 Order matters. For each in-scope node:

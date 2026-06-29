@@ -18,6 +18,14 @@ cd "${WORKTREE_PATH}"
 
 Stop and report if either check fails.
 
+## Load the Figma MCP tools (MUST DO BEFORE ANY FIGMA CALL)
+
+The Figma MCP tools are **deferred**: in a subagent they are not in your tool list until you load their schemas. Calling one cold fails with "tool not found" — that, not a real outage, is what historically read as "can't reach the Figma MCP server."
+
+So load them first: run `ToolSearch` with the query `figma` to discover and load the Figma tools (you need *get-metadata*, *get-design-context*, *get-screenshot*, and *whoami*; read the exact tool names out of the search result). Then call the Figma `whoami` tool once to confirm reachability.
+
+If `whoami` succeeds, use the live Figma file for node-for-node coverage and screenshot checks. If it errors (auth/transport), do NOT abort the review — fall back to the committed `visual-diff/*-figma.png` captures and tag your report `FIGMA_LIVE_UNAVAILABLE` so the gap is visible. Never report "can't reach Figma" without having run that ToolSearch first.
+
 ## Context
 
 Required from the caller:
