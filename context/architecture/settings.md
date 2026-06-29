@@ -196,13 +196,21 @@ carries:
   never reach plain storage or the bundle.
 - **Result-count control** — slider (1–8, default 3) →
   `searchProviderStore.setResultCount`; maps to the search budget `maxResults`.
-- **First-enable consent** — a disclosure that queries (and `read_url` targets)
-  leave the device to the chosen provider; gates key entry until accepted
-  (`searchProviderStore.setConsent` → `hasConsentedToSearch`).
+- **First-enable consent** — a disclosure that the query leaves the device to
+  the chosen provider, and that a `read_url` page read may instead be sent to a
+  default reader service (`r.jina.ai`) when the selected provider has no native
+  reader. Gates key entry until accepted (`searchProviderStore.setConsent` →
+  `hasConsentedToSearch`). Consent is **reversible**: once given, the card shows
+  a consent-given row with a **Revoke** affordance (`setConsent(false)`), which
+  re-shows the disclosure on next enable.
+- **Consent is load-bearing at execution** — the engines short-circuit with an
+  error result unless `hasConsentedToSearch === true` AND the active provider has
+  a key (`searchProviderStore.canSearch`), not just in the Settings UI.
 
 Non-secret prefs (`activeProviderId`, `resultCount`, `hasConsentedToSearch`)
 persist via `makePersistable`/AsyncStorage; BYOK keys persist only in Keychain.
 New testIDs are additive (`internet-search-card`, `internet-search-consent*`,
+`internet-search-consent-given`, `internet-search-consent-revoke`,
 `search-provider-selector-button`, `search-provider-option-*`,
 `search-provider-key-button`, `search-result-count-slider`,
 `search-provider-key-*`) — no frozen testID is touched (I_S3 intact). The talent
