@@ -86,12 +86,12 @@ The `local-invariants` role reviews changed lines for small contract breaks defi
 
 ## Required Lenses
 
-- **Correctness** _(Domain, QA)_: broken behavior, bad assumptions, null handling, state mistakes, async races, retries, cancellation, stale state, error paths.
+- **Correctness** _(QA)_: broken behavior, bad assumptions, null handling, state mistakes, async races, retries, cancellation, stale state, error paths.
 - **Architecture and boundaries** _(Architect)_: coupling, layering, public contracts, hidden dependencies, over-engineering.
-- **Maintainability and readability** _(Domain)_: duplication, naming, fragile logic, magic constants, hard-to-test design.
-- **Tests and verification** _(QA)_: missing coverage, weak assertions, mocks that hide contracts, skipped tests, manual validation gaps.
-- **Security and privacy** _(Security)_: secrets, unsafe logging, trust boundaries, input validation, injection, path risks, risky dependencies.
-- **Data and migration safety** _(Domain, Security)_: schema changes, persisted state, cache invalidation, backward compatibility, rollback.
+- **Maintainability and readability** _(Architect)_: duplication, naming, fragile logic, magic constants, hard-to-test design. (Owned by the architect role in high-risk reviews; the lead applies it against the diff directly when no architect subreview ran.)
+- **Tests and verification** _(QA)_: missing coverage, weak assertions, mocks that hide contracts, skipped tests, manual validation gaps. **Coverage floor: 60%** (statements, branches, functions, lines) for the changed surface; below it is a `BLOCKER` unless explicitly waived.
+- **Security and privacy** _(Security)_: PocketPal is an **on-device app, not a server** — review against the mobile threat model, not a server perimeter. The real trust boundaries are: (a) model-generated content reaching render/execution surfaces (markdown/HTML/WebView/JS, tool-call/JSON parsing); (b) external content entering the app (downloaded GGUF models, web-search/internet results, deep links / App Intents / Shortcuts params, PalsHub rows); (c) on-device data at rest and in logs (chat history, API keys, server/auth tokens, crash reports); (d) the native bridge and capability allowlist (Pals-as-apps WebView bridge); (e) debug/E2E hooks reachable in production builds. A security finding on a trust-boundary diff must name an untrusted **source** and the **sink** it reaches unsanitized.
+- **Data and migration safety** _(Data, Security)_: schema changes, persisted state, cache invalidation, backward compatibility, rollback.
 - **Performance and resources** _(Perf, Mobile Platform)_: hot paths, unbounded work, repeated I/O, memory, storage, startup time, battery. PocketPal runs LLMs on phones; any change that could plausibly increase RAM/heap, model load time, bundle size, startup, or battery use must be flagged at `CONCERN` minimum.
 - **UX and accessibility** _(UX/A11y)_: user-visible flows, honest states, error messages, accessibility, copy consistency, lost affordances.
 - **Platform and native verification** _(Mobile Platform)_: `NATIVE_CHANGES=YES` requires `pod install`, an iOS build, and an Android build before approval. Also consider cross-OS/chip compatibility — iOS version floor, Android API min, arm64 vs simulator, llama.rn backend variants, on-device vs emulator.
@@ -112,6 +112,27 @@ The `local-invariants` role reviews changed lines for small contract breaks defi
 
 `NOTHING_FOUND` is a valid outcome. Do not invent issues.
 
+## Confidence
+
+Every finding carries a `confidence` separate from its severity:
+
+- `high` — proven by code, contract, or repro you cite.
+- `med` — strong inference, not fully proven.
+- `low` — plausible but speculative.
+
+Severity is impact-if-real; confidence is likelihood-it's-real. Never collapse the two — a `low`-confidence `BLOCKER` is exactly the finding the refutation step exists to test.
+
+## Adversarial verification
+
+Before any `BLOCKER` or `CONCERN` is accepted into the final review, attempt to **refute** it: argue from the code and contracts why it might NOT be a real defect — wrong, already handled elsewhere, unreachable, or masked by an invariant. The refutation must be performed by someone other than the role reviewer that produced the finding (the lead synthesizer, or a dedicated skeptic subreview for the highest-stakes findings).
+
+Record the outcome on the finding:
+
+- `refutation: stands` — survived the attempt; it ships.
+- `refutation: withdrawn — <reason>` — drop or downgrade it, with the reason.
+
+A finding that cannot survive a genuine refutation attempt must not ship as a `BLOCKER`/`CONCERN`. This is false-positive suppression with an audit trail, not silent dropping.
+
 ## Evidence Rules
 
 1. Cite real file paths and line numbers; read the file before citing it.
@@ -124,6 +145,8 @@ The `local-invariants` role reviews changed lines for small contract breaks defi
 - `APPROVE` — no unresolved blockers or concerns, verification complete or N/A, residual risk acceptable.
 - `REQUEST_CHANGES` — any blocker, serious unresolved concern, missing mandatory verification, or unproven acceptance criteria.
 - `ESCALATE` — needs human product/architecture judgment, or the diff is too ambiguous to review safely.
+
+**Verification gate (mechanical).** `APPROVE` is invalid if any required verification entry is `NOT_RUN` — downgrade to `REQUEST_CHANGES` or `ESCALATE`. `review_complete: yes` requires lint, typecheck, and tests at `PASS`/`N/A`, plus the native builds at `PASS` when `NATIVE_CHANGES=YES`. Never claim a complete approval over unrun checks.
 
 ## Human-Facing Output
 
@@ -149,7 +172,7 @@ Then include a per-lens summary table:
 | Platform / Native     | PASS / ISSUES / N/A | n      |
 ```
 
-Then: findings ordered by severity, open questions, verification status, residual risks, decision summary.
+Then: findings ordered by severity (each stating its `confidence` and `refutation` outcome), open questions, verification status, residual risks, decision summary.
 
 If nothing was found, say so explicitly and call out remaining verification gaps.
 
@@ -177,7 +200,7 @@ counts: { blocker: 0, concern: 0, suggestion: 0 }
 
 findings:
 
-- id: R1 severity: BLOCKER|CONCERN|SUGGESTION lens: correctness|architecture|...|platform_native title: short title path: relative/path.ts line: 123 impact: one sentence evidence: short quoted code fix: one sentence
+- id: R1 severity: BLOCKER|CONCERN|SUGGESTION confidence: high|med|low refutation: stands|withdrawn lens: correctness|architecture|...|platform_native title: short title path: relative/path.ts line: 123 impact: one sentence evidence: short quoted code fix: one sentence
 
 manual_checks: [step, ...] # or [] residual_risks: [item, ...] # or []
 ```

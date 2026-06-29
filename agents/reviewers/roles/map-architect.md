@@ -4,7 +4,7 @@ Read `docs/standards/code-review.md` first.
 
 ## Context To Read
 
-- `context/architecture.md`
+- `docs/standards/architecture.md`
 - `context/patterns.md`
 - `context/pocketpal-overview.md`
 - Story, PR body, issue, and acceptance criteria when available

@@ -4,7 +4,7 @@ Read `docs/standards/code-review.md` first. Apply the shared severity, evidence,
 
 ## Context To Read
 
-- `context/architecture.md`
+- `docs/standards/architecture.md`
 - `context/patterns.md`
 - `context/pocketpal-overview.md`
 - `review-map.md`
@@ -23,6 +23,7 @@ Review as a mobile/RN software architect. Focus on contracts, ownership boundari
 - Registry, dispatch, plugin, and extension points
 - Whether abstractions remove real complexity or add avoidable indirection
 - Divergence from `context/patterns.md`
+- **Maintainability and readability** (you own this lens): duplication, naming, fragile logic, magic constants, hard-to-test design
 
 ## Common PocketPal Risks
 

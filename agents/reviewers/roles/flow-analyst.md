@@ -5,7 +5,7 @@ Read `docs/standards/code-review.md` first.
 ## Context To Read
 
 - `review-map.md` if it already exists
-- `context/architecture.md`
+- `docs/standards/architecture.md`
 - `context/pocketpal-overview.md`
 - `context/patterns.md` when tracing changed stores, repositories, model adapters, runtime flows, or native boundaries
 

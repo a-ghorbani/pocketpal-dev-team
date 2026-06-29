@@ -24,6 +24,8 @@ Review as a test engineer focused on behavior under normal, edge, async, interru
 - Test assertions, mocks, naming, and whether tests prove the contract
 - E2E coverage for user-visible multi-step workflows
 
+**Test-strength (mutation-style) check.** Coverage percentage is a weak proxy. For each critical test, state what regression it would actually catch: if the production line under test were broken or deleted, would this test fail? A test that passes against a mutated/broken implementation is theater — flag it, don't count it. Prefer this reasoning over citing the coverage number.
+
 ## Common PocketPal Risks
 
 - Empty assistant messages, streaming partials, or interrupted completions

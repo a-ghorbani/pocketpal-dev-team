@@ -32,10 +32,12 @@ For high-risk reviews, never claim a complete final review unless all required r
 2. Confirm each finding has a real file:line reference.
 3. Confirm impact, evidence, and fix are concrete.
 4. Merge duplicate findings.
-5. Drop or downgrade speculative findings.
-6. Normalize severity against the standard.
-7. Ensure every `ISSUES` lens row has at least one finding.
-8. Write `final.md` using the standard output contract.
+5. **Refute each BLOCKER/CONCERN** (standard's Adversarial verification): as a reviewer independent of the one that raised it, argue why it might not be real. Record `refutation: stands`, or drop/downgrade with `refutation: withdrawn — <reason>`. Do not silently delete.
+6. Assign each surviving finding a `confidence` (high/med/low).
+7. Normalize severity against the standard.
+8. Apply the mechanical verification gate — no `APPROVE`/`review_complete: yes` over `NOT_RUN` checks.
+9. Ensure every `ISSUES` lens row has at least one finding.
+10. Write `final.md` using the standard output contract.
 
 Include short synthesis notes in `final.md` only when they matter, such as unavailable reviewers, merged duplicates, dropped speculative findings, missing role artifacts, or verification gaps.
 

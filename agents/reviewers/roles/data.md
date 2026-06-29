@@ -5,7 +5,7 @@ Read `docs/standards/code-review.md` first. Apply the shared severity, evidence,
 ## Context To Read
 
 - `review-map.md`
-- `context/architecture.md`
+- `docs/standards/architecture.md`
 - `context/patterns.md`
 
 Use context to understand repository boundaries, model adapters, and existing persistence conventions before evaluating schema or stored-data changes.

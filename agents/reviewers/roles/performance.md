@@ -5,7 +5,7 @@ Read `docs/standards/code-review.md` first. Apply the shared severity, evidence,
 ## Context To Read
 
 - `review-map.md`
-- `context/architecture.md`
+- `docs/standards/architecture.md`
 - `context/pocketpal-overview.md`
 - `context/patterns.md`
 

@@ -80,6 +80,8 @@ Write durable artifacts in the following folder:
 workflows/reviews/<TARGET_ID>/round-<N>/
 ```
 
+Determine `N` as `(highest existing round-<k> dir for this TARGET_ID) + 1`, unless explicitly continuing an in-progress round. The max-2-rounds cap and escalation are owned by the caller (the `/start-task` delivery loop). A standalone `/review-pr` run performs a single round, states its round number, and does not enforce the cap itself.
+
 For a complete high-risk review, these files are required:
 
 - `review-map.md`
@@ -189,7 +191,7 @@ status: FINDINGS | NOTHING_FOUND
 
 ### <ID>: <Title>
 
-severity: BLOCKER | CONCERN | SUGGESTION lens: Correctness | Architecture | Maintainability | Tests | Security | Data / Migration | Performance/Resources | UX / Accessibility | Platform / Native path: relative/path.ts line: 123 impact: One sentence. evidence: Short quote or concrete code reference. fix: One sentence.
+severity: BLOCKER | CONCERN | SUGGESTION confidence: high | med | low lens: Correctness | Architecture | Maintainability | Tests | Security | Data / Migration | Performance/Resources | UX / Accessibility | Platform / Native path: relative/path.ts line: 123 impact: One sentence. evidence: Short quote or concrete code reference. fix: One sentence.
 ```
 
 ## Verification
@@ -221,6 +223,8 @@ Before final output:
 
 - Confirm every required role artifact exists, or mark the review incomplete.
 - Merge duplicate findings.
+- Refute each BLOCKER/CONCERN (standard's Adversarial verification) as a reviewer independent of the one that raised it; record `refutation: stands` or drop/downgrade with `refutation: withdrawn — <reason>`.
+- Apply the mechanical verification gate: no `APPROVE` / `review_complete: yes` over `NOT_RUN` checks.
 - Include short synthesis notes only when they matter, such as unavailable reviewers, merged duplicates, missing role artifacts, or verification gaps.
 
 ## Final Response

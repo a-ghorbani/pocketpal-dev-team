@@ -151,5 +151,16 @@ Only `BLOCKER` and `CONCERN` findings are mandatory fix scope. `SUGGESTION` find
 | `pocketpal-plan-critic` | After HOW drafted | `how.md` (plan) |
 | `pocketpal-pipeline-reviewer` | After impl + tests | Everything; gates draft PR |
 | `pocketpal-code-reviewer` | Standalone | Branch or PR, independent of pipeline state |
+| `pocketpal-design-parity-reviewer` | Redesign slices only, after implementer | Committed Figma-vs-sim visual diffs; node-for-node parity |
 
 Pipeline progression: **architect → architect-critic → planner → plan-critic → implementer → tester → pipeline-reviewer**.
+
+## Redesign-slice sub-pipeline (Figma-pinned work)
+
+For any task that implements a Figma node id (FOU-112 redesign rollout, or any task pinning a canonical Figma file), the implementer follows the `figma-implement` skill (metadata-first inspection, design-context translation, committed side-by-side captures), then an extra gate runs before the pipeline-reviewer:
+
+```text
+implementer (figma-implement skill) → pocketpal-design-parity-reviewer → pipeline-reviewer
+```
+
+The parity reviewer compares each committed `*-figma.png`/`*-sim.png` pair and walks the Figma node tree for silently-dropped children; max 2 parity rounds before human escalation. See `docs/workflows/visual-capture.md` (Flavour C).
