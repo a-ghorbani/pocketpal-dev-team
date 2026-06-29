@@ -85,26 +85,24 @@ mkdir -p "${STORY_DIR}"
 
 ```bash
 PR_NUMBER="{extracted from prompt}"
-TASK_ID="PR-${PR_NUMBER}-fix"
-WORKTREE_PATH="./worktrees/${TASK_ID}"
+# Per AGENTS.md naming: worktree = PR-<n>, branch = pr-<n>, story = PR-<n>-fix.
+# Keep the story id (TASK_ID) separate from the worktree name — they differ.
+TASK_ID="PR-${PR_NUMBER}-fix"                 # story id
+WORKTREE_PATH="./worktrees/PR-${PR_NUMBER}"   # worktree name (reused from review)
+BRANCH_NAME="pr-${PR_NUMBER}"
 STORY_DIR="./workflows/stories/${TASK_ID}"
 MAIN_REPO="./repos/pocketpal-ai"
 
-# Step 2: Check if PR worktree already exists (from review)
-if [ -d "./worktrees/PR-${PR_NUMBER}" ]; then
-  # Use existing review worktree
-  WORKTREE_PATH="./worktrees/PR-${PR_NUMBER}"
+# Step 2: Reuse the review worktree if present, else create it from the PR branch
+if [ -d "${WORKTREE_PATH}" ]; then
   echo "Using existing PR review worktree: ${WORKTREE_PATH}"
 else
-  # Create new worktree from PR branch
   cd "${MAIN_REPO}"
   git fetch origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}"
   cd - >/dev/null
   ./tools/create-worktree.sh "PR-${PR_NUMBER}" --branch "pr-${PR_NUMBER}" --ref "pr-${PR_NUMBER}"
 fi
 mkdir -p "${STORY_DIR}"
-# Branch name for routing
-BRANCH_NAME="pr-${PR_NUMBER}"
 ```
 
 ### Common Steps (both task types)
@@ -249,29 +247,29 @@ Flag `Visual Evidence Required=YES` whenever the work is likely to change a scre
 
 ## Routing Protocol
 
-When routing to another agent, ALWAYS pass:
+When routing to another agent, ALWAYS pass the `WORKTREE_PATH`, `BRANCH_NAME`, and `STORY_DIR` you set during worktree setup — never reconstruct paths from `${TASK_ID}`. For a new task these resolve to `worktrees/TASK-…` / `feature/TASK-…`; for a PR fix they differ: worktree `PR-<n>`, branch `pr-<n>`, story `PR-<n>-fix`.
 
 ```
-WORKTREE: ./worktrees/${TASK_ID}
-BRANCH: feature/${TASK_ID}
+WORKTREE: ${WORKTREE_PATH}
+BRANCH: ${BRANCH_NAME}
 TASK_ID: ${TASK_ID}
 NATIVE_CHANGES: YES | NO
 DESIGN_EXPLORATION: YES | NO
 PLAN_EXPLORATION: YES | NO
-INTENT_BRIEF: ./workflows/stories/${TASK_ID}/intent-brief.md
+INTENT_BRIEF: ${STORY_DIR}/intent-brief.md
 ```
 
 ### Routing for trivial tasks
 
 ```
 Use pocketpal-implementer to implement trivial change ${TASK_ID}
-WORKTREE: ./worktrees/${TASK_ID}
-BRANCH: feature/${TASK_ID}
+WORKTREE: ${WORKTREE_PATH}
+BRANCH: ${BRANCH_NAME}
 TASK_ID: ${TASK_ID}
 NATIVE_CHANGES: ${NATIVE_CHANGES}
 DESIGN_EXPLORATION: NO
 PLAN_EXPLORATION: NO
-INTENT_BRIEF: ./workflows/stories/${TASK_ID}/intent-brief.md
+INTENT_BRIEF: ${STORY_DIR}/intent-brief.md
 
 (no WHAT, no HOW — implementer works directly from intent-brief)
 ```
@@ -280,13 +278,13 @@ INTENT_BRIEF: ./workflows/stories/${TASK_ID}/intent-brief.md
 
 ```
 Use pocketpal-planner to create implementation plan for ${TASK_ID}
-WORKTREE: ./worktrees/${TASK_ID}
-BRANCH: feature/${TASK_ID}
+WORKTREE: ${WORKTREE_PATH}
+BRANCH: ${BRANCH_NAME}
 TASK_ID: ${TASK_ID}
 NATIVE_CHANGES: YES | NO
 DESIGN_EXPLORATION: NO
 PLAN_EXPLORATION: YES | NO
-INTENT_BRIEF: ./workflows/stories/${TASK_ID}/intent-brief.md
+INTENT_BRIEF: ${STORY_DIR}/intent-brief.md
 WHAT: (none — quick tasks skip the architect)
 ARCHITECTURE_DOCS: ./context/architecture/<flow>.md, ...     # comma-separated; for quick this IS the design source
 
@@ -300,13 +298,13 @@ intake — quick may have been the wrong classification.
 
 ```
 Use pocketpal-architect to design WHAT for ${TASK_ID}
-WORKTREE: ./worktrees/${TASK_ID}
-BRANCH: feature/${TASK_ID}
+WORKTREE: ${WORKTREE_PATH}
+BRANCH: ${BRANCH_NAME}
 TASK_ID: ${TASK_ID}
 NATIVE_CHANGES: YES | NO
 DESIGN_EXPLORATION: YES | NO
 PLAN_EXPLORATION: YES | NO
-INTENT_BRIEF: ./workflows/stories/${TASK_ID}/intent-brief.md
+INTENT_BRIEF: ${STORY_DIR}/intent-brief.md
 ARCHITECTURE_DOCS: ./context/architecture/<flow>.md, ...     # comma-separated, one per flow this work touches
 ```
 
