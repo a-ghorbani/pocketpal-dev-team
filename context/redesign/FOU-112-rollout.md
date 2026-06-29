@@ -96,3 +96,29 @@ Each Phase 1+ slice runs the dev-team pipeline (standard/complex) when picked up
 - **Light + dark** parity checked per slice (dark = the `3011:*` render).
 - Update the relevant `context/architecture/*.md` flow doc in the same PR as any
   behavior change (repo non-negotiable).
+
+---
+
+## 6. Delivery / branching strategy (LOCKED 2026-06-20)
+
+Phase 3 lands on `main` as **one coherent flip via a long-lived integration branch**, not
+piecemeal and not as one giant PR.
+
+- **Integration branch:** `redesign/phase-3` (created off `main`). The nav swap is app-wide
+  (Drawer removed outright), so individual Phase-3 slices must NOT merge to `main` directly —
+  `main` would sit half-redesigned and become un-hotfix-releasable for the whole window.
+- **Per slice:** each slice (POC-30, POC-7, POC-8…POC-12) stays its own small,
+  independently-reviewed PR, but **targets `redesign/phase-3`**, not `main`. Create worktrees
+  from `origin/redesign/phase-3` (`create-worktree.sh … --ref origin/redesign/phase-3`).
+- **Final landing:** when all Phase-3 tab destinations (Chats/Home/Chat · Explore · Settings)
+  are coherent, `redesign/phase-3` → `main` in **one** merge of already-reviewed slices.
+- **Hygiene:** periodically merge `main` → `redesign/phase-3` to avoid big-bang conflicts; the
+  integration branch runs full CI and is dogfoggable. `main` stays clean + hotfix-releasable
+  throughout.
+- **Exception already on `main`:** onboarding (3a, PR #747) merged to `main` directly — it is
+  greenfield/additive and does not make `main` half-redesigned.
+- POC-30 (nav shell + Home, PR #785) is the first slice into `redesign/phase-3` (retargeted
+  2026-06-20).
+
+This supersedes the earlier "merge each slice to `main`, enforce no-half-app at release" note —
+the integration branch keeps `main` releasable AND keeps slices reviewable.

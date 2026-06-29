@@ -89,3 +89,16 @@ Frame 393 wide, bg `#fafafa`. Below the OS status bar:
 - Layout: hero content is **bottom-anchored** (Content flex-1 justify-end) with history peeking + bottom gradient + floating tab bar — current impl is a plain top-anchored scroll.
 - Title must be **two lines** Fraunces 36 / lh ×1.4.
 - Tab pill color `#FCE7CF` → must be `#f5dbbc` (border `#f8f1e2`).
+
+---
+
+## First-time-user / EMPTY state (node 888:33856)
+
+When there are NO chat sessions, the "Previous chats" region (888:33874) is NOT the history list and NOT bottom-pinned text. It is a centered empty-state block:
+- Region: bg #fafafa, height ~212, flex-col, **items-center + justify-center** (vertically + horizontally centered), sits in normal flow below the model-chip (after the Content hero block + its gap).
+- Header (888:33875): flex-col, gap 8 (S), items-center/justify-center, px 8.
+  1. **Chat-bubble icon** (888:33876): a speech/chat-bubble outline icon **20px**, inside a 28-high button (padding 2, radius 12 M). Color ~ subtle grey.
+  2. **Message** (888:33877): Body/sm = Inter Regular **13px / lineHeight 20 / letterSpacing +0.195**, color **#c4c2c0 (foreground/subtle)**, **text-center**. Copy: "Select a pal or model, then start typing. Your conversations will appear here." (the app already uses this copy — keep it).
+- So: centered chat-bubble icon ABOVE a centered subtle-grey 13px message. NOT bottom-pinned, NOT occluded by the tab bar.
+
+Note: the populated default (888:33822) and the empty first-time (888:33856) share the same hero (title/carousel/composer/model-chip); they differ ONLY in the lower region (history rows vs centered icon+message). The app must render the centered empty block when `sessions.length === 0`.
