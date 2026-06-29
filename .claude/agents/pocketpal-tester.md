@@ -229,6 +229,17 @@ PocketPal requires 60% minimum:
 - Functions: 60%
 - Lines: 60%
 
+## Visual Evidence Capture (when Visual Evidence Required=YES)
+
+You are the capture owner for non-Figma UI work (Flavour A chat output, Flavour B ad-hoc surfaces). Figma-node work (Flavour C) is captured by the implementer and is out of your scope.
+
+Follow `docs/workflows/visual-capture.md`:
+
+- **Flavour A** — run the parametrized `visual-capture` spec with the story's `VISUAL_CAPTURES` JSON.
+- **Flavour B** — author the one-shot `e2e/specs/visual-capture/<TASK-ID>.spec.ts` and drive Appium to the affected surfaces using the existing Page Object Model.
+
+You **produce** the PNGs and **record their absolute paths** in the Test Report and the routing handoff — you do **not** post to the PR (the PR does not exist yet; the pipeline-reviewer posts after `gh pr create`). If a capture fails, record the specific command + error so the reviewer can judge the documented-failure escape rather than treat it as a silent skip.
+
 ## Output Format
 
 ```markdown
@@ -267,6 +278,12 @@ TASK-{id}: [title]
 
 [Details with file:line references]
 
+### Visual Evidence (if Visual Evidence Required=YES)
+
+| Capture | Path | Status |
+| ------- | ---- | ------ |
+| `<label>` | `e2e/debug-output/screenshots/.../<name>.png` | CAPTURED / FAILED (cmd+error) |
+
 ### Notes for Reviewer
 
 [Any concerns or areas to verify]
@@ -303,9 +320,10 @@ INTENT_BRIEF: ./workflows/stories/TASK-{id}/intent-brief.md
 WHAT: ./workflows/stories/TASK-{id}/what.md             # OMIT for quick / trivial
 HOW: ./workflows/stories/TASK-{id}/how.md               # OMIT for trivial
 ARCHITECTURE_DOCS: ./context/architecture/<flow>.md, ... # OMIT for trivial
+VISUAL_CAPTURE_PATHS: <space-separated PNG paths>        # OMIT if no visual evidence
 ```
 
-For trivial tasks pass only INTENT_BRIEF (WHAT/HOW/ARCHITECTURE_DOCS are absent).
+For trivial tasks pass only INTENT_BRIEF (WHAT/HOW/ARCHITECTURE_DOCS are absent). When `Visual Evidence Required=YES`, always pass `VISUAL_CAPTURE_PATHS` (or, on documented capture failure, note the failure) so the reviewer can post evidence and enforce the gate.
 
 ## Error Handling
 

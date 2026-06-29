@@ -245,7 +245,7 @@ flag as `NATIVE_CHANGES=YES` in the intent brief metadata.
 
 ## Visual Evidence Detection
 
-If the task changes visible UI (layout, styling, rendering, theme, markdown/HTML), flag as `Visual Evidence Required=YES`. This means the pipeline must create or verify durable visual evidence before approval; do not ask the user to inspect UI manually unless capture infrastructure or required devices are unavailable after documented attempts. The planner will include VISUAL_CAPTURES JSON or an equivalent capture plan in HOW.
+Flag `Visual Evidence Required=YES` whenever the work is likely to change a screen, component, style, theme, or rendering path under `src/` (layout, styling, rendering, theme, markdown/HTML). When unsure, set YES. The pipeline must then produce durable captures and post them to the PR before approval; the tester captures (Flavour A/B), the implementer captures Figma work (Flavour C), and the pipeline-reviewer posts and enforces. The reviewer also re-derives this requirement from the actual diff, so a missed flag here is caught — but classify correctly so the planner can include the `VISUAL_CAPTURES` JSON or equivalent capture plan in HOW. Do not ask the user to inspect UI manually unless capture infrastructure or required devices are unavailable after documented attempts. See `docs/workflows/visual-capture.md`.
 
 ## Routing Protocol
 

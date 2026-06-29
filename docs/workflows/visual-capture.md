@@ -18,6 +18,29 @@ Decision rule:
 - "Drive Appium to a non-chat surface that isn't tied to a Figma spec" → Flavour B.
 - "Implementing a Figma node id" → Flavour C (mandatory side-by-side captures committed into the story dir; the parity reviewer is a pipeline gate).
 
+## Ownership
+
+| Step | Owner |
+| --- | --- |
+| Decide whether evidence is required | `pocketpal-intake` sets `Visual Evidence Required=YES`; `pocketpal-pipeline-reviewer` **re-derives it from the actual diff** so a missed flag can't skip the gate. Any change under `src/` to a screen, component, style, theme, or rendering path ⇒ required. |
+| Produce captures (Flavour A / B) | `pocketpal-tester` writes the PNGs and hands their paths to the reviewer in the Test Report. |
+| Produce captures (Flavour C) | `pocketpal-implementer` via the `figma-implement` skill (committed side-by-sides under the story dir). |
+| Post captures to the PR | `pocketpal-pipeline-reviewer`, immediately after `gh pr create`, via `tools/post-pr-visual-evidence.sh`. |
+| Enforce | `pocketpal-pipeline-reviewer` — "UI changed but no visual-evidence comment on the PR" is a `BLOCKER`. |
+
+## Posting to the PR (mandatory)
+
+Captures are not evidence until they are on the PR. After the draft PR exists, post them as an inline comment:
+
+```bash
+# run from the task worktree (so gh infers the pocketpal-ai repo)
+./tools/post-pr-visual-evidence.sh <PR-number> \
+  --title "Visual evidence — <short label>" \
+  <path/to/capture-1.png> <path/to/capture-2.png> ...
+```
+
+The helper uploads each PNG to GitHub's `user-attachments` CDN via the `gh image` extension — public URLs that render inline, so nothing is committed to the app repo — and posts one comment. If no GitHub session token is available it prints `MANUAL_POST_REQUIRED` with the exact hand-run command and exits non-zero; record that as a pending condition on the PR and do **not** report the evidence as posted. Recording only a local screenshot path is a fallback for a documented capture/post failure (see Failure handling), never the default when posting is possible.
+
 ## Flavour A — Parametrized (chat output)
 
 1. Read the `Visual evidence` section in the story for the `VISUAL_CAPTURES` JSON.
@@ -31,7 +54,7 @@ VISUAL_CAPTURES='[the JSON from the story]' yarn e2e:ios --spec visual-capture -
 ```
 
 3. Screenshots land in `e2e/debug-output/screenshots/visual-captures/`.
-4. Attach to the PR as a comment, or record the local screenshot path as review evidence.
+4. Hand the capture paths to the reviewer in the Test Report. The reviewer posts them to the PR via `tools/post-pr-visual-evidence.sh` after the draft PR exists (see **Posting to the PR**).
 
 ## Flavour B — Per-task one-shot (ad-hoc UI surfaces)
 
@@ -109,6 +132,6 @@ For FOU-112 phase slices that touch an existing screen (e.g. theming a previousl
 
 ## Failure handling
 
-If a capture fails due to model download timeout, inference error, simulator instability, or missing network state, do **not** block the PR by default. Record the failure in the review report and escalate only if visual evidence is still required and no acceptable substitute evidence exists.
+If a capture fails due to model download timeout, inference error, simulator instability, or missing network state, do **not** block the PR by default. Record the **specific, documented** failure (command + error) in the review report and escalate only if visual evidence is still required and no acceptable substitute evidence exists. A documented infra failure is the only escape from the posting gate — silently shipping a UI change with no captures and no recorded failure is a `BLOCKER`, not a skip.
 
 For Surface-style mechanical-parity changes (Phase 2 design-system rebuilds), a unit test asserting the relevant style invariant (e.g. `elevation` default matching Paper) is acceptable evidence in lieu of screenshots when the capture infrastructure can't be exercised. State this explicitly in the PR body.

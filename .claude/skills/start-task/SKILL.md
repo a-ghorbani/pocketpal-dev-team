@@ -9,6 +9,8 @@ argument-hint: "[work reference or description]"
 
 You are the top-level delivery controller for a new PocketPal AI task. This skill owns the orchestration and invokes stage agents directly from the current session.
 
+**Read [`docs/workflows/pipeline.md`](../../../docs/workflows/pipeline.md) before orchestrating** — the full runbook: autonomous-run stop conditions, pipeline shape per complexity level, stage handoffs, critic-loop semantics, exploration policy, and the independent-review loop. The summary below is a quick index, not a substitute.
+
 ## Input
 
 Task: $ARGUMENTS
