@@ -85,8 +85,23 @@ Engines stay pure — they neither produce nor read metrics.
   `{type:'text'}` page on success. `web_search` resolves to a `{type:'search'}`
   result carrying structured `results[]` for `WebSearchTalentUI` AND the wrapped
   menu as `summary` (the model-facing payload — `summary` behaves exactly like a
-  `{type:'text'}` result for the runner). Both return `{type:'error'}` on
-  not-enabled / no-results / timeout / transport — never a silent no-op. Network
+  `{type:'text'}` result for the runner). The `summary` menu is labeled blocks:
+  a `Web search results for "…" (retrieved YYYY-MM-DD):` header, then per-hit
+  `Title:` / `URL:` / `Published:` (when present) / `Content:` (when non-empty)
+  lines — the shape canonical search-tool servers feed models. Both return
+  `{type:'error'}` on not-enabled / no-results / timeout / transport — never a
+  silent no-op; the no-results summary appends "Try a shorter or less
+  restrictive query." as the model's in-band retry steer.
+  - **Minimal descriptions + grounding system line**: both tool descriptions
+    are capability-only statements. The behavioural steering (today's date,
+    search-first policy, tool-call budget = agent turn cap − 1,
+    answer-from-results + cite URLs, say-so when results lack the answer)
+    lives in ONE grounding system message that `prepareCompletion`
+    (`useChatSession.ts`) appends when the session's tools include a search
+    talent (`resolveSearchGroundingMessage`,
+    `src/utils/systemPromptResolver.ts`). It is a separate system message —
+    the pal's own prompt is never modified — placed in the initial messages
+    array so it rides every follow-up tool turn. Network
   and Keychain reads are permitted side effects behind the engine boundary
   (I4); the engines read the active provider, whether search may run, and the
   result count through an **accessor injected as a constructor argument** at

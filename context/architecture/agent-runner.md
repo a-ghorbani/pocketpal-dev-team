@@ -30,14 +30,14 @@ Discriminated union, `AgentRunner.types.ts:41-63`.
 
 | Variant                | Shape                          | When emitted                                                                                  |
 | ---------------------- | ------------------------------ | --------------------------------------------------------------------------------------------- |
-| `run_started`          | `{ messageId }`                | Once, top of `runAgent` (`AgentRunner.ts:254`)                                                |
-| `step_started`         | `{ turn, isFollowUp }`         | Top of each loop iteration (`:294`); `isFollowUp = turn > 0`                                  |
+| `run_started`          | `{ messageId }`                | Once, top of `runAgent` (`AgentRunner.ts:262`)                                                |
+| `step_started`         | `{ turn, isFollowUp }`         | Top of each loop iteration (`:307`); `isFollowUp = turn > 0`                                  |
 | `token`                | `{ delta: TokenDelta }`        | Each engine stream chunk with non-empty content / reasoning / tool_calls                       |
 | `marker_seen`          | `{ marker }`                   | First time accumulated `content` matches one of `triggerMarkers` in this step (≤ 1 per step)  |
 | `step_finished`        | `{ turn, toolCalls? }`         | After engine `.completion()` resolves; `toolCalls` carries normalized ids when tools fired    |
 | `tool_call_started`    | `{ call }`                     | Just before `engine.execute(args)`                                                            |
 | `tool_call_finished`   | `{ outcome }`                  | Always after `executeOne` resolves — engine throws are captured as error outcomes              |
-| `run_finished`         | `{ result: AgentRunResult }`   | Clean exit (text-only step, hit max turns, or aborted between turns)                          |
+| `run_finished`         | `{ result: AgentRunResult }`   | Clean exit (text-only step, forced final step after hitting max turns, or aborted between turns) |
 | `run_failed`           | `{ error: Error }`             | Engine rejects, or any uncaught throw inside the generator                                    |
 
 ### 1b. Supporting shapes
@@ -75,11 +75,14 @@ The runner has **zero** imports from React, MobX, or any store
 - **Step** — the persisted slice of a turn. 1 step per turn; the hook
   appends to `AssistantTurn.steps[turn]` on `step_started`.
 - **Follow-up** — any turn with `turn > 0`. Exists only when the previous
-  step actually invoked a tool; otherwise the loop breaks at `:416`.
+  step actually invoked a tool; otherwise the loop breaks at `:455`.
+- **Forced final turn** — the one extra completion scheduled when the turn
+  cap is reached while the model is still requesting tools: tools stripped
+  from params, budget-exhausted user nudge appended, result is the answer.
 - **Pending tool call** — a `tool_call_started` without its matching
   `tool_call_finished` yet. Serial within a step (D1).
 - **Synthetic id** — `call_<seed>_<idx>` written by `normalizeToolCallIds`
-  (`:105-117`) when llama.rn returns `id: null`. Seed is `Date.now() + turn`.
+  (`:113-125`) when llama.rn returns `id: null`. Seed is `Date.now() + turn`.
 
 ---
 
@@ -111,25 +114,28 @@ lives in **`chat-flow.md` §3** — not duplicated here.
          tool_call_finished
                 │
                 ▼
-        (back to step_started, isFollowUp=true,
-         unless turn+1 >= maxTurns or signal.aborted)
+        (back to step_started, isFollowUp=true.
+         At turn+1 >= maxTurns: ONE forced final step runs
+         instead — tools stripped, budget-exhausted user
+         nudge appended — then run_finished.
+         signal.aborted: run ends without it.)
 
   Any point: engine throws / generator throws  ──►  run_failed (final event)
 ```
 
 Hard sequencing rules (verified in `AgentRunner.ts`):
 
-- **I1**: exactly one `run_started` precedes any other event (`:254`).
+- **I1**: exactly one `run_started` precedes any other event (`:262`).
 - **I2**: every `step_started(turn=N)` is paired with exactly one
   `step_finished(turn=N)` BEFORE any `tool_call_*` for that step
-  (`:294`, `:410`).
+  (`:307`, `:443`).
 - **I3**: `token` events for a step arrive before `step_finished`. Within
-  one chunk, `token` enqueues **before** `marker_seen` (`:333-348`).
+  one chunk, `token` enqueues **before** `marker_seen` (`:355-376`).
 - **I4**: each `tool_call_started` is followed by exactly one
   `tool_call_finished` for the same `call.id` before the next
-  `tool_call_started` or `step_started` (`:421-431`).
+  `tool_call_started` or `step_started` (`:462-469`).
 - **I5**: the run terminates with **exactly one** of `run_finished` or
-  `run_failed` (`:478`, `:480`).
+  `run_failed` (`:531`, `:533`).
 
 ---
 
@@ -139,16 +145,17 @@ Hard sequencing rules (verified in `AgentRunner.ts`):
 
 | Responsibility                                          | Site                                                |
 | ------------------------------------------------------- | --------------------------------------------------- |
-| Produce every `AgentEvent` for the run                  | `runAgent` generator (`AgentRunner.ts:240`)         |
-| Bridge sync engine callback → iterator                  | `EventQueue` (`:28-70`)                             |
-| Translate `signal.abort` → `engine.stopCompletion`      | `onAbort` IIFE (`:266-275`)                         |
-| Accumulate `content`, scan `triggerMarkers`             | Per-step locals; first match enqueues `marker_seen` (`:301-350`) |
-| Normalize tool-call ids (fill `null` with synthetic)    | `normalizeToolCallIds` (`:105-117`)                 |
-| Attach per-step generation metrics                      | `:393-408` (only when tool-call tokens were seen)   |
-| Whitelist tool name + JSON-parse arguments              | `executeOne` (`:124-186`)                           |
-| Wrap engine throws as error outcomes (never throws out) | `executeOne` catch (`:176-186`)                     |
-| Build next-turn `ChatMessage[]`                          | `buildNextTurnMessages` (`:194-233`)                |
-| Enforce `maxTurns` budget                                | `while (turn < maxTurns)` (`:289`)                  |
+| Produce every `AgentEvent` for the run                  | `runAgent` generator (`AgentRunner.ts:248`)         |
+| Bridge sync engine callback → iterator                  | `EventQueue` (`:36-78`)                             |
+| Translate `signal.abort` → `engine.stopCompletion`      | `onAbort` IIFE (`:274-283`)                         |
+| Accumulate `content`, scan `triggerMarkers`             | Per-step locals; first match enqueues `marker_seen` (`:314-378`) |
+| Normalize tool-call ids (fill `null` with synthetic)    | `normalizeToolCallIds` (`:113-125`)                 |
+| Attach per-step generation metrics                      | `:421-441` (only when tool-call tokens were seen)   |
+| Whitelist tool name + JSON-parse arguments              | `executeOne` (`:132-194`)                           |
+| Wrap engine throws as error outcomes (never throws out) | `executeOne` catch (`:184-194`)                     |
+| Build next-turn `ChatMessage[]`                          | `buildNextTurnMessages` (`:202-241`)                |
+| Enforce `maxTurns` budget                                | `while (turn < maxTurns \|\| forceFinal)` (`:301`)  |
+| Force a final no-tools answer at the turn cap           | `forceFinal` scheduling + nudge append (`:501-514`); tools stripped from turn params (`:326-328`) |
 
 ### 3b. What the runner DOES NOT
 
@@ -160,7 +167,7 @@ Hard sequencing rules (verified in `AgentRunner.ts`):
   written by the hook via `agentStateReducer`.
 - **Decide which talent runs.** Mapping `name → TalentEngine` is injected
   via `talentLookup` — the runner never imports `talentRegistry`.
-- **Track its own step list.** `AgentRunResult.steps = []` always (`:469`).
+- **Track its own step list.** `AgentRunResult.steps = []` always (`:522`).
 - **Cancel in-flight tool execution.** Once `engine.execute(args)` is
   awaited, it runs to completion (D3).
 - **Cache `triggerMarkers`.** Cache scoped to the hook's `useRef`
@@ -169,7 +176,7 @@ Hard sequencing rules (verified in `AgentRunner.ts`):
 ### 3c. Consumer-side wiring (one site)
 
 ```ts
-// useChatSession.ts:521-540
+// useChatSession.ts:652+
 for await (const event of runAgent(opts)) {
   uiState = agentStateReducer(uiState, event);   // pure
   chatSessionStore.setAgentUiState(uiState);     // status write
@@ -225,7 +232,7 @@ step_finished  turn=0  toolCalls=undefined  streaming_text (unchanged)
 run_finished   hitMaxTurns=false            done
 ```
 
-Loop exits at `:416` (no tool calls in `lastResult`).
+Loop exits at `:455` (no tool calls in `lastResult`).
 
 ### B. Tool + follow-up (the common tool path)
 
@@ -248,16 +255,24 @@ run_finished   hitMaxTurns=false                   done
 
 `messages` was rebuilt by `buildNextTurnMessages` between turn 0 and turn 1.
 
-### C. Hit max turns
+### C. Hit max turns → forced final answer
 
 ```
 maxTurns = 5; every turn asks for another tool
 turn 0..4   ── tool dispatch + follow-up each time, messages grow
-turn = 5    ── while-guard fails, fall through
+turn = 5    ── cap reached with tools still requested: forceFinal set
+               (`:501-514`), user-role budget-exhausted nudge appended
+step_started   turn=5  isFollowUp=true    ── forced final step: tools
+               stripped from params (`:326-328`), marker scan off, any
+               tool_calls in the result ignored (`:419-421`)
+token+         the closing answer streams like any final turn
+step_finished  turn=5  toolCalls=undefined
 run_finished   result.hitMaxTurns = true   ── consumer mirrors to metadata.hitMaxTurns
 ```
 
-`hitMaxTurns = (turn >= maxTurns)` computed once at `:470`.
+`hitMaxTurns = (turn >= maxTurns)` computed once at `:523`. An abort
+during the last tool round skips the forced turn (both `signal.aborted`
+checks sit before the scheduling / the forced iteration).
 
 ### D. Abort mid-stream (user taps Stop)
 
@@ -274,9 +289,9 @@ native winds down, engine.completion(...) resolves with partial result
   ─► .then: queue.finish()
 drain → step_finished (toolCalls? from lastResult)
   ── if there were calls: tool_call_* pairs emit normally (D3)
-  ── if none: loop breaks at no-tools branch (:416)
-                                       loop top: signal.aborted check (:290) breaks
-                                       OR mid-turn-end check (:438) breaks
+  ── if none: loop breaks at no-tools branch (:455)
+                                       loop top: signal.aborted check (:302) breaks
+                                       OR mid-turn-end check (:477) breaks
 run_finished   hitMaxTurns=false                done
 ```
 
@@ -300,7 +315,7 @@ run_failed     error=Error("…")             failed
 ```
 
 `step_finished` is **NOT** emitted on engine failure — runner yields
-`run_failed` and returns (`:378-381`). The active step keeps `partial: true`.
+`run_failed` and returns (`:407-410`). The active step keeps `partial: true`.
 
 ### F. Multi-tool in one step
 
@@ -340,7 +355,7 @@ future caller broke this, both runs would still execute correctly but their
 ### 6b. Multi-tool metrics overcount
 
 (C) `step.toolCalls[i].metrics = { tokens, durationMs }` is replicated on every
-call when N > 1 (`:401-408`). This overstates per-call cost for multi-tool
+call when N > 1 (`:433-441`). This overstates per-call cost for multi-tool
 steps; the metric is really "per-step generation cost, attributed to each
 call." Documented decision (D2).
 
@@ -348,27 +363,27 @@ call." Documented decision (D2).
 
 (C) Abort during `engine.execute(args)` does **not** interrupt the talent. The
 runner awaits `executeOne` to completion, emits `tool_call_finished` with the
-outcome, then checks `signal.aborted` at `:438` and breaks. (D3)
+outcome, then checks `signal.aborted` at `:477` and breaks. (D3)
 
 ### 6d. Talent missing from registry
 
 (C) `talentLookup(fnName)` returns `undefined`. `executeOne` returns an error
 outcome with `summary = "Talent X is not available on this device"`
-(`:144-153`). `tool_call_finished` still fires; follow-up proceeds. See
+(`:152-161`). `tool_call_finished` still fires; follow-up proceeds. See
 `pals-and-talents.md` §7C.
 
 ### 6e. Tool name not in `allowedTalentNames`
 
-(C) Short-circuits before `executeOne` looks up the talent (`:132`). Error
+(C) Short-circuits before `executeOne` looks up the talent (`:140`). Error
 outcome with `summary = "Talent X is not enabled for this Pal"`. Same
 downstream flow as 6d.
 
 ### 6f. JSI cancel race (model unloaded mid-run)
 
 (C) llama.rn's `engine.completion(...)` rejects when the context is destroyed.
-The runner's `.catch` (`:358`) captures it into `engineError`, calls
+The runner's `.catch` (`:387`) captures it into `engineError`, calls
 `queue.finish()`, drains the (empty) queue, awaits the settled promise, and
-yields `run_failed`. The `try/finally` (`:288/:481`) detaches the abort
+yields `run_failed`. The `try/finally` (`:300/:534`) detaches the abort
 listener either way.
 
 ### 6g. Runner exits before final `step_finished`
@@ -411,7 +426,7 @@ listener either way.
     do next); it does NOT become a `run_failed`.
 
 - **D4 (synthetic-then-reconciled tool-call ids)**: runner generates
-  `call_<seed>_<idx>` ids in `normalizeToolCallIds` (`:105-117`) and attaches
+  `call_<seed>_<idx>` ids in `normalizeToolCallIds` (`:113-125`) and attaches
   the normalized list to `step_finished.toolCalls`. Consumer's
   `appendToolCall` lands them on `step.toolCalls`; outcomes carry the same
   `callId` by construction. Alternative: let strict-Jinja templates fail at
@@ -426,10 +441,19 @@ listener either way.
   first, persistence second) is trivial under iteration; callback ordering
   would be brittle.
 
-- **D6 (turn budget = 5)**: `DEFAULT_MAX_TURNS = 5` (`:17`). Alternative was
-  unbounded. Decided: cap protects against tool-call loops; 5 covers
-  preamble + tool + follow-up + correction + final-summary. Overridable per
-  run via `AgentRunOptions.maxTurns` (unused today).
+- **D6 (turn budget = 5; forced final answer at the cap)**:
+  `DEFAULT_MAX_TURNS = 5` (`:17`, exported — the search grounding system
+  line derives its advertised tool-call budget from it as `maxTurns - 1`).
+  Alternative was unbounded. Decided: cap protects against tool-call loops;
+  5 covers preamble + tool + follow-up + correction + final-summary.
+  When the cap is reached while the model is still requesting tools, the
+  runner schedules ONE extra completion without the `tools` param, with a
+  user-role "(Tool budget exhausted. …)" nudge appended (`:501-514`) — the
+  ecosystem-standard forced-final-answer pattern, so the run ends with an
+  answer instead of an unanswered tool request. The forced turn streams
+  and persists through the same events as any final turn; `hitMaxTurns`
+  still reports `true`. Overridable per run via `AgentRunOptions.maxTurns`
+  (unused today).
 
 - **D7 (partial step events)**: `token` events arrive before `step_finished`;
   the consumer's `step.partial: true` tells the renderer the step isn't

@@ -194,7 +194,7 @@ carries:
   active provider's key to Keychain via `searchProviderStore.setKey/clearKey`,
   one entry per provider under service `'search_provider_service_<id>'`. Keys
   never reach plain storage or the bundle.
-- **Result-count control** — slider (1–8, default 3) →
+- **Result-count control** — slider (1–8, default 5) →
   `searchProviderStore.setResultCount`; maps to the search budget `maxResults`.
 - **First-enable consent** — a disclosure that the query leaves the device to
   the chosen provider, and that a `read_url` page read may instead be sent to a
