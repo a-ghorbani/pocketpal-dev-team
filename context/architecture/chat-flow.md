@@ -1118,6 +1118,10 @@ returns exactly one of five variants in this precedence order:
    (reappears next turn if still full); also exits via auto-clear when
    the next turn satisfies `used < nCtx - AUTOCLEAR_RUNWAY` AND no §4a
    match, and when the snapshot is invalidated by a message edit/regenerate.
+   Copy is remote-aware: a remote session renders `contextFullRemote` (drops
+   the "or increase the context size" clause — the increase CTA is hidden for
+   remote, no client-side control); local sessions keep `contextFull` /
+   `contextFullEscalated` / `contextFullHeavyTalent`.
 2. `context-warning` — `ratio >= WARNING_THRESHOLD` (0.80), not
    `contextFull`, and a known `effectiveNCtx`. Fires for a local session and
    for a remote llama.cpp session once its `/props` window is known (the

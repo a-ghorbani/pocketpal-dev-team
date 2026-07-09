@@ -26,7 +26,7 @@ ServerConfig                          // src/utils/types.ts
   requestTimeoutMs?: number           // (C) per-server network timeout, whole ms; undefined = use API default
   serverType?: string                 // (C) user-selectable; gates the reasoning wire payload; undefined = unknown
   contextLength?: number              // (C) llama.cpp /props n_ctx; undefined = unknown/not probed
-  supportsVision?: boolean            // (C) llama.cpp /props modalities.vision; undefined = unknown/not probed
+  supportsVision?: boolean            // (C) llama.cpp /props modalities.vision; always defined (true/false) after a successful probe; undefined = not probed / probe failed (NOT "vision off")
 
 ServerStore                           // src/store/ServerStore.ts
   remoteReasoning: Record<modelId, ReasoningCapability>  // (C) remote reasoning caps,
@@ -118,11 +118,12 @@ calls to `/v1/chat/completions` and `/v1/models`. The Ollama server-type probe
   or non-finite maps to the supplied default. Stores, the engine, and both
   sheets forward the raw stored/in-edit value (possibly undefined) untouched.
   The API layer never sets a deadline of 0 or negative.
-- **I2**: `ServerStore` (`addServer` / `updateServer`, incl. the `/props`
-  writer in `fetchModelsForServer`) is the only writer of `requestTimeoutMs`,
-  `contextLength`, and `supportsVision`. `openai.ts`, `ModelStore`,
-  `OpenAICompletionEngine`, `BannerRow`, and both sheets only read/forward
-  them.
+- **I2**: `ServerStore` (`addServer` / `updateServer`, incl. the detached
+  `/props` writer in `fetchModelsForServer`) is the only writer of
+  `requestTimeoutMs`, `contextLength`, and `supportsVision` — including the
+  always-defined `supportsVision: false` that clears a stale `true`.
+  `openai.ts`, `ModelStore`, `OpenAICompletionEngine`, `BannerRow`, and both
+  sheets only read/forward them.
 - **I3**: A persisted `ServerConfig` from a prior app version (no
   `requestTimeoutMs`) behaves identically to before (defaults apply). No
   migration, no crash.
@@ -304,21 +305,32 @@ which unlock remote context banners (chat-flow §4a) and remote image attach
 ```
 serverType === 'llama.cpp' (add / hydration / throttled foreground refresh)
   ServerStore.fetchModelsForServer(serverId)
-    (after the /v1/models write)
-    fetchServerProps(url, apiKey, requestTimeoutMs)   // pure; openai.ts
+    (after the /v1/models write — DETACHED: fire-and-forget, OFF the
+     fetchModelsForServer resolution path; the sheet's add resolves as soon as
+     the models list is stored; caps land after that, whenever the probe returns)
+    fetchServerProps(url, apiKey, PROPS_TIMEOUT_MS)   // pure; openai.ts; 5 s bound
       GET {baseUrl}/props
-        [ok]   → { contextLength?, supportsVision? }
+        [ok]   → { contextLength?, supportsVision }   // supportsVision always defined
                  → ServerStore.updateServer(serverId, caps)   // re-found by id
         [fail] → {}  → no-op; caps unchanged; models + connection intact
   serverType !== 'llama.cpp' → /props never requested
 ```
 
+- **Detached probe.** The `/props` fetch runs off `fetchModelsForServer`'s
+  awaited path (a `.catch`-guarded async), so a slow or hung probe cannot hold
+  the add-server sheet in the saving state. It is bounded by an explicit
+  `PROPS_TIMEOUT_MS` (5000, mirroring the server-type detect probe) passed to
+  `fetchServerProps` — NOT the omitted default, which would resolve to
+  `CONNECTION_TIMEOUT_MS` (30000) and fail to bound it.
 - **Wire → ours** (key names verified against a live llama.cpp build, b9910):
   - `contextLength ← default_generation_settings.n_ctx ?? n_ctx` (top-level
     `n_ctx` is an older-build fallback; b9910 nests it under
     `default_generation_settings`).
-  - `supportsVision ← modalities.vision === true`. Absent/unmapped → undefined
-    → vision off.
+  - `supportsVision ← modalities.vision === true`, **always defined (true or
+    false) on a successful 2xx probe**, so a model swap that drops vision
+    overwrites a stale `true` (the `updateServer` `Object.assign` write is
+    present-keyed) and attach self-heals to disabled. `undefined` only when the
+    probe FAILS (→ `{}`, caps untouched) — never "vision off on a live server".
 - **`fetchServerProps` never throws.** Timeout / non-2xx / malformed JSON all
   resolve to `{}`; the caps stay whatever they were and the models fetch and
   connection are untouched (I3-adjacent — a `/props` failure is invisible).
