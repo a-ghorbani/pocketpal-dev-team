@@ -25,6 +25,8 @@ ServerConfig                          // src/utils/types.ts
   lastConnected?: number              // (C) timestamp
   requestTimeoutMs?: number           // (C) per-server network timeout, whole ms; undefined = use API default
   serverType?: string                 // (C) user-selectable; gates the reasoning wire payload; undefined = unknown
+  contextLength?: number              // (C) llama.cpp /props n_ctx; undefined = unknown/not probed
+  supportsVision?: boolean            // (C) llama.cpp /props modalities.vision; undefined = unknown/not probed
 
 ServerStore                           // src/store/ServerStore.ts
   remoteReasoning: Record<modelId, ReasoningCapability>  // (C) remote reasoning caps,
@@ -39,6 +41,12 @@ live detection) gates the payload. Both `serverType` and `remoteReasoning` ride
 the existing `ServerStore` persisted properties — no migration. The reasoning
 capability model itself lives in `chat-flow.md` §9g (resolver, two axes,
 learn-from-stream, single-writer); this doc covers only the remote wire side.
+
+`contextLength` and `supportsVision` are server-reported capabilities
+discovered from a llama.cpp `GET /props` response (§8). They are optional and
+ride the same already-persisted `servers` list — no new persisted key, no
+migration; an absent field hydrates as undefined (unknown → pre-discovery
+behaviour). `ServerStore` is their sole writer (I2).
 
 Persisted: `requestTimeoutMs` is part of the already-persisted `ServerConfig`
 inside `ServerStore.servers` (mobx-persist-store → AsyncStorage, key
@@ -110,9 +118,11 @@ calls to `/v1/chat/completions` and `/v1/models`. The Ollama server-type probe
   or non-finite maps to the supplied default. Stores, the engine, and both
   sheets forward the raw stored/in-edit value (possibly undefined) untouched.
   The API layer never sets a deadline of 0 or negative.
-- **I2**: `ServerStore` (`addServer` / `updateServer`) is the only writer of
-  `requestTimeoutMs`. `openai.ts`, `ModelStore`, `OpenAICompletionEngine`, and
-  both sheets only read/forward it.
+- **I2**: `ServerStore` (`addServer` / `updateServer`, incl. the `/props`
+  writer in `fetchModelsForServer`) is the only writer of `requestTimeoutMs`,
+  `contextLength`, and `supportsVision`. `openai.ts`, `ModelStore`,
+  `OpenAICompletionEngine`, `BannerRow`, and both sheets only read/forward
+  them.
 - **I3**: A persisted `ServerConfig` from a prior app version (no
   `requestTimeoutMs`) behaves identically to before (defaults apply). No
   migration, no crash.
@@ -281,3 +291,54 @@ ON with an effort the effort cell **replaces** the plain ON cell.
 | Old persisted server without `serverType` | Treated as unknown → omits all reasoning controls (I-RS2). No migration. |
 | Old persisted server / model without reasoning fields | Resolver fails open via `supportsThinking` / `'unknown'`; no crash (see chat-flow §9g). |
 | Ollama OFF `reasoning_effort:'none'` rejected by some non-thinking model | On-device flag: if it 400s, omit `'none'` entirely (omit beats 400). |
+
+---
+
+## 8. Capability discovery (llama.cpp GET /props)
+
+llama.cpp serves `GET {baseUrl}/props`; LM Studio / Ollama / vLLM / OpenAI do
+not. The response carries the server's context window and multimodal support,
+which unlock remote context banners (chat-flow §4a) and remote image attach
+(model-loading — `isMultimodalEnabled` remote fallback).
+
+```
+serverType === 'llama.cpp' (add / hydration / throttled foreground refresh)
+  ServerStore.fetchModelsForServer(serverId)
+    (after the /v1/models write)
+    fetchServerProps(url, apiKey, requestTimeoutMs)   // pure; openai.ts
+      GET {baseUrl}/props
+        [ok]   → { contextLength?, supportsVision? }
+                 → ServerStore.updateServer(serverId, caps)   // re-found by id
+        [fail] → {}  → no-op; caps unchanged; models + connection intact
+  serverType !== 'llama.cpp' → /props never requested
+```
+
+- **Wire → ours** (key names verified against a live llama.cpp build, b9910):
+  - `contextLength ← default_generation_settings.n_ctx ?? n_ctx` (top-level
+    `n_ctx` is an older-build fallback; b9910 nests it under
+    `default_generation_settings`).
+  - `supportsVision ← modalities.vision === true`. Absent/unmapped → undefined
+    → vision off.
+- **`fetchServerProps` never throws.** Timeout / non-2xx / malformed JSON all
+  resolve to `{}`; the caps stay whatever they were and the models fetch and
+  connection are untouched (I3-adjacent — a `/props` failure is invisible).
+- **Gating** mirrors the reasoning payload (I-RS1): keyed on the PERSISTED
+  `serverType`, never live detection. The fetch is co-located in
+  `fetchModelsForServer`, reusing the add / hydration / throttled-foreground
+  triggers — no new scheduler.
+- **Token accounting** (chat-flow §token snapshot): a remote turn's used-token
+  total is sourced from the server `timings` object already captured on the
+  finish chunk — `timings.prompt_n → tokens_evaluated`, `timings.predicted_n →
+  tokens_predicted` (server count wins over the per-event tally, each key
+  guarded independently). No request-body change; `usage`/`include_usage` is
+  not used. Absent timings → prior behaviour (predicted-only per-event count).
+
+### Decisions
+
+| ID | Decision | Rationale |
+| --- | --- | --- |
+| D14 | Caps as optional fields on `ServerConfig` | /props is server-scoped; reuses the persisted single-writer. |
+| D15 | /props gated on persisted `serverType==='llama.cpp'` | Only llama.cpp serves it; never live detection. |
+| D16 | /props fetch co-located in `fetchModelsForServer` | Reuses add/hydration/foreground triggers; no new scheduler. |
+| D17 | /props failure is a silent no-op | Must not break the models fetch or the connection. |
+| D18 | Remote used-tokens from `timings.prompt_n/predicted_n` | Already default-emitted + captured; `usage` needs a request-body opt-in. |

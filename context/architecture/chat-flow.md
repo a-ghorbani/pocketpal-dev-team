@@ -41,12 +41,18 @@ ask "is this an architecture change?" before approving.
 - **One banner variant per render.** `resolveBannerVariant` is pure and
   returns exactly one of context-full / context-warning /
   context-remote-hedged / html-soft-cap / none. The context-* variants
-  are suppressed when no `LlamaContext` is loaded
-  (`activeModelId === undefined`). The nCtx-reading variants (context-full,
-  context-warning) additionally require a known runtime n_ctx
-  (`activeContextSettings.n_ctx`); context-remote-hedged does not read
-  n_ctx (remote models never set `activeContextSettings.n_ctx`) and gates
-  on a loaded model only. html-soft-cap is independent of model state.
+  are suppressed when no model is loaded (`activeModelId === undefined`).
+  The nCtx-reading variants (context-full, context-warning) additionally
+  require a known runtime n_ctx (`effectiveNCtx`). For a local model
+  `effectiveNCtx = activeContextSettings.n_ctx`; for a remote llama.cpp
+  model, `BannerRow` falls back to the server's `/props`-reported
+  `ServerConfig.contextLength` (remote-servers §8) — so a remote llama.cpp
+  model with a discovered window can now resolve context-full/context-warning
+  too. A remote model without a known window keeps `effectiveNCtx` undefined
+  → context-remote-hedged-or-none. `activeContextSettings.n_ctx` remains
+  local-only; the remote window enters solely via `BannerRow`'s cross-store
+  read, never written to `activeContextSettings`. html-soft-cap is
+  independent of model state.
 - **Loaded n_ctx is the user's only runtime signal.** Every reload path
   (Settings, the banner CTA, Models screen, auto-load) honors
   `contextInitParams.n_ctx` by construction; there is no hidden state
@@ -70,6 +76,9 @@ Session
                                             //     finishReason?, isRemote }
                                             //   used = tokens_evaluated + tokens_predicted
                                             //   (tokens_cached unavailable at the boundary)
+                                            //   remote llama.cpp: both counts sourced from
+                                            //   server timings.prompt_n / predicted_n
+                                            //   (openai.ts), so used reflects prompt+predicted
             copyable?        : boolean      // turn has user-visible content worth copying
             interrupted?     : boolean      // run failed/aborted with partial content
             truncationLikely?: true         // set ONLY when the tool-args JSON
@@ -1109,13 +1118,19 @@ returns exactly one of five variants in this precedence order:
    (reappears next turn if still full); also exits via auto-clear when
    the next turn satisfies `used < nCtx - AUTOCLEAR_RUNWAY` AND no §4a
    match, and when the snapshot is invalidated by a message edit/regenerate.
-2. `context-warning` — local session, `ratio >= WARNING_THRESHOLD` (0.80),
-   not `contextFull`. Per-draft dismiss, reappears next turn if still
-   triggered.
+2. `context-warning` — `ratio >= WARNING_THRESHOLD` (0.80), not
+   `contextFull`, and a known `effectiveNCtx`. Fires for a local session and
+   for a remote llama.cpp session once its `/props` window is known (the
+   local-only guard was dropped); a remote session without a discovered
+   window falls through (its `effectiveNCtx` is undefined). Per-draft
+   dismiss, reappears next turn if still triggered.
 3. `context-remote-hedged` — remote session, weak-signal heuristic
    (all of: `finishReason !== 'length'`, `tokensPredicted >= 500`,
-   `content` doesn't end on terminal punctuation). Per-draft dismiss;
-   re-derives every render.
+   `content` doesn't end on terminal punctuation). The `finishReason !==
+   'length'` exclusion is retained: a remote length-truncation now routes to
+   the freshness-gated context-full branch, so a `max_tokens` cap well below
+   the window (fails the freshness gate) yields no banner rather than a false
+   full. Per-draft dismiss; re-derives every render.
 4. `html-soft-cap` — `htmlPreviewCount >= 4`. Existing rule preserved;
    context variants take precedence so the visible bug (truncated
    replies) wins over the preventative hint.
