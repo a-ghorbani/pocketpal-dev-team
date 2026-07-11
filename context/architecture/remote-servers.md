@@ -218,6 +218,7 @@ handleServerChipPress reads server.requestTimeoutMs → passes 600000 ms to fetc
 | Server-type detection probe (`detectServerType`) | Unaffected — keeps fixed `DETECT_TIMEOUT_MS`. |
 | Healthy long stream exceeding the timeout in total wall-clock | Runs indefinitely; idle timer resets per chunk (I4). |
 | Edit-time field empty / mid-typing on the probe | Falls through to undefined → probe uses API default (I1); no crash. |
+| iOS Local Network permission (any LAN-address server) | All flows in this doc presuppose the OS grant. `NSLocalNetworkUsageDescription` in `ios/PocketPal/Info.plist` makes iOS prompt on the app's first LAN request; on iOS 18.x a missing key silently denies instead (no prompt, toggle off in Settings, NSURLError -1009 — indistinguishable from a dead server; Safari is exempt, so it's a misleading control). Already-denied devices don't re-prompt — recovery is Settings → Privacy & Security → Local Network. Simulator never enforces; physical-device-only behaviour. |
 
 ---
 
