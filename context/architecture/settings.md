@@ -186,7 +186,7 @@ monolithic `src/screens/SettingsScreen/SettingsScreen.tsx`. The section is a new
 and **before** the API Settings card (`l10n.settings.apiSettingsTitle`). It
 carries:
 
-- **Provider picker** — Tavily (default), Brave, Exa; Parallel is listed but
+- **Provider picker** — Brave (default), Tavily, Exa; Parallel is listed but
   gated (not selectable as the active provider until its free-tier/PAYG terms
   are confirmed). Active provider written by
   `searchProviderStore.setActiveProvider`.

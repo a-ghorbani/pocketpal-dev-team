@@ -85,15 +85,22 @@ Engines stay pure — they neither produce nor read metrics.
   `{type:'text'}` page on success. `web_search` resolves to a `{type:'search'}`
   result carrying structured `results[]` for `WebSearchTalentUI` AND the wrapped
   menu as `summary` (the model-facing payload — `summary` behaves exactly like a
-  `{type:'text'}` result for the runner). The `summary` menu is labeled blocks:
-  a `Web search results for "…" (retrieved YYYY-MM-DD):` header, then per-hit
-  `Title:` / `URL:` / `Published:` (when present) / `Content:` (when non-empty)
-  lines — the shape canonical search-tool servers feed models. Both return
+  `{type:'text'}` result for the runner). The `summary` menu is markdown: a
+  `## Web search results for "…" (retrieved YYYY-MM-DD)` header, then one bullet
+  per hit — `- **title**` with an italic `*(publishedAt)*` suffix when present,
+  the snippet indented on the next line (omitted when empty), and the
+  angle-bracketed `<url>` last; bullets are not blank-line separated. Title falls
+  back to the URL when the provider gives none. Both return
   `{type:'error'}` on not-enabled / no-results / timeout / transport — never a
   silent no-op; the no-results summary appends "Try a shorter or less
   restrictive query." as the model's in-band retry steer.
-  - **Minimal descriptions + grounding system line**: both tool descriptions
-    are capability-only statements. The behavioural steering (today's date,
+  - **Task-shaped descriptions + grounding system line**: both tool descriptions
+    state when to reach for the tool, not just what it does — `web_search` names
+    the change-prone domains (news, prices, releases, sports, weather) and steers
+    the model to short keyword queries (2–6 words) rather than full sentences;
+    `read_url` says to use it when a snippet mentions but does not contain the
+    answer, and to pass an exact URL copied from a result rather than invent one.
+    The rest of the behavioural steering (today's date,
     search-first policy, tool-call budget = agent turn cap − 1,
     answer-from-results + cite URLs, say-so when results lack the answer)
     lives in ONE grounding system message that `prepareCompletion`
@@ -130,7 +137,11 @@ Engines stay pure — they neither produce nor read metrics.
   A single pure `searchBudget` util owns the on-device budgeting
   (count cap, plain-text strip, word-boundary snippet cap with char-boundary
   fallback for space-less scripts, token ceiling with trailing-drop, bounded
-  in-session cache invalidated on key/consent/provider change); the provider
+  in-session cache invalidated on key/consent/provider change). `budgetHits`
+  takes the caller's per-hit renderer and charges the ceiling against the
+  **rendered** bullet, not the raw fields — markdown and indentation are part of
+  what the model receives, so estimating from raw fields under-counts the real
+  payload and leaks past the cap. The provider
   adapters (`src/services/search/providers/`) only normalize wire JSON to a
   common `SearchHit` / `PageContent` shape and bound each response body before
   buffering. BYOK keys live only in Keychain, one entry per provider under
