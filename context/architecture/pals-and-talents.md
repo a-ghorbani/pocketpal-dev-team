@@ -103,12 +103,20 @@ Engines stay pure — they neither produce nor read metrics.
     The rest of the behavioural steering (today's date,
     search-first policy, tool-call budget = agent turn cap − 1,
     answer-from-results + cite URLs, say-so when results lack the answer)
-    lives in ONE grounding system message that `prepareCompletion`
-    (`useChatSession.ts`) appends when the session's tools include a search
-    talent (`resolveSearchGroundingMessage`,
-    `src/utils/systemPromptResolver.ts`). It is a separate system message —
-    the pal's own prompt is never modified — placed in the initial messages
-    array so it rides every follow-up tool turn. Network
+    is grounding text that `prepareCompletion` (`useChatSession.ts`) adds when
+    the session's tools include a search talent
+    (`resolveSearchGroundingMessage`, `src/utils/systemPromptResolver.ts`).
+    **The request carries at most ONE system message**: the grounding is
+    MERGED into the pal's system message (`mergeSearchGrounding` joins them
+    with a blank line, pal prompt first), and becomes the sole system message
+    when the pal has no prompt. It must not be a second system message — many
+    chat templates accept a system message only as the first message and
+    `raise_exception('System message must be at the beginning.')` otherwise,
+    which fails template rendering and kills the whole completion. The merge
+    happens at request-assembly time only: the pal's STORED system prompt is
+    never modified. The result sits in the initial messages array so it rides
+    every follow-up tool turn. Invariant guarded by a
+    `system messages === 1` assertion in the `useChatSession` tests. Network
   and Keychain reads are permitted side effects behind the engine boundary
   (I4); the engines read the active provider, whether search may run, and the
   result count through an **accessor injected as a constructor argument** at
