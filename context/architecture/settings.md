@@ -48,6 +48,13 @@ the Background Download row (§4). (C)
 3. **App Settings sub-screen** (`AppSettingsScreen`, pushed route): Dark Mode,
    Background Download, Language, TTS availability, and (iOS-only) Display
    Memory Usage. (D)
+   - **Language** is the self-contained `LanguageSelector`
+     (`src/components/LanguageSelector/`): a content-sized trigger plus the
+     shared `SearchableSelectSheet` (title, search field, full-bleed rows,
+     check mark on the active row). It replaced the Paper `Menu` anchored to an
+     outlined `Button`, which was width-capped at 170px and unbounded in height.
+     Because it is a component, the later `AppSettingsScreen` relocation is
+     verbatim (I_S1). §10 owns its contract. (C)
 4. **About App** maps to the existing `AboutScreen` (`ROUTES.APP_INFO`),
    reskinned in place — not a new screen. Its Send-feedback sheet and
    Feedback-sent toast are AboutScreen's existing `submitFeedback` flow. (D)
@@ -97,6 +104,42 @@ rendering it would be net-new behaviour plus a new persisted field. (D)
   not-registered variant and never reads account state here; the registered
   variant is implemented but dormant.
 
+**Language picker (I_L\*)** — the `LanguageSelector` + `SearchableSelectSheet`
+control (§1.3, §10):
+
+- **I_L1 — No option truncates.** Full-bleed row width is the guarantee: no
+  fixed pixel width on a row or a label, at any locale, in any script. The rows'
+  `numberOfLines={1}` is a defensive cap that must not engage at any supported
+  locale; if a future label overflows it, the cap is raised, never the row
+  narrowed.
+- **I_L2 — Trigger content-sized, never fixed-width.** The trigger sizes to its
+  label. A single-line overflow guard is permitted but must not engage at any
+  supported locale; the full value is in the sheet and the a11y label.
+- **I_L3 — Bounded height, locale-count-independent.** The open picker occupies
+  the same screen fraction at 14, 20 or 40 locales; overflow scrolls inside the
+  sheet. No dimension is a function of `supportedLanguages.length`.
+- **I_L4 — Query is per-open.** The search query resets on every close path,
+  dismiss *and* selection, so reopening always shows the full list.
+- **I_L5 — Every label carries a Latin handle.** Every `languageDisplayNames`
+  entry contains its parenthesised uppercase locale code, so every locale is
+  reachable by ASCII typing. Guarded structurally in
+  `src/locales/__tests__/locales.test.ts`. This is a property of the language
+  surface, not of `SearchableSelectSheet` (the TTS call site's labels carry no
+  code suffix).
+- **I_L6 — RTL by auto-flip only.** Direction comes from `flexDirection: 'row'`
+  plus symmetric padding. Text alignment follows the *layout* direction, not the
+  script: both the search input and the row label are pinned with
+  `textAlign: I18nManager.isRTL ? 'right' : 'left'`. `textAlign: 'auto'` is
+  forbidden here — it resolves to natural (first-strong) alignment, so an RTL UI
+  flips the field mid-keystroke as soon as a Latin code is typed, and Hebrew /
+  Persian rows detach to the opposite edge from every other row in an LTR UI. No
+  `translateX`, no absolute `left`/`right`, no anchor maths.
+- **I_L7 — testID freeze (inherits I_S3).** `language-selector-button` and
+  `language-option-<lang>` survive on the same controls; new testIDs are
+  additive leaves only.
+- **I_L8 — Single writer.** `uiStore.setLanguage()` remains the only writer of
+  `_language` (`theming.md I6`).
+
 ---
 
 ## 4. Background Download row
@@ -124,8 +167,21 @@ ctor default is unchanged. (C)
 | search `resultCount` | `searchProviderStore.setResultCount` |
 | `hasConsentedToSearch` | `searchProviderStore.setConsent` |
 
+Component-local state, for completeness: `LanguageSelector` owns `sheetOpen`;
+`SearchableSelectSheet` owns its search `query`. Neither is store state.
+
 Cross-store reads: launcher and sub-screens read these fields as observers only;
 no new write coupling, no multi-writer.
+
+**Deferred cleanups** (known, out of scope of the language-picker slice):
+
+1. The three remaining `styles.menu` Paper menus on `SettingsScreen` (key-cache,
+   value-cache, search-provider) — same 170px truncation class on out-of-scope
+   controls. `styles.menu` is shared by all four menus, so it stayed untouched
+   when the language menu was removed.
+2. English-name / ISO alias search terms so "chinese" matches `中文 (ZH)`.
+3. Renaming `Português (PT_BR)` → `Português (BR)`.
+4. Splitting the TTS call site's snap point if the two pickers later diverge.
 
 ---
 
@@ -145,6 +201,11 @@ App Settings sub-screen:
 Launcher rows (nav, kept reachable — I_S2):
   settings-nav-benchmark, settings-nav-app-info, settings-nav-dev-tools
 ```
+
+Additive language-picker testIDs: `language-sheet` (the sheet container, waited
+on by the e2e page object because the sheet animates in and out) and
+`language-search` (its search field). Both are new leaves; the frozen
+`language-selector-button` / `language-option-*` are unchanged (I_L7).
 
 Additive launcher-row testIDs (`settings-nav-<row>`) name the remaining rows:
 `settings-nav-preferences`, `settings-nav-app-settings`, `settings-nav-models`,
@@ -174,6 +235,25 @@ directly are migrated in later slices.
 | D6 | New `settings.md` flow doc; app-shell stays nav-only | Settings is now a multi-screen flow |
 | D7 | Dissolve Advanced accordion into flat Preferences rows | Figma shows flat stacked containers |
 | D8 | Seed omitted | No store field/control exists; net-new behaviour + persistence |
+
+Language picker (§1.3, §10):
+
+| ID | Decision | Rationale |
+| --- | --- | --- |
+| DL1 | Reuse `SearchableSelectSheet` unchanged in shape | Same problem already solved for TTS locales |
+| DL2 | Keep search on at 14 items | Recovery from an unreadable locale; also deterministic e2e |
+| DL3 | Fixed snap point, not item-count sizing | Height must not track locale count (I_L3) |
+| DL4 | Registry order; no recents, no selected-first | Stable order for muscle memory and tests |
+| DL5 | Extract a `LanguageSelector` component | Later `AppSettingsScreen` move stays verbatim |
+| DL6 | Filter on label only; no English-name aliases | The `(CODE)` suffix already gives every locale a Latin handle |
+| DL7 | Not a Figma parity slice | Canonical file specifies no picker component |
+| DL8 | Fix query-reset + empty state in the shared component | Both are load-bearing invariants here |
+
+Rejected: capping the Paper `Menu` (anchored popup width stays layout-fragile,
+and `Menu` is on the `theming.md §4g` final-state blocklist); a sheet without
+search (leaves a user stranded in an unreadable locale scrolling, and leaves
+virtualized rows untappable in e2e); the DS `Dropdown` (wraps Paper `Menu`
+directly per `theming.md D25`, so it inherits the exact defect).
 
 ---
 
@@ -221,3 +301,40 @@ adapters, and the `searchBudget` util) lives in `pals-and-talents.md`.
 `AppSettingsScreen`), this section moves verbatim into the App Settings
 sub-screen as an app-level pref — same store, same writers, same testIDs, no
 behaviour change (I_S1).
+
+---
+
+## 10. Language picker
+
+`LanguageSelector` (`src/components/LanguageSelector/`) renders a trigger
+(`language-selector-button`, showing `languageDisplayNames[uiStore.language]`
+plus a chevron, content-sized) and the shared `SearchableSelectSheet`
+(`language-sheet`, `language-search`, rows `language-option-<lang>`). It owns
+only `sheetOpen`; options are derived, not stored:
+`uiStore.supportedLanguages.map(l => ({value: l, label: languageDisplayNames[l]}))`
+in registry order. Selection calls `uiStore.setLanguage` and closes the sheet.
+(C)
+
+Behaviour: the sheet opens at a fixed snap point with the search field **not**
+autofocused; typing filters rows case-insensitively on the label, so the
+parenthesised locale code is a Latin handle for every locale; a query that
+matches nothing renders an empty-state row and the sheet stays open; the query
+resets on every close path. Display-name strings are unchanged — the layout does
+not depend on shortening them. (C)
+
+Shared-component scope: `SearchableSelectSheet` also backs the TTS Supertonic
+language picker (`tts-hero-language-picker`), so the query-reset and empty-state
+behaviour above applies there too. It renders nothing language-specific — its
+empty-state copy comes from `common`, never from `settings`. (C)
+
+RTL is not e2e-reachable (the app never calls `I18nManager.forceRTL`), so I_L6
+is verified by an RTL capture with a Latin query typed into the search field,
+via simulator launch args. (C)
+
+e2e contract: `language-selector-button` / `language-option-<lang>` are frozen,
+so `e2e/specs/features/language.spec.ts` is unchanged. The page object changes
+internals only — `openLanguageMenu()` waits for `language-sheet` to be displayed
+(the sheet animates in, where the popup was synchronous), and `selectLanguage()`
+types the language code into `language-search` before tapping the row
+(`BottomSheetFlatList` virtualizes; an unrendered row is not tappable) and then
+waits for `language-sheet` to disappear before returning. (C)
