@@ -129,7 +129,10 @@ calls to `/v1/chat/completions` and `/v1/models`. The Ollama server-type probe
   (`resolveTimeout`): a `timeoutMs` argument that is `undefined`, `≤ 0`, `NaN`,
   or non-finite maps to the supplied default. Stores, the engine, and both
   sheets forward the raw stored/in-edit value (possibly undefined) untouched.
-  The API layer never sets a deadline of 0 or negative.
+  The API layer never sets a deadline of 0 or negative. One exception, and only
+  downwards: the detached `/props` capability probe clamps to
+  `PROPS_TIMEOUT_MS` before calling (§8 Bound) — no other path caps a
+  user-visible request.
 - **I2**: `ServerStore` (`addServer` / `updateServer`) is the only writer of
   `requestTimeoutMs`. `ServerConfig.contextLength` and
   `ServerConfig.supportsVision` have **no writer at all** — they are read-only
@@ -166,14 +169,15 @@ component-local `parseTimeoutMs(seconds)`: empty/invalid/non-positive →
 | Field | Single writer |
 | --- | --- |
 | `ServerConfig.requestTimeoutMs` | `ServerStore.updateServer` / `ServerStore.addServer` |
-| `ServerStore.remoteCaps` | `ServerStore.fetchRemoteModelCaps` (+ the `removeServer` prefix prune) |
+| `ServerStore.remoteCaps` | `ServerStore.fetchRemoteModelCaps` (+ the `removeServer` / `updateServer` prefix prunes) |
 | `ServerConfig.contextLength` / `supportsVision` | none — read-only legacy |
 
 Cross-store reads: `ModelStore.setRemoteModel` reads
 `serverStore.servers[].requestTimeoutMs` to build the engine (one direction,
 ModelStore ← ServerStore — the same place it already reads `url`/apiKey). It
-also *calls* `serverStore.fetchRemoteModelCaps` on activation (§8) — a call in
-the same direction, never a write: `ModelStore` never touches `remoteCaps`.
+also *calls* `serverStore.fetchRemoteModelCaps` on activation and on foreground
+with unknown caps (§8) — a call in the same direction, never a write:
+`ModelStore` never touches `remoteCaps`.
 `ChatScreen`, `BannerRow` and `ModelStore.isMultimodalEnabled` reach
 `remoteCaps` and `servers` only through `resolveRemoteCaps`
 (`src/utils/remoteCaps.ts`), so the UI and the send path cannot disagree.
@@ -331,9 +335,11 @@ with its loaded model.
 
 ```
 user selects a remote model (ModelStore.selectModel → setRemoteModel)
+  OR app returns to foreground with the active remote model's caps unknown
   serverType === 'llama.cpp'  ───────────────────────────────── else: no request
-    ServerStore.fetchRemoteModelCaps(serverId, remoteModelId)   // DETACHED
-      fetchServerProps(url, apiKey, requestTimeoutMs, remoteModelId)
+    ServerStore.fetchRemoteModelCaps(serverId, remoteModelId, apiKey?)  // DETACHED
+      (apiKey passed on the activation path — already resolved for the engine)
+      fetchServerProps(url, apiKey, min(requestTimeoutMs, PROPS_TIMEOUT_MS), remoteModelId)
         GET {baseUrl}/props?model=<encodeURIComponent(remoteModelId)>
           [caps resolved] → remoteCaps[`${serverId}/${remoteModelId}`] merged field-wise
           [{}] and single-model gate passes → GET {baseUrl}/props (bare, ONE retry)
@@ -344,18 +350,37 @@ user selects a remote model (ModelStore.selectModel → setRemoteModel)
 
 - **Trigger is model activation**, not the models fetch. `fetchModelsForServer`
   issues no `/props` request. Capability is a property of a model, and only the
-  active model is ever read; activation is also the only trigger, so there is no
-  second writer to race (the pre-per-model shape let a throttled foreground
-  refresh clobber a good result back to the placeholder).
+  active model is ever read.
+- **Second trigger: foreground with unknown caps.** `ModelStore`'s existing
+  foreground `AppState` branch calls `fetchRemoteModelCaps` for the active
+  remote model **iff** `remoteCaps` has no entry for it (detached, `.catch`-
+  guarded, and `ModelStore` still never writes caps). Without it, activation is
+  the sole trigger and remote models are exempt from auto-release
+  (model-loading), so one torn-down probe leaves caps unknown for the whole
+  session with no recovery but manually re-selecting the model — the likeliest
+  case being iOS Local Network (§ permissions), where the first probe is the
+  request that raises the prompt and nothing re-probes after the grant. The
+  gate is what keeps this from becoming a racing second writer: a populated
+  entry is never re-fetched, so a good result can never be clobbered back to
+  the placeholder (the failure mode the pre-per-model shape had, where a
+  throttled foreground *models* refresh re-probed unconditionally). It lives in
+  `ModelStore`, not in `ServerStore`'s own foreground branch, because
+  `ServerStore` cannot see the active model without a `ServerStore` →
+  `ModelStore` import cycle.
 - **Detached probe.** `setRemoteModel` calls it off its awaited path
   (`.catch`-guarded), so a lazily-starting server cannot delay model activation,
   the engine build, or the chat screen. Worst case is two sequential requests,
   i.e. 2× the resolved bound; nothing user-facing waits on it.
-- **Bound.** `fetchServerProps` resolves its deadline through the shared
-  `resolveTimeout(timeoutMs, PROPS_TIMEOUT_MS)`, so callers forward the server's
-  raw `requestTimeoutMs` (I1) and an unusable `0` / `NaN` / negative falls back
-  to 5000 rather than aborting instantly. Call sites never pass
-  `PROPS_TIMEOUT_MS` themselves.
+- **Bound.** `PROPS_TIMEOUT_MS` (5000) is both floor-fallback and ceiling for
+  the probe, and this is the one place where a caller does *not* forward the
+  server's raw `requestTimeoutMs` (the I1 exception). `fetchRemoteModelCaps`
+  clamps with `Math.min(requestTimeoutMs ?? PROPS_TIMEOUT_MS,
+  PROPS_TIMEOUT_MS)` — a shorter server timeout is honoured, a longer one is
+  not — and `fetchServerProps` still resolves the clamped value through the
+  shared `resolveTimeout(timeoutMs, PROPS_TIMEOUT_MS)`, so an unusable `0` /
+  `NaN` / negative falls back to 5000 rather than aborting instantly. Without
+  the ceiling, `requestTimeoutMs` being a free unclamped numeric input would
+  put an unbounded amount of detached in-flight work behind every activation.
 - **Bare retry is gated (single-model gate).** The bare form is issued only when
   the scoped probe yielded `{}`, a model id was supplied, and
   `serverModels.get(serverId)` is an array of length exactly 1 whose `[0].id`
@@ -374,12 +399,29 @@ user selects a remote model (ModelStore.selectModel → setRemoteModel)
     `modalities` key is a definite `false` — those builds have no vision path,
     and a definite `false` fails closed. `role: 'router'` corroborates the
     placeholder but is not what the rule tests.
+- **Write is guarded and re-checked.** Inside the `runInAction`, the server is
+  re-read and its `url` / `serverType` compared against the values snapshotted
+  when the probe started; a mismatch (or a gone server) discards the answer,
+  because it describes a backend that is no longer configured and its key has
+  already been pruned. A merge that changes no field is not written at all,
+  matching the `remoteReasoning` writer.
 - **Write is a field-wise merge.** `remoteCaps[key] = {...prior, ...caps}`.
   A field the response did not resolve is absent from `caps`, so it leaves the
   prior value untouched; a `{}` result writes nothing. A failing or unusable
   probe therefore never clears, zeroes, or downgrades a known capability — and
   it is not retried in-session; the next probe is the next activation of that
-  model. Entries are pruned by `${serverId}/` prefix in `removeServer`.
+  model.
+- **Invalidation.** Entries are pruned by `${serverId}/` prefix (shared
+  `dropServerEntries` helper) on two events: `removeServer`, and an
+  `updateServer` that changes `url` or `serverType`. Caps describe the
+  configured backend, and `resolveRemoteCaps` consults neither field, so a
+  repointed url or a type flipped away from `llama.cpp` would otherwise freeze
+  stale caps permanently — the writer is gated on `serverType`, the reader is
+  not. `remoteReasoning` is pruned only by `removeServer`: it carries user
+  declarations and is not server-reported. Editing the url under an active
+  model is not a correctness hole in the other direction either — the
+  completion engine is not rebuilt by `updateServer`, so that session still
+  talks to the old url; the pruned caps are re-probed on the next activation.
 - **`fetchServerProps` never throws.** Timeout / non-2xx / malformed JSON all
   resolve to `{}`; a `/props` failure is invisible to the user.
 - **Gating** mirrors the reasoning payload (I-RS1): keyed on the PERSISTED
