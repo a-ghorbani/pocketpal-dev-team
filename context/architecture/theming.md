@@ -181,7 +181,9 @@ The two surfaces **do not cross-feed**. New tokens do not derive from legacy MD3
 - **Theme** — the runtime object consumed via `useTheme()`. A superset of resolved tokens plus MD3/Paper-compat aliases. Built per-render by `buildTheme({mode, language})`.
 - **Mode** — `'light' | 'dark'`. Sourced from `uiStore.colorScheme`. (x1 is gone.)
 - **MD3-compat alias** — a key on `Theme` whose name matches an MD3 / current-code identifier and whose value is preserved verbatim (color) or pinned to today's value (typography). Migration layer, not a permanent API.
-- **Fraunces-fallback set** — locales whose primary script is not covered by the **bundled Fraunces subset**, which is Latin-only (Fontsource's Latin cut — no Cyrillic codepoints). For these, Fraunces tokens fall back to Inter (which ships Latin + Cyrillic; for scripts Inter doesn't cover, the platform falls back to system fonts). For PocketPal's supported languages (`en/fa/he/id/ja/ko/ms/ru/uk/zh/zh_Hant`) the set is `{fa, he, ja, ko, ru, uk, zh, zh_Hant}` — note `ru`/`uk` are included **because the bundled Fraunces has no Cyrillic glyphs**, not because Cyrillic is non-Latin in principle. The code constant is `NON_LATIN_LOCALES` (kept for name stability; the comment there explains the Cyrillic inclusion).
+- **Fraunces-fallback set** — locales whose characters are not covered by the **bundled Fraunces subset**, which is Fontsource's Latin cut: 199 codepoints, stopping at Latin-1 (no Cyrillic, no Latin Extended-A). For these, Fraunces tokens fall back to Inter (2818 codepoints — Latin + Latin Extended-A + Cyrillic; for scripts Inter doesn't cover, the platform falls back to system fonts). For PocketPal's supported languages (`en/fa/he/id/ja/ko/ms/pl/pt/pt_BR/ru/uk/zh/zh_Hant`) the set is `{fa, he, ja, ko, pl, ru, uk, zh, zh_Hant}`. The code constant is `NON_LATIN_LOCALES` (kept for name stability).
+
+  **The membership test is glyph coverage, not script family.** Two entries make that concrete: `ru`/`uk` are included because the bundled Fraunces has no Cyrillic, not because Cyrillic is non-Latin in principle; and `pl` is included even though Polish *is* Latin script, because Latin Extended-A is absent — Fraunces is missing `ą ć ę ł ń ś ź ż` and their capitals, 16 of Polish's 18 diacritics (only `ó`/`Ó` survive, via Latin-1). Portuguese (`pt`, `pt_BR`) needs only Latin-1 (`ã õ ç á é í ó ú â ê ô à`) and correctly stays on Fraunces. A new locale must be checked against the bundled TTFs' `cmap`, never assumed from its script — `yarn verify:fonts` enforces this (see I8) so the check cannot be skipped by inspection.
 - **RTL locale** — `{he, fa}`. RTL mirroring is handled by RN's `I18nManager`; tokens are RTL-safe (no directional values baked in).
 
 ---
@@ -252,6 +254,11 @@ No wire format. The token layer is internal. The only external touchpoint is the
 - React Native: declared once in `react-native.config.js` (`assets: ['./src/assets/fonts']`).
 
 The font family **name** as referenced in code (e.g. `'Fraunces-Regular'`) must match the iOS PostScript name and the Android filename (sans extension). Mismatches are silent — RN falls back to system. Enforced at CI by `scripts/verify-fonts.js` (see I8).
+
+`verify-fonts.js` enforces **two** independent guarantees:
+
+1. **Asset presence** — every `fontFamily` referenced in code is bundled on both platforms (the name↔asset match above).
+2. **Headline glyph coverage** — for every wired locale *not* in `NON_LATIN_LOCALES`, every letter used in its `src/locales/<lang>.json` exists in the bundled Fraunces `cmap`. Only letters are checked: the shared punctuation `— • … → ✓` is absent from Fraunces for every locale including `en`, so it is not a regression. This is what makes the Fraunces-fallback set self-policing — adding a locale whose diacritics Fraunces lacks fails the build with the exact remediation, instead of shipping tofu headlines.
 
 ---
 

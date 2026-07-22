@@ -407,7 +407,7 @@ onboarding.skip                          // visible label + accessibility label 
 (C) Per `FOU-112-rollout.md` §5 + theming.md §4d:
 
 1. RTL (`he`, `fa`): Layout mirrors via RN's `I18nManager.isRTL` flag, which the FOU-114 wiring already toggles per `uiStore.language`. Screens use `start`/`end` semantics (RN built-in), not `left`/`right`, on every container that has directional padding/margin. The Stepper itself reads LTR → RTL by reversing its dot order via `flexDirection: 'row-reverse'` when `I18nManager.isRTL`. Per-screen sanity check: screens 5 and 6 (the two most layout-sensitive) MUST be verified manually in `he` (or `fa`) in HOW.
-2. Non-Latin / CJK: Headlines using `theme.typography.headlineH1` (which is Fraunces in Latin locales) automatically fall back to Inter for `language ∈ {fa, he, ja, ko, ru, uk, zh, zh_Hant}` per theming.md §4d.2. No per-screen handling required — onboarding inherits the token-level swap.
+2. Fraunces-fallback locales: Headlines using `theme.typography.headlineH1` (Fraunces elsewhere) automatically fall back to Inter for `language ∈ {fa, he, ja, ko, pl, ru, uk, zh, zh_Hant}` per theming.md §4d.2. No per-screen handling required — onboarding inherits the token-level swap. Membership is by glyph coverage, not script: `pl` is on the list despite being Latin script because the bundled Fraunces subset lacks Latin Extended-A. Onboarding is the app's main Fraunces headline surface, so it is where such a gap shows up first — the Polish screen-4 title (`Żadne dane nie opuszczają Twojego telefonu.`) is the canonical check.
 
 ### 4l. Visual-parity snapshot strategy for onboarding (additive)
 
