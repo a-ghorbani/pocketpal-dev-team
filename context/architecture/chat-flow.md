@@ -45,14 +45,18 @@ ask "is this an architecture change?" before approving.
   The nCtx-reading variants (context-full, context-warning) additionally
   require a known runtime n_ctx (`effectiveNCtx`). For a local model
   `effectiveNCtx = activeContextSettings.n_ctx`; for a remote llama.cpp
-  model, `BannerRow` falls back to the server's `/props`-reported
-  `ServerConfig.contextLength` (remote-servers §8) — so a remote llama.cpp
-  model with a discovered window can now resolve context-full/context-warning
-  too. A remote model without a known window keeps `effectiveNCtx` undefined
-  → context-remote-hedged-or-none. `activeContextSettings.n_ctx` remains
-  local-only; the remote window enters solely via `BannerRow`'s cross-store
-  read, never written to `activeContextSettings`. html-soft-cap is
-  independent of model state.
+  model, `BannerRow` falls back to
+  `resolveRemoteCaps(activeModel, serverStore.remoteCaps,
+  serverStore.servers).contextLength` — the `/props` window discovered for
+  **that model** (remote-servers §8) — so a remote llama.cpp model with a
+  discovered window can resolve context-full/context-warning too.
+  `effectiveNCtx` is defined only when the resolved window is `> 0`: a window
+  of 0 is unknown, not exhausted, and admitting it would make every ratio 1 and
+  fire a spurious context-full. A remote model without a known window keeps
+  `effectiveNCtx` undefined → context-remote-hedged-or-none.
+  `activeContextSettings.n_ctx` remains local-only; the remote window enters
+  solely via `BannerRow`'s cross-store read, never written to
+  `activeContextSettings`. html-soft-cap is independent of model state.
 - **Loaded n_ctx is the user's only runtime signal.** Every reload path
   (Settings, the banner CTA, Models screen, auto-load) honors
   `contextInitParams.n_ctx` by construction; there is no hidden state
@@ -1127,10 +1131,10 @@ returns exactly one of five variants in this precedence order:
    the increase-context advice) are never shown for remote.
 2. `context-warning` — `ratio >= WARNING_THRESHOLD` (0.80), not
    `contextFull`, and a known `effectiveNCtx`. Fires for a local session and
-   for a remote llama.cpp session once its `/props` window is known (the
-   local-only guard was dropped); a remote session without a discovered
-   window falls through (its `effectiveNCtx` is undefined). Per-draft
-   dismiss, reappears next turn if still triggered.
+   for a remote llama.cpp session once `resolveRemoteCaps` reports a window
+   `> 0` for the active model (the local-only guard was dropped); a remote
+   session without a discovered window falls through (its `effectiveNCtx` is
+   undefined). Per-draft dismiss, reappears next turn if still triggered.
 3. `context-remote-hedged` — remote session, weak-signal heuristic
    (all of: `finishReason !== 'length'`, `tokensPredicted >= 500`,
    `content` doesn't end on terminal punctuation). The `finishReason !==
