@@ -128,12 +128,21 @@ control (§1.3, §10):
   code suffix).
 - **I_L6 — RTL by auto-flip only.** Direction comes from `flexDirection: 'row'`
   plus symmetric padding. Text alignment follows the *layout* direction, not the
-  script: both the search input and the row label are pinned with
-  `textAlign: I18nManager.isRTL ? 'right' : 'left'`. `textAlign: 'auto'` is
-  forbidden here — it resolves to natural (first-strong) alignment, so an RTL UI
-  flips the field mid-keystroke as soon as a Latin code is typed, and Hebrew /
-  Persian rows detach to the opposite edge from every other row in an LTR UI. No
-  `translateX`, no absolute `left`/`right`, no anchor maths.
+  script — but **`Text` and `TextInput` need different expressions**, verified by
+  forced-RTL device capture:
+  - `Text` (row label, empty state): plain `textAlign: 'left'`. RN mirrors
+    `left`/`right` for `Text` under RTL (`RCTTextAttributes.mm`), so `'left'`
+    resolves to the layout start in both directions. An
+    `I18nManager.isRTL ? 'right' : 'left'` ternary **double-flips** and pushes
+    rows to the layout *end* — the exact ragged edge this invariant forbids.
+  - `TextInput` (search field): `textAlign: I18nManager.isRTL ? 'right' : 'left'`.
+    `TextInput` does *not* get that mirroring, so the ternary is required here.
+
+  `textAlign: 'auto'` is forbidden throughout — it resolves to natural
+  (first-strong) alignment, so an RTL UI flips the field mid-keystroke as soon as
+  a Latin code is typed, and Hebrew / Persian rows detach to the opposite edge
+  from every other row in an LTR UI. No `translateX`, no absolute
+  `left`/`right`, no anchor maths.
 - **I_L7 — testID freeze (inherits I_S3).** `language-selector-button` and
   `language-option-<lang>` survive on the same controls; new testIDs are
   additive leaves only.
