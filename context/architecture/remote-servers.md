@@ -25,8 +25,6 @@ ServerConfig                          // src/utils/types.ts
   lastConnected?: number              // (C) timestamp
   requestTimeoutMs?: number           // (C) per-server network timeout, whole ms; undefined = use API default
   serverType?: string                 // (C) user-selectable; gates the reasoning wire payload; undefined = unknown
-  contextLength?: number              // (C) LEGACY. Read-fallback only; no writer.
-  supportsVision?: boolean            // (C) LEGACY. Read-fallback only; no writer.
 
 ServerStore                           // src/store/ServerStore.ts
   remoteReasoning: Record<modelId, ReasoningCapability>  // (C) remote reasoning caps,
@@ -38,6 +36,18 @@ RemoteModelCaps                       // src/utils/types.ts
   contextLength?: number              // (C) /props n_ctx; ONLY ever a finite number > 0
   supportsVision?: boolean            // (C) /props modalities.vision; definite (true/false) only on a
                                       //   model-describing response; undefined = unknown
+  probedUrl?: string                  // (C) the backend these describe; absent = written before the
+                                      //   field existed, taken at face value
+
+ModelStore                            // src/store/ModelStore.ts
+  activeRemoteBinding?: RemoteSessionBinding             // (C) the backend the live remote session
+                                      //   talks to; set with the engine, cleared with it; NOT persisted
+
+RemoteSessionBinding                  // src/utils/types.ts
+  modelId: string                     // (C) `${serverId}/${remoteModelId}` = Model.id
+  serverId / remoteModelId: string    // (C)
+  url: string                         // (C) the url the engine was built from
+  serverType?: string                 // (C) idem
 ```
 
 `serverType` is one of `{llama.cpp, LM Studio, Ollama, OpenAI, vLLM, unknown}`,
@@ -52,18 +62,29 @@ learn-from-stream, single-writer); this doc covers only the remote wire side.
 Capabilities discovered from a llama.cpp `GET /props` response (§8) live in
 `ServerStore.remoteCaps`, keyed per model. `/props` answers per model, so on a
 multi-model server a server-scoped slot can only ever describe "whichever model
-was probed first". The two `ServerConfig` fields of the same name are the
-pre-per-model shape: they have **no writer** left (§2b I2) and are read only as
-a fallback for a config persisted before the move — a persisted
-`contextLength: 0` (a router placeholder) is ignored, since 0 is an unknown
-window, not an empty one.
+was probed first". The pre-per-model `ServerConfig.contextLength` /
+`supportsVision` fields are **gone** (D24/D25 superseded): they had no writer
+after the move, and the writer that filled them shipped after the last release,
+so no persisted store can carry them. Nothing reads a per-server capability any
+more.
+
+**A configured server and a live session are different things.** `ServerConfig`
+is mutable; the completion engine captures `url` / `serverType` when it is built
+and is not rebuilt when the record changes, so after an in-session url edit the
+session still posts to the old backend until the model is selected again.
+`ModelStore.activeRemoteBinding` is that captured backend as readable state, and
+`RemoteModelCaps.probedUrl` is the backend an entry describes. Resolution
+compares the two (§8 Read side); without them the comparison can only be
+approximated from the mutable record, which is where the caps of one backend
+could be attributed to a session on another.
 
 Persisted: `requestTimeoutMs` rides the already-persisted `ServerConfig` inside
 `ServerStore.servers`; `remoteCaps` is its own entry in the `ServerStore`
 `makePersistable` `properties` list (mobx-persist-store → AsyncStorage, key
-`ServerStore`). No migration — an absent field hydrates as undefined (unknown).
-Derived: the resolved caps of the active model (§8), computed at read time by
-`resolveRemoteCaps`, never stored.
+`ServerStore`). No migration — an absent field hydrates as undefined (unknown),
+including `probedUrl`. The binding is deliberately **not** persisted: a session
+does not survive a launch. Derived: the resolved caps of the active model (§8),
+computed at read time by `resolveRemoteCaps`, never stored.
 
 ### 1a. Glossary
 
@@ -134,11 +155,10 @@ calls to `/v1/chat/completions` and `/v1/models`. The Ollama server-type probe
   `PROPS_TIMEOUT_MS` before calling (§8 Bound) — no other path caps a
   user-visible request.
 - **I2**: `ServerStore` (`addServer` / `updateServer`) is the only writer of
-  `requestTimeoutMs`. `ServerConfig.contextLength` and
-  `ServerConfig.supportsVision` have **no writer at all** — they are read-only
-  legacy, superseded by `ServerStore.remoteCaps`, whose sole writer is
-  `ServerStore.fetchRemoteModelCaps` (§3). `openai.ts`, `ModelStore`,
-  `OpenAICompletionEngine`, `BannerRow`, and both sheets only read/forward.
+  `requestTimeoutMs`, and `ServerStore.fetchRemoteModelCaps` is the sole writer
+  of `remoteCaps` (§3). No per-server capability field exists any more.
+  `openai.ts`, `ModelStore`, `OpenAICompletionEngine`, `BannerRow`, and both
+  sheets only read/forward.
 - **I3**: A persisted `ServerConfig` from a prior app version (no
   `requestTimeoutMs`) behaves identically to before (defaults apply). No
   migration, no crash.
@@ -146,6 +166,12 @@ calls to `/v1/chat/completions` and `/v1/models`. The Ollama server-type probe
   idle-between-chunks), NOT the total wall-clock of a long successful stream. A
   healthy stream emitting tokens within the timeout interval runs indefinitely
   (the idle timer resets on each chunk).
+- **I5**: Capabilities are never read on behalf of a backend they were not
+  probed against. An entry whose `probedUrl` disagrees with
+  `activeRemoteBinding.url` for that model resolves to unknown, which fails
+  closed: attach off, no window for the banners. The binding is defined exactly
+  while a remote engine exists, so "no binding" and "no live session" are the
+  same state, and an entry is then taken at face value.
 
 ### 2c. Component renders
 
@@ -170,17 +196,19 @@ component-local `parseTimeoutMs(seconds)`: empty/invalid/non-positive →
 | --- | --- |
 | `ServerConfig.requestTimeoutMs` | `ServerStore.updateServer` / `ServerStore.addServer` |
 | `ServerStore.remoteCaps` | `ServerStore.fetchRemoteModelCaps` (+ the `removeServer` / `updateServer` prefix prunes) |
-| `ServerConfig.contextLength` / `supportsVision` | none — read-only legacy |
+| `ServerStore.serverModels` | `ServerStore.fetchModelsForServer` (+ the same two prunes) |
+| `ModelStore.activeRemoteBinding` | `ModelStore.setRemoteModel` (set) / the engine-clearing paths in `initContext` and `releaseContext` (clear) |
 
 Cross-store reads: `ModelStore.setRemoteModel` reads
 `serverStore.servers[].requestTimeoutMs` to build the engine (one direction,
 ModelStore ← ServerStore — the same place it already reads `url`/apiKey). It
 also *calls* `serverStore.fetchRemoteModelCaps` on activation and on foreground
-with unknown caps (§8) — a call in the same direction, never a write:
+without valid caps for the binding (§8) — a call in the same direction, never a write:
 `ModelStore` never touches `remoteCaps`.
 `ChatScreen`, `BannerRow` and `ModelStore.isMultimodalEnabled` reach
-`remoteCaps` and `servers` only through `resolveRemoteCaps`
-(`src/utils/remoteCaps.ts`), so the UI and the send path cannot disagree.
+`remoteCaps` only through `resolveRemoteCaps` (`src/utils/remoteCaps.ts`), each
+passing `modelStore.activeRemoteBinding`, so the UI and the send path cannot
+disagree — with each other or with the backend they are describing.
 
 ---
 
@@ -242,6 +270,7 @@ handleServerChipPress reads server.requestTimeoutMs → passes 600000 ms to fetc
 | Healthy long stream exceeding the timeout in total wall-clock | Runs indefinitely; idle timer resets per chunk (I4). |
 | Edit-time field empty / mid-typing on the probe | Falls through to undefined → probe uses API default (I1); no crash. |
 | iOS Local Network permission (any LAN-address server) | All flows in this doc presuppose the OS grant. `NSLocalNetworkUsageDescription` in `ios/PocketPal/Info.plist` makes iOS prompt on the app's first LAN request; on iOS 18.x a missing key silently denies instead (no prompt, toggle off in Settings, NSURLError -1009 — indistinguishable from a dead server; Safari is exempt, so it's a misleading control). Already-denied devices don't re-prompt — recovery is Settings → Privacy & Security → Local Network. Simulator never enforces; physical-device-only behaviour. |
+| Server url edited while a remote model is active | The session keeps posting to the old backend (the engine is not rebuilt), so its capabilities stay bound to that url: pruned entries are not re-probed while the two disagree, and a probe that did land from the new url does not resolve for this session (I5). Re-selecting the model rebuilds the binding and re-probes (§8). |
 
 ---
 
@@ -334,14 +363,15 @@ model's real properties. A single-model `llama-server` answers the bare form
 with its loaded model.
 
 ```
-user selects a remote model (ModelStore.selectModel → setRemoteModel)
-  OR app returns to foreground with the active remote model's caps unknown
+user selects a remote model (ModelStore.selectModel → setRemoteModel; binding set)
+  OR app returns to foreground with no caps valid for the active model's binding
   serverType === 'llama.cpp'  ───────────────────────────────── else: no request
     ServerStore.fetchRemoteModelCaps(serverId, remoteModelId, apiKey?)  // DETACHED
-      (apiKey passed on the activation path — already resolved for the engine)
+      (apiKey forwarded on the activation path; undefined for a keyless server,
+       which the probe cannot tell from "not supplied", so it reads the Keychain)
       fetchServerProps(url, apiKey, min(requestTimeoutMs, PROPS_TIMEOUT_MS), remoteModelId)
         GET {baseUrl}/props?model=<encodeURIComponent(remoteModelId)>
-          [caps resolved] → remoteCaps[`${serverId}/${remoteModelId}`] merged field-wise
+          [caps resolved] → remoteCaps[`${serverId}/${remoteModelId}`] = merge + probedUrl
           [{}] and single-model gate passes → GET {baseUrl}/props (bare, ONE retry)
             [caps resolved] → merged as above
             [{}]            → no-op; prior entry (if any) untouched
@@ -351,18 +381,22 @@ user selects a remote model (ModelStore.selectModel → setRemoteModel)
 - **Trigger is model activation**, not the models fetch. `fetchModelsForServer`
   issues no `/props` request. Capability is a property of a model, and only the
   active model is ever read.
-- **Second trigger: foreground with unknown caps.** `ModelStore`'s existing
+- **Second trigger: foreground with no valid caps.** `ModelStore`'s existing
   foreground `AppState` branch calls `fetchRemoteModelCaps` for the active
-  remote model **iff** `remoteCaps` has no entry for it (detached, `.catch`-
-  guarded, and `ModelStore` still never writes caps). Without it, activation is
+  remote model **iff** `remoteCaps` holds no entry valid for its binding —
+  absent, or present with a `probedUrl` describing another backend (detached,
+  `.catch`-guarded, and `ModelStore` still never writes caps). It is skipped
+  outright once the server record has been repointed away from the binding:
+  the probe would read a backend this session never talks to, and could not
+  produce caps this session could use. Without it, activation is
   the sole trigger and remote models are exempt from auto-release
   (model-loading), so one torn-down probe leaves caps unknown for the whole
   session with no recovery but manually re-selecting the model — the likeliest
   case being iOS Local Network (§ permissions), where the first probe is the
   request that raises the prompt and nothing re-probes after the grant. The
-  gate is what keeps this from becoming a racing second writer: a populated
-  entry is never re-fetched, so a good result can never be clobbered back to
-  the placeholder (the failure mode the pre-per-model shape had, where a
+  gate is what keeps this from becoming a racing second writer: an entry that
+  is valid for the binding is never re-fetched, so a good result can never be
+  clobbered back to the placeholder (the failure mode the pre-per-model shape had, where a
   throttled foreground *models* refresh re-probed unconditionally). It lives in
   `ModelStore`, not in `ServerStore`'s own foreground branch, because
   `ServerStore` cannot see the active model without a `ServerStore` →
@@ -403,37 +437,52 @@ user selects a remote model (ModelStore.selectModel → setRemoteModel)
   re-read and its `url` / `serverType` compared against the values snapshotted
   when the probe started; a mismatch (or a gone server) discards the answer,
   because it describes a backend that is no longer configured and its key has
-  already been pruned. A merge that changes no field is not written at all,
-  matching the `remoteReasoning` writer.
-- **Write is a field-wise merge.** `remoteCaps[key] = {...prior, ...caps}`.
-  A field the response did not resolve is absent from `caps`, so it leaves the
-  prior value untouched; a `{}` result writes nothing. A failing or unusable
-  probe therefore never clears, zeroes, or downgrades a known capability — and
-  it is not retried in-session; the next probe is the next activation of that
-  model.
+  already been pruned. That check covers an edit *during* flight only; an edit
+  that happened *before* the probe started is caught on the read side instead,
+  by the `probedUrl` the write records. A merge that changes no field **and no
+  `probedUrl`** is not written at all, matching the `remoteReasoning` writer.
+- **Write is a field-wise merge within one backend.** `remoteCaps[key] =
+  {...prior, ...caps, probedUrl}`. A field the response did not resolve is
+  absent from `caps`, so it leaves the prior value untouched; a `{}` result
+  writes nothing. A failing or unusable probe therefore never clears, zeroes,
+  or downgrades a known capability. Across backends there is nothing to merge:
+  when `prior.probedUrl` differs from the url just probed, the prior entry is
+  replaced rather than blended, or one entry would describe two backends while
+  claiming to be one of them. A probe that resolves nothing is not retried
+  in-session; the next probe is the next activation of that model, or the next
+  foreground while the entry is still absent or invalid for the binding.
 - **Invalidation.** Entries are pruned by `${serverId}/` prefix (shared
   `dropServerEntries` helper) on two events: `removeServer`, and an
-  `updateServer` that changes `url` or `serverType`. Caps describe the
-  configured backend, and `resolveRemoteCaps` consults neither field, so a
-  repointed url or a type flipped away from `llama.cpp` would otherwise freeze
-  stale caps permanently — the writer is gated on `serverType`, the reader is
-  not. `remoteReasoning` is pruned only by `removeServer`: it carries user
-  declarations and is not server-reported. Editing the url under an active
-  model is not a correctness hole in the other direction either — the
-  completion engine is not rebuilt by `updateServer`, so that session still
-  talks to the old url; the pruned caps are re-probed on the next activation.
+  `updateServer` that changes `url` or `serverType`. The same `updateServer`
+  branch drops `serverModels` for that server: the list describes what the old
+  backend offered, `ServerDetailsSheet.handleSave` never refetches, and
+  `fetchAllRemoteModels` only runs on hydration or a throttled foreground — so
+  a stale single-entry list would otherwise clear the bare-retry gate against a
+  new multi-model router, indefinitely, and re-attribute the resident model's
+  props. `remoteReasoning` is pruned only by `removeServer`: it carries user
+  declarations and is not server-reported.
+
+  The prune is defence in depth, not the correctness argument. Editing the url
+  under an active model does not move that session — the engine is not rebuilt
+  by `updateServer` — and the binding is what keeps the two apart: caps probed
+  against the new url carry it in `probedUrl` and do not resolve for a session
+  still bound to the old one (I5). The foreground re-probe additionally
+  declines to fire at all in that state (§8 second trigger), so the prune's
+  practical effect is that caps stay unknown until the model is re-selected.
 - **`fetchServerProps` never throws.** Timeout / non-2xx / malformed JSON all
   resolve to `{}`; a `/props` failure is invisible to the user.
 - **Gating** mirrors the reasoning payload (I-RS1): keyed on the PERSISTED
   `serverType`, never live detection. A non-`llama.cpp` server issues zero
   `/props` requests, scoped or bare.
 - **Read side.** One pure synchronous selector, `resolveRemoteCaps(model,
-  remoteCaps, servers)` (`src/utils/remoteCaps.ts`, shaped after
-  `resolveReasoningCapability`), owns resolution for all three consumers:
-  `ChatScreen`'s attach affordance, `BannerRow`'s `effectiveNCtx`, and
-  `ModelStore.isMultimodalEnabled`'s remote branch. Per-model entry first, then
-  the legacy `ServerConfig` fields (context length only when `> 0`), then
-  unknown. Attach is enabled **iff** the resolved `supportsVision === true`.
+  remoteCaps, binding)` (`src/utils/remoteCaps.ts`, the shape of
+  `resolveReasoningCapability` plus the binding), owns resolution for all three
+  consumers: `ChatScreen`'s attach affordance, `BannerRow`'s `effectiveNCtx`,
+  and `ModelStore.isMultimodalEnabled`'s remote branch. The per-model entry is
+  used only when `capsMatchBinding` passes — same modelId and a `probedUrl`
+  that agrees with the binding, or no binding / no `probedUrl` to contradict it
+  (I5). Anything else is unknown. Attach is enabled **iff** the resolved
+  `supportsVision === true`.
   Being synchronous is load-bearing: consumers call it in the `observer` render
   body, so caps landing from the detached probe re-render the affordance with no
   further user action. Reading them inside an effect or a promise body would
@@ -459,9 +508,13 @@ user selects a remote model (ModelStore.selectModel → setRemoteModel)
 | D21 | Probe bound via `resolveTimeout(requestTimeoutMs, PROPS_TIMEOUT_MS)` | Lazy router starts exceed 5 s; a user-set `0` must not abort instantly. |
 | D22 | Bare retry only after an unusable scoped probe **and** the single-model gate | Keeps single-model behaviour; makes mis-attribution unrepresentable. |
 | D23 | An unknown/empty model list does **not** pass the gate | Unknown is exactly the router case; fail closed instead. |
-| D24 | Legacy `ServerConfig` caps: read-fallback, never written | The fallback *is* the migration; zero migration code. |
-| D25 | Legacy `contextLength` honoured only when `> 0` | A pre-per-model router persisted `0`; that must not resurface. |
+| D24 | ~~Legacy `ServerConfig` caps: read-fallback, never written~~ | **SUPERSEDED by D33** — the writer never shipped, so the shape it defends cannot exist. |
+| D25 | ~~Legacy `contextLength` honoured only when `> 0`~~ | **SUPERSEDED by D33** — no legacy field left to filter. |
 | D26 | `contextLength` written only when `n_ctx > 0` | `0` is unknown, not a window. |
 | D27 | `supportsVision` definite only on a model-describing body | A placeholder `false` would be a wrong definite answer. |
 | D28 | `modalities` absent on a real model ⇒ definite `supportsVision: false` | Such builds have no vision; definite `false` fails closed. |
 | D29 | One pure sync selector `resolveRemoteCaps` owns resolution | An async read point cannot re-render; UI and send path must agree. |
+| D30 | The session's backend is first-class state (`ModelStore.activeRemoteBinding`), not a private engine field | Three separate approximations of it (probe snapshot, write guard, prune) each covered part of the same question; one named value covers it once. |
+| D31 | Caps carry `probedUrl`; validity is `probedUrl === binding.url` | Provenance on the record makes "do these describe what we are talking to" answerable at read time instead of guarded at every mutation. Absent = pre-field, taken at face value: no migration, downgrade-safe. |
+| D32 | `updateServer` prunes `serverModels` alongside `remoteCaps` | The sheet never refetches after a save, so a stale single-entry list clears the bare-retry gate against a new router — #828's failure mode through its own gate. |
+| D33 | Delete the per-server `contextLength` / `supportsVision` | Zero writers, and the writer that filled them post-dates the last release, so no persisted store can hold them. Removing them takes `servers` off the resolver signature. |

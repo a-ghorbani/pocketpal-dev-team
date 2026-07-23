@@ -47,9 +47,12 @@ ask "is this an architecture change?" before approving.
   `effectiveNCtx = activeContextSettings.n_ctx`; for a remote llama.cpp
   model, `BannerRow` falls back to
   `resolveRemoteCaps(activeModel, serverStore.remoteCaps,
-  serverStore.servers).contextLength` — the `/props` window discovered for
-  **that model** (remote-servers §8) — so a remote llama.cpp model with a
-  discovered window can resolve context-full/context-warning too.
+  modelStore.activeRemoteBinding).contextLength` — the `/props` window
+  discovered for **that model** on the backend the live session is bound to
+  (remote-servers §8) — so a remote llama.cpp model with a discovered window
+  can resolve context-full/context-warning too. A window probed against a
+  different backend resolves to unknown, and the nCtx-reading variants fall
+  through as if none had been discovered.
   `effectiveNCtx` is defined only when the resolved window is `> 0`: a window
   of 0 is unknown, not exhausted, and admitting it would make every ratio 1 and
   fire a spurious context-full. A remote model without a known window keeps
