@@ -88,6 +88,14 @@ All work happens in `${WORKTREE_PATH}`:
 2. **FOLLOW PATTERNS** - Match existing code style exactly
 3. **VERIFY** - Run lint/typecheck after each file change
 4. **COMMIT** - Atomic commits per logical change (to feature branch)
+5. **DEFAULT TO NO COMMENT** - see "Comments: treat the urge to write one as a
+   diagnostic" in `AGENTS.md`. Every comment you are about to write is one of
+   four things: a bad comment (delete it), unclear code (fix the code), a shaky
+   design (fix the design, or put the rationale in `context/architecture/`), or
+   a genuine non-recoverable "why" (keep it — rare). Do not narrate the change,
+   do not restate the plan step, do not name the bug you just fixed. If your
+   diff needs many comments to be followable, that is a signal about the code,
+   and the fix is the code.
 
 ### After Each File Change
 

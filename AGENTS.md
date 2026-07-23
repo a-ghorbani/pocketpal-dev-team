@@ -56,6 +56,24 @@ Tasks touching `package.json`, native modules, `ios/`, `android/`, Podfile, or b
 
 Tasks that change visible UI are `Visual Evidence Required=YES`. The pipeline must produce durable captures and post them to the PR before approval; "UI changed but no posted visual evidence" is a blocking review issue. Owners and the posting command are in `docs/workflows/visual-capture.md`.
 
+### Comments: treat the urge to write one as a diagnostic
+
+A comment is almost always a **symptom**, not a deliverable. Before writing one, work out which of these you are actually looking at — and fix *that*, rather than describing it:
+
+1. **Bad comment** — it states what the code already says, narrates the change, or records how you arrived at the answer. → **Delete it.** Names and types already carry it.
+2. **Bad code** — you need prose because the code is not self-explanatory. → **Fix the code.** Rename the variable, extract the function, drop the cleverness. The comment is buying silence for a readability problem.
+3. **Bad design** — the comment justifies why something is done this odd way. → **Fix the design**, or if the oddity is genuinely forced, put the reasoning in `context/architecture/` where design rationale belongs, not above the call site.
+4. **Genuine "why"** — a non-recoverable fact a future reader cannot derive from the code: an external constraint, non-obvious platform behaviour, a trap that looks like a bug and isn't. → **Keep it.** This is the rare case, not the normal one.
+
+The test: *if I delete this line, what does a competent reader who knows the codebase but not this task actually lose?* If the answer is "nothing", it was case 1. If it is "they would misread the code", it is probably case 2 or 3 and the code should change. Only if the answer is "they would repeat a mistake the code cannot warn them about" is it case 4.
+
+Two consequences worth stating explicitly, because they are where this usually goes wrong:
+
+- **Volume is the signal.** A diff that needs many comments is reporting a design or clarity problem, not a documentation gap. Do not resolve it by writing better prose.
+- **Nothing about the task belongs in source.** No "we hit X", no round numbers, no story anchors. Source describes the current state; the reasoning lives in the story and the architecture docs. (This overlaps Public artifacts hygiene above — same rule, different failure mode.)
+
+Reviewers: flag over-commenting as a finding, and say **which of the four** it is. "Too many comments" is not actionable; "this is case 2, the function needs splitting" is.
+
 ### Secrets, config, cleanup
 
 - Do not read, copy, or bulk-sync `.env` files or private config by hand. Use only the allowlisted sync tools.
