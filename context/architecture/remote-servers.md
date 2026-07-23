@@ -196,7 +196,8 @@ component-local `parseTimeoutMs(seconds)`: empty/invalid/non-positive →
 | --- | --- |
 | `ServerConfig.requestTimeoutMs` | `ServerStore.updateServer` / `ServerStore.addServer` |
 | `ServerStore.remoteCaps` | `ServerStore.fetchRemoteModelCaps` (+ the `removeServer` / `updateServer` prefix prunes) |
-| `ServerStore.serverModels` | `ServerStore.fetchModelsForServer` (+ the same two prunes) |
+| `ServerStore.serverModels` | **two, not one**: `ServerStore.fetchModelsForServer` and `RemoteModelSheet.handleServerChipPress`, which writes it directly (+ the same two prunes). Both store the identical `fetchModels()` output for the same server id, so anything derived from the list is source-identical either way. The sheet's own probe, `probeServer`, writes nothing — its rows stay local to the sheet. |
+| `ServerStore.listCaps` | **none — a computed** over `serverModels` and `servers[].serverType`. No setter exists and it is not persisted (§8, list tier). |
 | `ModelStore.activeRemoteBinding` | `ModelStore.setRemoteModel` (set) / the engine-clearing paths in `initContext` and `releaseContext` (clear) |
 
 Cross-store reads: `ModelStore.setRemoteModel` reads
@@ -486,6 +487,9 @@ user selects a remote model (ModelStore.selectModel → setRemoteModel; binding 
   that agrees with the binding, or no binding / no `probedUrl` to contradict it
   (I5). Anything else is unknown. Attach is enabled **iff** the resolved
   `supportsVision === true`.
+  `resolveRemoteCaps` owns the **probe tier** only; the remote leg of
+  `resolveModelCaps` merges its answer with the list tier below, field by
+  field, probe first.
   Being synchronous is load-bearing: `activeModelCaps` is a computed that runs
   `resolveModelCaps` inline, so consumers read it in the `observer` render body
   and caps landing from the detached probe re-render the affordance with no
@@ -497,6 +501,102 @@ user selects a remote model (ModelStore.selectModel → setRemoteModel; binding 
   tokens_predicted` (server count wins over the per-event tally, each key
   guarded independently). No request-body change; `usage`/`include_usage` is
   not used. Absent timings → prior behaviour (predicted-only per-event count).
+
+### The list tier — a second capability source that probes nothing
+
+`/props` can only answer about a model the server has **loaded**, and on a swap
+router `?model=` *loads* it. So anything that answers "does this do vision"
+while the user is still browsing must read a body the app already has. The
+`GET /v1/models` response is that body, and a llama.cpp server already states
+per row what the probe would confirm:
+
+| | router (`llama-server` router mode) | direct single-model `llama-server` |
+| --- | --- | --- |
+| top-level keys | `data`, `object` | `data`, `models`, `object` |
+| per-row `architecture.input_modalities` | every row, loaded or not; always contains `text` | *absent* |
+| per-row `status.args` | every row; carries `--ctx-size` | *absent* |
+| per-row `meta.n_ctx` | loaded rows only | present (the loaded model) |
+| `models[].capabilities` | *absent* | `["completion"]` / `["completion","multimodal"]` |
+
+- **One interpreter.** `deriveListCaps(row, serverType)` (`src/utils/listCaps.ts`)
+  is the only reader of a `/v1/models` row, pure and synchronous, yielding at
+  most `supportsVision` and `contextLength`. Vision from `input_modalities`
+  including `'image'`, else — only if that key was absent — `capabilities`
+  including `'multimodal'`. Context from `meta.n_ctx`, else the **last**
+  `--ctx-size`/`-c` in `status.args` in either the space or `=` form, admitted
+  only as an integer `> 0`. **No other argument is read**, and every failure
+  lands on an absent field, never a default: `--ctx-size 0` means "the model's
+  trained window", which is unknown, not `0`.
+  `status.args` carries filesystem paths and could carry a credential, so this
+  is the only thing permitted to read it — nothing logs, persists or serialises
+  a raw row. The router form is the more precise of the two: it separates image
+  from audio, which `capabilities: multimodal` cannot.
+- **Gated the same way** as `/props`, on the PERSISTED `serverType ===
+  'llama.cpp'` — but *inside* `deriveListCaps`, because it has two callers with
+  two different sources for that type and a gate outside the function is a gate
+  that can disagree with itself. The sheet passes the persisted type of the
+  selected chip's server when there is one, since `handleServerChipPress` never
+  sets its own `serverType` state and would otherwise suppress the answer on
+  exactly the routers this exists for. Every other server type reads identically
+  to before: the wire-level lift is unconditional but inert, since those servers
+  emit no `models[]`.
+- **Zero new requests, nothing stored.** `ServerStore.listCaps` is a computed
+  over `serverModels`, whose lifecycle is already the right invalidation —
+  replaced by each fetch, dropped by `updateServer` on a `url`/`serverType`
+  change and by `removeServer`, absent until the post-hydration fetch. It
+  therefore needs no `probedUrl`: a list cannot outlive the url it came from.
+- **Precedence: probe beats list, field by field**, and the list reaches the
+  **declared** axis only. `visionActive` and `effectiveContextLength` are
+  computed from the probe result before the list is consulted, so no derived
+  value can gate attach, the send-path image gate, the video-pal camera start,
+  or the context banner. This holds structurally rather than by convention:
+  there is no write path from the list into `remoteCaps`, and the two types
+  carry a literal `tier` discriminant that makes them mutually non-assignable,
+  so a derived value cannot be passed where a probed one is expected even by
+  mistake. Freshness is not authority — the list refreshes every foreground and
+  the probe still wins.
+- **A single-model server needs no bare `/props` at add time.** Its own
+  `/v1/models` carries both fields, in a sibling `models[]` array joined onto
+  the `data[]` row by `entry.name ?? entry.model === row.id` (plus the 1×1
+  degenerate pairing) at the fetch, so "is this server single-model" never has
+  to be decided to read a capability.
+- **Surfaces.** Remote model cards state vision and context length before
+  anything is activated, and the header glyph is sourced from the same resolver
+  as the cell. Add-sheet rows carry a **three-state** slot — supported, not
+  supported, and a muted em-dash for "this build does not say" — because there
+  presence/absence is the only other signal and three distinct populations land
+  on absence. Any non-llama.cpp server renders no slot at all.
+
+#### Edge cases
+
+| Edge case | Behaviour |
+| --- | --- |
+| Router build too old for `architecture`, or a proxy emitting neither key | No vision field: card `Unknown`, sheet `—`. The whole sheet shows em-dashes rather than 47 silent rows — "this build does not tell me" is a different statement from "no vision". Context is unaffected; the rules are independent. |
+| Router cannot resolve the projector offline (mmproj not cached) | `image` absent ⇒ **Not supported**, though the child would fetch it at launch. A false-negative browse impression, corrected on activation; never a broken action. |
+| Direct server with an **audio-only** projector | `capabilities` contains `multimodal` ⇒ **Supported**, though `/props modalities.vision` is `false`. The direct form cannot separate image from audio; activation corrects it. |
+| `--ctx-size` absent (the preset relies on the server default) | No context cell. A default is never assumed. |
+| Server runs multiple slots | `--ctx-size` / `meta.n_ctx` report the **total** window, `/props` the per-slot one, so the cell may overstate until activation. The banner is unaffected — it reads the probe tier alone. |
+| Model removed from the server between fetches | Its row disappears and `listCaps` loses the key; the card falls back to any probe entry, else `Unknown`. |
+| Direct server whose `models[]` entry joins no `data[]` row | No vision field ⇒ `—` / `Unknown`. The tolerant join and the 1×1 pairing exist because this failure is otherwise invisible. |
+
+**A card may read "Vision: Supported" while attach stays disabled** — for the
+**active** model — whenever the list has an answer and the probe has **no
+entry**. Two ways to get there, and they are the same state: the probe failed
+(timeout, non-2xx, malformed — `fetchServerProps` resolves to `{}` and writes
+nothing), or a url edit dropped both the entry and the list and the next
+foreground fetch repopulated only the list, from the new backend, while the
+session stayed bound to the old one. A *present but mismatched* entry is not
+one of them: `updateServer` drops the entry on a url change and the write guard
+refuses a probe whose url has moved, so nothing is left to mismatch — the
+binding check is defence, not the story.
+
+This is the safe direction to be wrong in: the two axes describe different
+things, the **configured** server and the **bound** session, and only the
+second gates any action. It self-corrects on the next successful probe (§8's
+second trigger). It also qualifies the claim that the card need not distinguish
+an inferred value from a confirmed one because "activating is exactly what
+confirms it" — activating *attempts* confirmation and can fail. That is a
+tendency, not a guarantee.
 
 ### Decisions
 
