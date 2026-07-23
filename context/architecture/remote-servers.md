@@ -204,11 +204,13 @@ Cross-store reads: `ModelStore.setRemoteModel` reads
 ModelStore ← ServerStore — the same place it already reads `url`/apiKey). It
 also *calls* `serverStore.fetchRemoteModelCaps` on activation and on foreground
 without valid caps for the binding (§8) — a call in the same direction, never a write:
-`ModelStore` never touches `remoteCaps`.
-`ChatScreen`, `BannerRow` and `ModelStore.isMultimodalEnabled` reach
-`remoteCaps` only through `resolveRemoteCaps` (`src/utils/remoteCaps.ts`), each
-passing `modelStore.activeRemoteBinding`, so the UI and the send path cannot
-disagree — with each other or with the backend they are describing.
+`ModelStore` never writes `remoteCaps`.
+`ModelStore` is, however, its only reader: it assembles them, with
+`activeRemoteBinding` and the local-session fields, into the env that
+`resolveModelCaps` (`src/utils/modelCaps.ts`) resolves against, and exposes the
+answer as `activeModelCaps` / `capsFor(model)`. No component builds that env or
+reaches `remoteCaps` itself, so the UI and the send path cannot disagree — with
+each other or with the backend they are describing.
 
 ---
 
@@ -353,7 +355,7 @@ ON with an effort the effort cell **replaces** the plain ON cell.
 llama.cpp serves `GET {baseUrl}/props`; LM Studio / Ollama / vLLM / OpenAI do
 not. The response carries the server's context window and multimodal support,
 which unlock remote context banners (chat-flow §4a) and remote image attach
-(model-loading — `isMultimodalEnabled` remote fallback).
+(model-loading — the remote leg of `activeModelCaps.vision`).
 
 Capabilities are **per model**, not per server: a multi-model router (llama-swap
 style, lazily starting a server per model) answers bare `/props` with a
@@ -476,17 +478,19 @@ user selects a remote model (ModelStore.selectModel → setRemoteModel; binding 
   `/props` requests, scoped or bare.
 - **Read side.** One pure synchronous selector, `resolveRemoteCaps(model,
   remoteCaps, binding)` (`src/utils/remoteCaps.ts`, the shape of
-  `resolveReasoningCapability` plus the binding), owns resolution for all three
-  consumers: `ChatScreen`'s attach affordance, `BannerRow`'s `effectiveNCtx`,
-  and `ModelStore.isMultimodalEnabled`'s remote branch. The per-model entry is
+  `resolveReasoningCapability` plus the binding), owns remote resolution. It has
+  a single caller — the remote leg of `resolveModelCaps` — and every consumer
+  reaches it through `modelStore.activeModelCaps` / `capsFor(model)`
+  (model-loading §Vision). The per-model entry is
   used only when `capsMatchBinding` passes — same modelId and a `probedUrl`
   that agrees with the binding, or no binding / no `probedUrl` to contradict it
   (I5). Anything else is unknown. Attach is enabled **iff** the resolved
   `supportsVision === true`.
-  Being synchronous is load-bearing: consumers call it in the `observer` render
-  body, so caps landing from the detached probe re-render the affordance with no
-  further user action. Reading them inside an effect or a promise body would
-  leave the button stuck at its first value.
+  Being synchronous is load-bearing: `activeModelCaps` is a computed that runs
+  `resolveModelCaps` inline, so consumers read it in the `observer` render body
+  and caps landing from the detached probe re-render the affordance with no
+  further user action. Resolving inside an effect or a promise body would leave
+  the button stuck at its first value.
 - **Token accounting** (chat-flow §token snapshot): a remote turn's used-token
   total is sourced from the server `timings` object already captured on the
   finish chunk — `timings.prompt_n → tokens_evaluated`, `timings.predicted_n →

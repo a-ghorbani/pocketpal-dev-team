@@ -26,7 +26,9 @@ Cost vs. baking metadata into the JSON: the first integrity check pays one HF fe
 
 `mmproj` names the projector; the app uses it directly and **not** the HF-browser quant-match (`getRecommendedProjectionModel`) — so projector quant is an **authoring** responsibility (pre-merge gate, no app-side check). It is synthesized as an LLM sibling and pushed as its own stub so the download path resolves it; detection is offline (filename-only, `MMProjRegex`); `mmproj.size_bytes` enters the fit check (`min_ram_gb` may exclude the ~1 GB projector). **`mmproj.hf_repo` must equal `hf_repo`** — `hfAsModel` pairs the projector under the LLM repo, so the parser drops cross-repo projectors (out of scope).
 
-**Remote vision (no local projector).** `ModelStore.isMultimodalEnabled()` is the single read-point for the chat attach affordance and the send-path image gate. For a **remote** active model there is no `this.context` and no projector; the method falls back to the `/props`-discovered `supportsVision` for that model on the backend the session is bound to, via `resolveRemoteCaps` (remote-servers §8) — `=== true` enables attach, otherwise off. The branch sits after the cached-flag return and before the `!this.context` early-return so a remote model is not shadowed into the dead branch; the local `ctx.isMultimodalEnabled()` path is untouched. Remote-attached images are inlined to `data:` URIs at the wire boundary (`openai.ts`), since a remote server cannot read the device filesystem. The real-time video-pal camera path also reads this flag but is separately gated shut for remote models by its own `!modelStore.context` guard.
+**Vision capability: one read-point.** `resolveModelCaps` (`src/utils/modelCaps.ts`), reached as `modelStore.activeModelCaps` / `capsFor(model)`, is the single read-point — chat attach affordance, send-path image gate, video-pal camera start, model card. It is pure and synchronous, and it branches on `model.origin` once: a **remote** model resolves to the `/props`-discovered `supportsVision` for that model on the backend the session is bound to (`resolveRemoteCaps`, remote-servers §8); a **local** model resolves to `isMultimodalActive`, and only for the active model — a card never borrows another model's load state. `visionActive` is what gates attach; the separate `vision` axis (`yes`/`no`/`unknown`) describes the model regardless of load state and is what the model card shows.
+
+`isMultimodalActive` is a **maintained observable**, not a cache: every native multimodal transition is bracketed by a write (`proceedWithInitialization` verifies with `ctx.isMultimodalEnabled()` and writes the result; `releaseContext` clears it), so **no reader performs a native re-verify** and no reader repairs the flag. Remote-attached images are inlined to `data:` URIs at the wire boundary (`openai.ts`), since a remote server cannot read the device filesystem. The real-time video-pal camera path also reads `visionActive` but is separately gated shut for remote models by its own `!modelStore.context` guard.
 
 ## Security (a trap — don't "simplify")
 
@@ -52,6 +54,8 @@ The list above sources models; this section is the **UI lifecycle** a card (or C
 - `downloading` — progress bar + size + **Stop**.
 - `warned` — inline DS `Label` (`status-warning` / `status-info`) + advisory copy; primary may be `disabled` (`!storageOk`).
 - `error` — `ErrorSnackbar` on whichever screen triggered the load, carrying **Report** (+ Dismiss).
+
+Remote model cards are expandable too, and their expanded block is **server-sourced only** — no local-file or on-device value (no memory estimate, no Parameters / Architecture / Author cell, no HF link, no vision toggle). It shows the full model name plus a grid of the discovered context window and a vision indicator that states `Supported` / `Not supported` / `Unknown` explicitly, never expressing unknown as absence.
 
 **Warning-vs-failure trigger boundary** (the contract):
 

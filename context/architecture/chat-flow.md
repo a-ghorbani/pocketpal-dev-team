@@ -43,23 +43,23 @@ ask "is this an architecture change?" before approving.
   context-remote-hedged / html-soft-cap / none. The context-* variants
   are suppressed when no model is loaded (`activeModelId === undefined`).
   The nCtx-reading variants (context-full, context-warning) additionally
-  require a known runtime n_ctx (`effectiveNCtx`). For a local model
-  `effectiveNCtx = activeContextSettings.n_ctx`; for a remote llama.cpp
-  model, `BannerRow` falls back to
-  `resolveRemoteCaps(activeModel, serverStore.remoteCaps,
-  modelStore.activeRemoteBinding).contextLength` — the `/props` window
-  discovered for **that model** on the backend the live session is bound to
-  (remote-servers §8) — so a remote llama.cpp model with a discovered window
+  require a known runtime n_ctx (`effectiveNCtx`).
+  `effectiveNCtx = modelStore.activeModelCaps.effectiveContextLength`. The
+  local/remote split lives inside the selector: a local model resolves to
+  `activeContextSettings.n_ctx`, a remote one to the `/props` window discovered
+  for **that model** on the backend the live session is bound to
+  (remote-servers §8), so a remote llama.cpp model with a discovered window
   can resolve context-full/context-warning too. A window probed against a
   different backend resolves to unknown, and the nCtx-reading variants fall
   through as if none had been discovered.
-  `effectiveNCtx` is defined only when the resolved window is `> 0`: a window
-  of 0 is unknown, not exhausted, and admitting it would make every ratio 1 and
-  fire a spurious context-full. A remote model without a known window keeps
-  `effectiveNCtx` undefined → context-remote-hedged-or-none.
+  The selector guarantees `effectiveContextLength` is `> 0` or absent, so
+  `BannerRow` does not re-check: a window of 0 is unknown, not exhausted, and
+  admitting it would make every ratio 1 and fire a spurious context-full. A
+  remote model without a known window keeps `effectiveNCtx` undefined →
+  context-remote-hedged-or-none.
   `activeContextSettings.n_ctx` remains local-only; the remote window enters
-  solely via `BannerRow`'s cross-store read, never written to
-  `activeContextSettings`. html-soft-cap is independent of model state.
+  via the selector's remote leg, never written to `activeContextSettings`.
+  html-soft-cap is independent of model state.
 - **Loaded n_ctx is the user's only runtime signal.** Every reload path
   (Settings, the banner CTA, Models screen, auto-load) honors
   `contextInitParams.n_ctx` by construction; there is no hidden state
@@ -1134,8 +1134,8 @@ returns exactly one of five variants in this precedence order:
    the increase-context advice) are never shown for remote.
 2. `context-warning` — `ratio >= WARNING_THRESHOLD` (0.80), not
    `contextFull`, and a known `effectiveNCtx`. Fires for a local session and
-   for a remote llama.cpp session once `resolveRemoteCaps` reports a window
-   `> 0` for the active model (the local-only guard was dropped); a remote
+   for a remote llama.cpp session once `activeModelCaps.effectiveContextLength`
+   resolves for the active model (the local-only guard was dropped); a remote
    session without a discovered window falls through (its `effectiveNCtx` is
    undefined). Per-draft dismiss, reappears next turn if still triggered.
 3. `context-remote-hedged` — remote session, weak-signal heuristic
