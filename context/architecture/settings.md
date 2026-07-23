@@ -130,6 +130,12 @@ control (§1.3, §10):
   plus symmetric padding. Text alignment follows the *layout* direction, not the
   script — but **`Text` and `TextInput` need different expressions**, verified by
   forced-RTL device capture:
+  RN's `textAlign` has **no `start`/`end`** — the legal values are
+  `'auto' | 'left' | 'right' | 'center' | 'justify'` (`StyleSheetTypes.js`), so
+  `textAlign: 'start'` is a type error. This differs from CSS *and* from RN's own
+  layout props, which do offer `paddingStart` / `marginStart` / `start`. `'left'`
+  is therefore how "start" is spelled for text.
+
   - `Text` (row label, empty state): plain `textAlign: 'left'`. RN mirrors
     `left`/`right` for `Text` under RTL (`RCTTextAttributes.mm`), so `'left'`
     resolves to the layout start in both directions. An
