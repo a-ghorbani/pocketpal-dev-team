@@ -226,7 +226,13 @@ Cross-store reads: Home reads `palStore.pals`, `chatSessionStore.sessions`,
 
 ### Deferred cleanups (out of current scope)
 
-1. Delete dead `SidebarContent` + drawer-only files → POC-13.
+1. Delete dead `SidebarContent` + drawer-only files → POC-13. **Re-home the
+   pin/unpin affordance first.** The pinned-sessions feature splits across the
+   shell boundary: the `chat_sessions.pinned` column, `togglePinSession`, and the
+   `Pinned` group in `groupedSessions` are nav-shell-independent and survive, but
+   the *only* entry point that sets the flag is the `SidebarContent` long-press
+   menu. Deleting the drawer without re-homing it ships a persisted column and a
+   `Pinned` section that can never become non-empty. See `chat-flow.md` §8b.
 2. Re-home Models / Benchmark / Pals / App Info under their conceptual tab →
    POC-8 / POC-9 / POC-11. The Settings launcher now hosts canonical rows that
    reach Benchmark, App Info, and Dev Tools (`__DEV__`-gated), so the interim

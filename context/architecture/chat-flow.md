@@ -585,6 +585,7 @@ screens.
 | `session.settingsSource` (sessions[].metadata) | `createNewSession` at birth (`ChatSessionStore.ts`); updated thereafter only by `ChatGenerationSettingsSheet` save flow. Birth-rule: `'custom'` if `newChatThinkingOverride !== undefined`, else `newChatSettingsSource`. (C) |
 | `chatSessionStore.newChatThinkingOverride` | `ChatScreen.persistReasoning` (set, no-session branch only); `createNewSession`, `resetActiveSession`, `setActiveSession` (clear). Read by `resolveCompletionSettings` no-session branch only. (C) |
 | `chatSessionStore.newChatReasoningEffort` | Paired with `newChatThinkingOverride`: `ChatScreen.persistReasoning` (set, no-session branch only); same three clear sites. Read by `resolveCompletionSettings` no-session branch, overlaid as `reasoning.effort` so a graded-effort pill survives the pre-first-message (no session) window. (C) |
+| `session.pinned` (sessions[].metadata) | `createNewSession` at birth (always `false`) and `loadSessionList` at hydration (`session.pinned \|\| false`); updated thereafter only by `togglePinSession` (`ChatSessionStore.ts`), which derives the target from its own state and mirrors it **only after** `chatSessionRepository.setSessionPinned` resolves. Persisted as a non-optional `boolean` column on `chat_sessions` (schema v8). (C) |
 
 Reading is unrestricted.
 
@@ -1010,6 +1011,49 @@ rename when Cleanup-DEFERRED lands.
 - **D16**: Sheets/menus inherit the reconciled token palette (no separate code
   delta). The new "Add to Chat" sheet, the bottom-sheet message-options layout,
   and a global Sheet-base dark surface change are OUT (net-new / app-wide DS).
+
+---
+
+## 8b. Sidebar session list — grouping and pinning
+
+The drawer's session list is derived, not stored. `ChatSessionStore.groupedSessions`
+is a MobX computed; `SidebarContent` is its only consumer and turns it into
+`SectionList` sections.
+
+- **The map key is the localized label, and insertion order carries display
+  order.** `SessionGroup` is `{[label: string]: SessionMetaData[]}`, so the
+  translated string *is* the group identity. Pinned sessions are partitioned out
+  first and inserted before the nine date buckets; each group is sorted by
+  `date` descending. (C)
+- **Two equal labels silently drop a group.** Because the key is a display
+  string, a locale that translates `dateGroups.pinned` to the same value as a
+  date label would let the date loop overwrite the pinned bucket, and the pinned
+  sessions would vanish from the sidebar with no error. Guarded only by a unit
+  test asserting the `dateGroups` values stay distinct and non-empty
+  (`src/locales/__tests__/locales.test.ts`) — nothing in the runtime enforces it.
+  Keying by stable ids and resolving labels at render time is the real fix and is
+  **deferred**. (D)
+- **(D) Pin is best-effort, deliberately.** `togglePinSession` swallows failures
+  to `console.error` and shows no alert, unlike the export/delete actions in the
+  same menu. Rationale: pinning is non-destructive and trivially retryable, and
+  the row not moving is itself honest feedback — a modal for "couldn't pin" costs
+  more than it informs. What is *not* acceptable is the UI asserting an
+  unconfirmed state, which is why `setSessionPinned` lets a missing record reject
+  rather than swallowing it, and the store mirrors only after the write resolves.
+  If pin failures ever need surfacing, add a `pinError` string and alert from
+  `handlePressPin` — the swallow is a decision, not an oversight.
+- **(D) The export format is conversation content only.** `pinned` is not
+  emitted by `exportChatSession` / `exportAllChatSessions` and is not read on
+  import, so an export → import round-trip returns sessions unpinned. A pin is
+  local organizational state, like a folder position; inheriting someone else's
+  pins when importing their chat would be wrong. `settingsSource` is excluded on
+  the same reasoning. Session attributes that *should* travel need an explicit
+  decision here first.
+- **Icon plumbing trap.** `star.svg` is stroke-only and `.svgrrc` rewrites its
+  hardcoded colour to the **`fill`** prop, so `fill="none"` paints nothing at
+  all. The outline state comes from *omitting* `fill` and letting the path
+  inherit the root `stroke`. `.svg` is mocked to a string in jest, so no unit
+  test can catch an icon that renders blank — only a device/simulator capture.
 
 ---
 
