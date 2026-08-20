@@ -427,11 +427,14 @@ eviction behaviour must be reviewed together, not chosen per-step.
 > each account for 6.7 GB — 69% of the whole budget — and they come from `actions/setup-java`'s
 > `cache: 'gradle'`, not from anything in this contract.
 >
-> **After the first provisioned run: 10.62 GB across 14 entries.** The three new entries are
-> `hexagon-sdk-6.4.0.2` 963 MB, `ccache-android` 852 MB, `Linux-cxx` 659 MB — 2.47 GB together — and
-> the entry count fell from 17 to 14, so **eviction is already happening**. Eviction is invisible: a
-> warm run that silently misses looks like a cold run rather than like a misconfiguration, which is
-> precisely how D2 gets defeated without anyone noticing.
+> **After the first provisioned run: 10.62 GB across 14 entries**, the three new entries being
+> `hexagon-sdk-6.4.0.2` 963 MB, `ccache-android` 852 MB and `Linux-cxx` 659 MB — 2.47 GB together.
+> **After the following run it had settled at 8.98 GB across 13 entries**, with all three new entries
+> intact and all three restored. So LRU took the eviction out of older, unused entries and warmth was
+> not harmed. The standing exposure is that eviction is *invisible*: a warm run that silently misses
+> looks like a cold run rather than like a misconfiguration, which is precisely how D2 gets defeated
+> without anyone noticing. A busier week could evict `hexagon-sdk-6.4.0.2` with no symptom but a slow
+> run.
 >
 > The pre-committed rule (over ~8 GB, drop the `.cxx` entry first, it being the most redundant with
 > ccache) was **already triggered by the starting state**, before this contract added anything. But
@@ -513,12 +516,28 @@ declarations reach gradle there, and that the gate blocks an upload:
   ~33 s (673 MB fetch + parallel xz extract). Both `HEXAGON_SDK_ROOT` and `HEXAGON_TOOLS_ROOT`, all
   four ccache variables, and the seven-name allowlist are visible in the build step's environment.
 
-**Build time.** Run 32410730113 is a **clean cold** measurement: its logs show `Cache not found` for
-all three new entries, including the `ccache-android-` restore-key prefix — run 32401062065 predates
-the ccache step entirely, so there was nothing for it to be partly warm from. Cold `build-android`
-wall clock **43.9 min** against a ≤ 75 min threshold committed before the first run; the build step
-itself was 39.4 min at a 10.7% ccache hit rate (the hits are duplicate compilations across variants
-within the one run). A salted cache-busting run was therefore not needed to obtain the cold number.
+- Run 32415207752 (**warm**, one commit later): green, gate passes, both symbols present, 16 matches,
+  extras empty. All three new caches **restored**.
+
+**Build time**, against thresholds committed before the first run:
+
+| | Threshold | Measured |
+| --- | --- | --- |
+| cold `build-android` | ≤ 75 min | **43.9 min** (run 32410730113) |
+| warm `build-android` | ≤ 35 min | **23.2 min** (run 32415207752) |
+
+Run 32410730113 is a **clean cold** measurement: its logs show `Cache not found` for all three new
+entries, including the `ccache-android-` restore-key prefix — run 32401062065 predates the ccache step
+entirely, so there was nothing for it to be partly warm from. A salted cache-busting run was therefore
+not needed, and was not run: it would have added an orphaned entry to a budget already over cap.
+
+**What each cache is worth**, from the warm run: cacheable compiler invocations fell from **2965 to
+412** — the restored `.cxx` tree lets ninja skip the rest — and ccache served **398/398 of the
+remainder, 100% direct hits, 0 misses**, at 0.9 GB of its 2 GB ceiling. The `.cxx` entry therefore
+earns its budget on evidence rather than assumption. The 100% *direct* hit rate is attributable to
+`CCACHE_COMPILERCHECK=content` and the `CCACHE_SLOPPINESS` list: the NDK is reinstalled every run and
+`yarn install` rewrites mtimes under `node_modules`, so at ccache's defaults nearly every object would
+have missed — and would have read as a cold cache rather than as a misconfigured one.
 
 **Provable only on the release path** (post-merge, first real release): the lane split, the gate's
 position between build and upload, the AAB path, and the moved tag push. `release.yml` is
