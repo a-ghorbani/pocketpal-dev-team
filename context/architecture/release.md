@@ -198,9 +198,20 @@ exactly why its absence is silent and needs an artifact-level assertion.
 4. It self-checks its instrument before judging: it fails if it cannot open the artifact, cannot locate
    a required library, cannot parse the ELF, or reads an empty `.dynsym`. A zero-match read is an
    instrument failure, never a pass.
+4b. **It validates its manifest as strictly as it validates the artifact**, because its own failure mode
+   is passing by absence. It rejects a manifest with no ABIs, an ABI with no required libraries, no
+   symbol rules at all, and — the one that matters most — a symbol rule that names a library but
+   asserts nothing about it (no `mustExport`, no `expectedMatchCount`). That last combination was
+   measured to report PASS and exit 0 against the very APK that shipped the regression: I1 and the
+   asset rule were both *satisfied* by that build, so the symbol rule is the only thing standing
+   between it and a green pipeline. Emptying `mustExport` during a dependency bump is a plausible
+   edit, which is exactly why it must fail rather than degrade. A repeated `--apk`/`--aab`/`--manifest`
+   is refused for the same reason, as is `--print-variants` alongside an artifact.
 5. It checks **both** shipped forms on the release path — the APK attached to the GitHub Release and
    the AAB uploaded to Play — resolving paths per form: an APK holds `lib/<abi>/…` and `assets/…`, an
-   AAB holds `base/lib/<abi>/…` and `base/assets/…`.
+   AAB holds `base/lib/<abi>/…` and `base/assets/…`. The `base/` layout is verified against a genuine
+   `:app:bundleProdRelease` output, not a synthetic one. `ci.yml` builds no bundle and so checks only
+   the APK.
 6. Extra `librnllama*` variants beyond the manifest are permitted and reported, not failed: the ladder
    can only benefit, and the prebuilt escape hatch (§4d) legitimately produces all seven.
 7. The ELF reader is in-process, not a shell-out to `readelf`/`llvm-nm`: macOS ships no `readelf` and
