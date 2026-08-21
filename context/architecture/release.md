@@ -198,26 +198,51 @@ exactly why its absence is silent and needs an artifact-level assertion.
 4. It self-checks its instrument before judging: it fails if it cannot open the artifact, cannot locate
    a required library, cannot parse the ELF, or reads an empty `.dynsym`. A zero-match read is an
    instrument failure, never a pass.
-4b. **It validates its manifest as strictly as it validates the artifact**, because its own failure mode
-   is passing by absence. The rule it enforces is that **a symbol rule must demand that something is
-   present**: `mustExport` non-empty, or an `expectedMatchCount` with a non-empty `pattern` and a
-   `count` greater than zero. Everything else about the manifest is rejected too — no ABIs, an ABI
-   with no required libraries, no symbol rules at all, a rule naming no library, a malformed
-   `expectedMatchCount`, and an allowlist that comes out empty because every required library is a
-   JNI wrapper.
+4b. **Every list in the manifest has a floor**, because the check's own failure mode is passing by
+   absence and an emptied list is the cheapest edit that unblocks a build. The rule is that a
+   declaration must demand something be **present**:
 
-   Two weakenings were **measured to report PASS and exit 0 against the very APK that shipped the
-   regression**: a rule that named the library and asserted nothing, and a rule whose only demand was
-   `{pattern: "hexagon", count: 0}` — which does not merely assert nothing, it asserts the backend is
-   *absent*, so the incident build satisfies it exactly. In both cases I1 and the asset rule were
-   already *satisfied* by that build, so the symbol rule is the only thing standing between it and a
-   green pipeline. `count: 0` is also self-contradictory beside `mustExport` — required symbols cannot
-   be present and match zero times — so demanding a positive count costs nothing legitimate. Emptying
-   `mustExport` during a dependency bump is a plausible edit, which is exactly why these must fail
-   rather than degrade.
+   | List | Floor |
+   | --- | --- |
+   | `abis` | non-empty |
+   | `requiredLibs` | non-empty, per ABI |
+   | `requiredSymbols` | at least one rule overall, and at least one for any ABI declaring a `_hexagon` library |
+   | each symbol rule | `mustExport` non-empty, **or** an `expectedMatchCount` with a non-empty `pattern` and `count > 0` |
+   | `requiredAssets` | non-empty for any ABI declaring a `_hexagon` library |
+   | derived allowlist | non-empty |
+
+   The asset and symbol floors are conditional on the ABI carrying an accelerator, since an ABI
+   without one legitimately declares neither. The report also prints the `assets:` row even when
+   nothing is declared — the summary line claims assets were checked, so a manifest that declares
+   none must be visible in the evidence rather than quietly losing the row.
+
+   Four weakenings were **measured passing on real artifacts** before these floors existed: a rule
+   that named the library and asserted nothing; a rule whose only demand was
+   `{pattern: "hexagon", count: 0}`, which does not merely assert nothing but asserts the backend is
+   *absent*, so the incident build satisfies it exactly; an emptied `requiredAssets`, which passed an
+   APK with **zero** DSP libraries — backend compiled in, dead on the device; and emptied arm64
+   symbol rules while x86_64 still carried one. In every case the other rules were already
+   *satisfied* by the bad build, so the emptied one was the only thing standing between it and a
+   green pipeline. Each is the kind of edit a dependency bump invites: a renamed
+   `libggml-htp-v*.so` makes the asset rule fail, and emptying the list is the single edit that
+   unblocks it.
 
    A repeated `--apk`/`--aab`/`--manifest` is refused for the same reason, as is `--print-variants`
    alongside an artifact.
+
+   **Where this hardening stops, and why.** The script can enforce that a declaration *demands
+   presence*. It cannot enforce that the demand is *meaningful*. Two weakenings defeat the gate and
+   are not defects in it: re-pointing a rule's `lib` at `librnllama.so` and demanding a symbol that
+   is always there, or keeping the hexagon library but demanding a trivially-true symbol of it.
+   Catching either would mean hardcoding which library and which symbols matter — duplicating in the
+   script the very thing the manifest exists to declare, and leaving two places to disagree. Past
+   this line the control is a **reviewed manifest diff**, not more validation. A future maintainer
+   should add floors, not semantics.
+
+   Two weakenings that already fail closed, and are worth keeping that way: dropping the hexagon
+   library from `requiredLibs` while keeping its symbol rule (the allowlist derives from
+   `requiredLibs`, so the variant stops being built and instrument-honesty fires — removing the
+   library from the contract *cannot* hide it), and deleting the arm64 ABI entry outright.
 5. It checks **both** shipped forms on the release path — the APK attached to the GitHub Release and
    the AAB uploaded to Play — resolving paths per form: an APK holds `lib/<abi>/…` and `assets/…`, an
    AAB holds `base/lib/<abi>/…` and `base/assets/…`. The `base/` layout is verified against a genuine
