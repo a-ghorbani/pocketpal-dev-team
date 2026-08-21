@@ -206,13 +206,19 @@ exactly why its absence is silent and needs an artifact-level assertion.
    | --- | --- |
    | `abis` | non-empty |
    | `requiredLibs` | non-empty, per ABI |
-   | `requiredSymbols` | at least one rule overall, and at least one for any ABI declaring a `_hexagon` library |
+   | `requiredSymbols` | at least one rule overall; and for any ABI declaring a `_hexagon` library, at least one rule **whose `lib` is that accelerator library** — not merely a rule |
    | each symbol rule | `mustExport` non-empty, **or** an `expectedMatchCount` with a non-empty `pattern` and `count > 0` |
    | `requiredAssets` | non-empty for any ABI declaring a `_hexagon` library |
    | derived allowlist | non-empty |
 
    The asset and symbol floors are conditional on the ABI carrying an accelerator, since an ABI
-   without one legitimately declares neither. The report also prints the `assets:` row even when
+   without one legitimately declares neither.
+
+   **Ground truth for why the symbol rule carries so much weight:** the APK that shipped the
+   regression contains **all 12 declared libraries and all 4 DSP assets**. Every other rule in the
+   manifest passes on it. The symbol rule is the only load-bearing assertion, which is why each way of
+   quietly disarming it — asserting nothing, demanding a count of zero, or pointing the rule at a
+   different library — mattered more than it looked. The report also prints the `assets:` row even when
    nothing is declared — the summary line claims assets were checked, so a manifest that declares
    none must be visible in the evidence rather than quietly losing the row.
 
@@ -269,12 +275,17 @@ fallback globs do not match this project's flavored path, `metadata_path` with
 **green having uploaded metadata and no binary**. With the path passed explicitly, supply's
 `verify_block` turns a wrong path into a loud failure instead.
 
-Two alternatives were considered and rejected: calling the gate from inside the lane (ordering would
-live in Ruby statement order, and the two workflows would invoke the gate differently), and a Gradle
-verification task attached to the `assemble`/`bundle` output (strongest — it would satisfy the ordering
-invariant by construction and cover local builds for free — but it would fail every local release build
-for a developer without the 673 MB SDK, turning an advisory into a blocker on machines that have no
-business being blocked). Worth revisiting only if local from-source builds stop being routine.
+Two alternatives were considered and rejected. Calling the gate from inside the lane would put the
+ordering guarantee in Ruby statement order rather than the workflow graph, and the two workflows would
+then invoke the gate differently.
+
+A **Gradle verification task attached to the `assemble`/`bundle` output** looks stronger — it would
+satisfy the ordering invariant by construction — but it **cannot reach the risk that matters**. The
+release path's exposure spans two separate `fastlane` processes and a Play upload; a task bound to
+`assemble`/`bundle` completes inside the first of them and has no way to gate what the second does.
+It would secure the build and leave the upload exactly as unguarded as before. That it would also
+block local release builds for a developer without the 673 MB SDK is a real cost, but it is the
+secondary objection, not the reason.
 
 ### 4d. Escape hatch (C)
 
@@ -318,18 +329,35 @@ what makes it usable at all.
 | Hexagon backend compiled in | `HEXAGON_SDK_ROOT` + `HEXAGON_TOOLS_ROOT` reaching a tree containing `libcdsprpc.so` |
 | DSP assets in the artifact | llama.rn's `syncRNLlamaHtpAssets`, sourced from `node_modules/llama.rn/bin/arm64-v8a` |
 | required payload | the committed manifest |
-| what the Play upload ships | the `aab:` path passed explicitly by `upload_android_alpha` |
+| what the Play upload ships | the `aab:` path passed explicitly by `upload_android_alpha` (`Fastfile`) |
+| what the payload gate reads | the `--aab` path in `release.yml` |
+
+The last two rows are the one place the lane split traded a single determinant for two: the path is now
+written in both `release.yml` and the `Fastfile`, and they must agree. A fresh runner makes divergence
+**fail closed** — the gate reads a path that does not exist (instrument honesty) or supply's
+`verify_block` rejects a missing `aab:` — so this is recorded rather than defended with a check. It
+would only fail open on a dirty runner holding a stale bundle at the other path.
 
 **Two declarations are asserted separately, because they are not the same problem.** Both reach gradle
 only through the environment and both used to fail silently, and the gate sees neither:
 
 - **Allowlist — asserted from the build log.** The build is teed to `android/android-build.log` and a
-  separate step greps for `Building rnllama variants: <the exact list>`. `build.gradle:155-158` prints
-  that line **only** when the property arrived by the `ORG_GRADLE_PROJECT_` route, so its presence
-  proves transport and its content proves the value. An unarrived allowlist builds all seven arm64
-  variants, which §4c.6 would pass as permitted extras. Note the grep is a *substring* match, so it
-  proves the declared list was reported, not that the built set is exactly it — extras are permitted
-  by design and the payload gate is what reports them. The step's message says so.
+  separate step greps for `Building rnllama variants: <the exact list>`. `build.gradle:155-158` reads
+  the value with `project.findProperty("rnllamaVariants")`, which is **route-agnostic** — it would
+  equally read a properties file or `-P`. So the printed line proves only that *a project property of
+  that name reached the subproject*. It proves the environment route specifically because
+  `rnllamaVariants` is defined in **no** properties file anywhere — not llama.rn's, not ours, not the
+  root (verified by grep, with `reactNativeArchitectures` as the positive control) — so the
+  environment is currently the only way it can arrive.
+
+  **That is contingent, and it is the design's only live proof that the env → gradle route works.** If
+  anyone ever adds `rnllamaVariants` to a properties file, this assertion keeps passing while silently
+  no longer proving transport. Treat adding it as a change to the verification, not just to a default.
+
+  An unarrived allowlist builds all seven arm64 variants, which §4c.6 would pass as permitted extras.
+  The grep is also a *substring* match, so it proves the declared list was reported, not that the built
+  set is exactly it — extras are permitted by design and the payload gate is what reports them. The
+  step's message says so.
 - **Mode — asserted from the environment, not a log line.** `rnllamaBuildFromSource` has a competing
   definition with the same value today, so a typo in our variable name produces a build
   *indistinguishable* from a correct one — until the day upstream flips its flag to `false`, at which
@@ -491,6 +519,15 @@ eviction behaviour must be reviewed together, not chosen per-step.
 > the smaller half. Reducing the `setup-java` gradle cache footprint is the larger lever and belongs
 > to its own change (deferred cleanup 9).
 
+**Accepted risk: release builds link objects restored from a prefix-matched ccache.** The key embeds
+the commit SHA so it never hits exactly, and every run restores via the `ccache-android-` prefix. Before
+this contract, the shipped native libraries came from the npm tarball, integrity-pinned in `yarn.lock`;
+now they are compiled, and compilation reuses cached objects. GitHub scopes cache **writes** per ref, so
+an unprivileged fork cannot poison what a `main` release run restores — which is why this is accepted
+rather than removed. What it does change is that a transient compromise of a privileged run becomes a
+persistent one, until the entry is evicted. Dropping the ccache entry from `release.yml` alone would cost
+roughly half the warm build; that trade is the one to revisit if the threat model changes.
+
 The `.cxx` cache is `ci.yml` only: a restored tree is only useful while ninja's mtime comparison
 against `node_modules/llama.rn/cpp/` still holds, and `ci.yml` caches `node_modules` so those mtimes
 are tar-preserved, while `release.yml` does not. Upstream caches ccache but not `.cxx`, a weak prior in
@@ -531,84 +568,50 @@ second, larger build pipeline. That is a scope boundary, not a preference.
 
 ---
 
-## 10. Verification record
+## 10. What this contract costs, and what is still unproven
 
-What was actually proven, and by what. Local, branch-CI, and release-path proofs are different things.
-
-**Proven locally** (machine with `~/.hexagon-sdk/6.4.0.2`):
-
-- From-source build with the allowlist applied → gate **passes** on both the APK and the AAB, 12/12
-  arm64 libraries, 4/4 DSP assets, 4/4 x86_64 libraries, both symbols defined, **exactly 16** hexagon
-  `.dynsym` entries, **extras: none** (the allowlist dropped `rnllama_v8_2_i8mm` as intended).
-- **Instrument calibration**: on that same `librnllama_v8_2_dotprod_i8mm_hexagon_opencl.so`, the gate's
-  in-process ELF reader and
-  `ndk/27.0.12077973/…/llvm-nm -D | grep -ci hexagon` agree exactly — 6527 `.dynsym` entries and 16
-  hexagon matches on both, with both required symbols reported `T` (defined). The reader is
-  cross-checked, not trusted.
-- Gate against the **currently shipped, broken CI APK** (run 32347391124) → **fails**, naming both
-  symbols, with I1 satisfied and extras `librnllama_v8_2_i8mm.so`, `librnllama_jni_v8_2_i8mm.so` —
-  the pre-allowlist seven-variant build.
-- `bundle exec fastlane build_android_release` produces both artifacts at the paths the workflow and
-  the upload lane hardcode.
-
-**Proven by branch CI** — the only proof that provisioning works on `ubuntu-latest`, that the
-declarations reach gradle there, and that the gate blocks an upload:
-
-- Run 32401062065 (gate + allowlist, **no SDK**): `build-android` red **at the payload check and
-  nowhere else**; the report shows I1 satisfied, extras **empty**, both symbols absent, count 0, on a
-  `.dynsym` of **6458** entries; the APK upload step **skipped**, proving I5 on `ci.yml`. The allowlist
-  assertion passed. Job wall clock 53 min, no new caches.
-- Run 32410730113 (**SDK provisioning the only change**): all four jobs green. The report shows both
-  symbols **present**, **exactly 16** hexagon matches on a `.dynsym` of 6527 entries, extras still
-  empty. **Absent → present on the two named symbols, with one variable moved** — the stop condition
-  is met and no re-declaration was needed. `Provision the Hexagon SDK` succeeded on `ubuntu-latest` in
-  ~33 s (673 MB fetch + parallel xz extract). Both `HEXAGON_SDK_ROOT` and `HEXAGON_TOOLS_ROOT`, all
-  four ccache variables, and the seven-name allowlist are visible in the build step's environment.
-
-- Run 32415207752 (**warm**, one commit later): green, gate passes, both symbols present, 16 matches,
-  extras empty. All three new caches **restored**.
-
-**Build time**, against thresholds committed before the first run:
-
-| | Threshold | Measured |
-| --- | --- | --- |
-| cold `build-android` | ≤ 75 min | **43.9 min** (run 32410730113) |
-| warm `build-android` | ≤ 35 min | **23.2 min** (run 32415207752) |
-
-Run 32410730113 is a **clean cold** measurement: its logs show `Cache not found` for all three new
-entries, including the `ccache-android-` restore-key prefix — run 32401062065 predates the ccache step
-entirely, so there was nothing for it to be partly warm from. A salted cache-busting run was therefore
-not needed, and was not run: it would have added an orphaned entry to a budget already over cap.
-
-**What each cache is worth**, from the warm run: cacheable compiler invocations fell from **2965 to
-412** — the restored `.cxx` tree lets ninja skip the rest — and ccache served **398/398 of the
-remainder, 100% direct hits, 0 misses**, at 0.9 GB of its 2 GB ceiling. The `.cxx` entry therefore
-earns its budget on evidence rather than assumption. The 100% *direct* hit rate is attributable to
-`CCACHE_COMPILERCHECK=content` and the `CCACHE_SLOPPINESS` list: the NDK is reinstalled every run and
+**Build time.** Measured on `ubuntu-latest` `build-android`: cold (all three caches miss) **≈ 44 min**,
+warm (all three restore) **≈ 23 min**, against thresholds of 75 and 35 min set before the first run and
+a 21 min pre-regression prebuilt baseline. The caches are worth roughly half the wall clock: with the
+`.cxx` tree restored, ninja drops cacheable compiler invocations by about 85%, and ccache then serves
+essentially all of the remainder as *direct* hits. That direct-hit rate depends on
+`CCACHE_COMPILERCHECK=content` and the `CCACHE_SLOPPINESS` list — the NDK is reinstalled every run and
 `yarn install` rewrites mtimes under `node_modules`, so at ccache's defaults nearly every object would
-have missed — and would have read as a cold cache rather than as a misconfigured one.
+miss, and it would read as a cold cache rather than as a misconfigured one. Provisioning the SDK itself
+costs well under a minute.
 
-**Provable only on the release path** (post-merge, first real release): the lane split, the gate's
-position between build and upload, the AAB path, and the moved tag push. `release.yml` is
-`workflow_dispatch` and would bump the version, push a tag and upload to Play, so it cannot be
-rehearsed. Residual risk is bounded in the safe direction — a lane-name or path error fails *before*
-`upload_to_play_store`, and supply's `verify_block` rejects a wrong `aab:` path.
+Missing either threshold reopens the allowlist (deferred cleanup 6) or the escape hatch (§4d); it does
+not silently become the new normal.
 
-> **Handover: the first post-merge release run must be watched.** The upload lane and the moved tag
-> push have no pre-merge proof.
+**The gate's instrument is calibrated, not trusted.** Its in-process ELF reader was cross-checked
+against the NDK's `llvm-nm -D | grep -ci hexagon` on two real artifacts — a backend-less build (6458
+`.dynsym` entries, 0 hexagon matches) and a sound one (6527 entries, 16 matches) — with both readings
+agreeing exactly and both required symbols reported as *defined*. Re-run that cross-check if the reader
+is ever changed.
 
-**Stop condition, for any future repeat of this work**: if the two named symbols do not go from
-**absent to present** in a CI-produced artifact, the diagnosis is wrong — stop and report rather than
-proceeding. A count other than 16 with both symbols present is **not** a stop: from-source and
-upstream's standalone build need not export identically (LTO and visibility differ). Treat it as
-scenario E.
+**Stop condition, for any future repeat of this work.** If the two named symbols do not go from
+**absent to present** in a CI-produced artifact when the SDK is added, the diagnosis is wrong — stop
+and report rather than proceeding. A count other than the declared one *with both symbols present* is
+**not** a stop: from-source and upstream's standalone build need not export identically, since LTO and
+visibility differ. That is scenario E, and it is re-declared in the PR that causes it.
 
-**Build-time acceptance**, set before the first run: cold (all three caches miss) ≤ **75 min**, warm
-(all three restore) ≤ **35 min**, against 62 and 58 min from-source-without-caches baselines and a 21
-min pre-regression prebuilt baseline. Missing either threshold reopens the allowlist (deferred cleanup
-6) or the escape hatch (§4d); it does not silently become the new normal.
+**What no pre-merge run can prove.** `release.yml` is `workflow_dispatch` and would bump the version,
+push a tag and upload to Play, so it cannot be rehearsed. The lane split, the gate's position between
+build and upload, the AAB path and the moved tag push are therefore verified by reading only. Residual
+risk is bounded in the safe direction: a lane-name or path error fails *before* `upload_to_play_store`,
+and supply's `verify_block` rejects a wrong `aab:` path.
 
----
+> **Live obligation: the first release run after this landed must be watched**, and the backend
+> confirmed on a real device. Two separate reasons:
+>
+> - The upload lane and the moved tag push have no pre-merge proof.
+> - **Everything here proves the backend is *present in the shipped library*, not that it *engages on a
+>   device*.** `RNLlama.java`'s `isHexagonSupported()` gates the backend on Snapdragon 8-series SoCs,
+>   and nothing in CI can observe that — no emulator has a DSP, and the payload gate reads `.dynsym`,
+>   not runtime behaviour. Presence is necessary and was what regressed; it is not sufficient.
+>   Confirming engagement needs a real 8-series device.
+>
+> Remove this note once a release has gone through cleanly and a device has been checked.
 
 ## Deferred cleanups
 
@@ -630,7 +633,13 @@ min pre-regression prebuilt baseline. Missing either threshold reopens the allow
    gradle cache** (6.7 GB of ~10.6 GB, three entries). Until that is addressed, every cache in the
    repo is subject to eviction, silently. This is the larger half of the D2 budget problem and is not
    specific to the Android native build.
-10. **The payload gate only inspects the ABIs the manifest names.** An artifact carrying an
+10. **I5 is the only invariant enforced by prose rather than a check.** Nothing mechanically asserts
+    that no upload, publish, tag push or `upload_to_play_store` can be reached without a passing gate;
+    today it holds by review of the workflow graph and the lane split. The shape that would fix it is
+    the one `android-ladder-coverage.test.js` already uses for I7: parse the workflow YAML and the
+    Fastfile, identify every publishing step, and assert each is ordered after the gate step within its
+    job. Deferred because it is scope growth on an already-large change, not because it is unwanted.
+11. **The payload gate only inspects the ABIs the manifest names.** An artifact carrying an
     unexpected `lib/<abi>/` directory would not be looked at, so a backend-less payload for a
     newly-added ABI would ship unnoticed. Unreachable today — `reactNativeArchitectures` pins
     `arm64-v8a,x86_64` and llama.rn filters 32-bit regardless — but the gate is silent rather than
