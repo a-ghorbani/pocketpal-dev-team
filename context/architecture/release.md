@@ -236,6 +236,13 @@ exactly why its absence is silent and needs an artifact-level assertion.
    A repeated `--apk`/`--aab`/`--manifest` is refused for the same reason, as is `--print-variants`
    alongside an artifact.
 
+   **The same drift problem applies to the SDK digest.** The provisioning action verifies a digest over
+   a narrow subset of the SDK — the include roots CMake adds and the library it links — which is only
+   sound while that subset still covers what llama.rn references. A widened include set would leave the
+   digest green over a stale, narrower set, and on a cache hit the tarball digest is not there to catch
+   it. `scripts/__tests__/hexagon-sdk-coverage.test.js` ties the two together, with a vacuity guard on
+   both parses, in the same shape as the variant-ladder and DSP-asset ties.
+
    **Where this hardening stops, and why.** The script can enforce that a declaration *demands
    presence*. It cannot enforce that the demand is *meaningful*. Two weakenings defeat the gate and
    are not defects in it: re-pointing a rule's `lib` at `librnllama.so` and demanding a symbol that
@@ -485,6 +492,8 @@ upload lane never runs; Play receives nothing; no tag is pushed; no GitHub Relea
 | D14 | `e2e-tests.yml` declares mode + allowlist, but no SDK and no gate | Emulators have no DSP; its APK never ships |
 | D15 | Push the release tag after the gate, not after the version bump | A failed gate should leave no tag to reuse or delete |
 | D16 | Set the full ccache env, not just dir and size | The NDK is reinstalled per run, so `compiler_check=mtime` would miss on everything and read as cold rather than misconfigured |
+| D17 | No ccache on the release path | Only a prefix restore could ever hit there, and that links objects of unreviewed provenance into the shipped artifact |
+| D18 | Pin the Hexagon SDK by content, not by tag | A third party redistributes it without checksums, and a tag names a mutable asset |
 
 **On D2, the cache budget and the subset alternative.** The Android host build reads only `incs`,
 `incs/stddef`, `ipc/fastrpc/rpcmem/inc`, and links
@@ -519,14 +528,17 @@ eviction behaviour must be reviewed together, not chosen per-step.
 > the smaller half. Reducing the `setup-java` gradle cache footprint is the larger lever and belongs
 > to its own change (deferred cleanup 9).
 
-**Accepted risk: release builds link objects restored from a prefix-matched ccache.** The key embeds
-the commit SHA so it never hits exactly, and every run restores via the `ccache-android-` prefix. Before
-this contract, the shipped native libraries came from the npm tarball, integrity-pinned in `yarn.lock`;
-now they are compiled, and compilation reuses cached objects. GitHub scopes cache **writes** per ref, so
-an unprivileged fork cannot poison what a `main` release run restores — which is why this is accepted
-rather than removed. What it does change is that a transient compromise of a privileged run becomes a
-persistent one, until the entry is evicted. Dropping the ccache entry from `release.yml` alone would cost
-roughly half the warm build; that trade is the one to revisit if the threat model changes.
+**`release.yml` runs no ccache, deliberately (D17).** Before this contract the shipped native libraries
+came from the npm tarball, integrity-pinned in `yarn.lock`; now they are compiled, and compilation can
+reuse cached objects. The ccache key is the commit SHA and a release builds a fresh version-bump commit,
+so the exact key can never hit — the *only* way ccache could help a release is the `ccache-android-`
+prefix restore, i.e. linking objects of unreviewed provenance into the artifact that ships. GitHub scopes
+cache **writes** per ref, so an unprivileged fork cannot poison what a `main` run restores; the residual
+exposure is that a transient compromise of a privileged run becomes a persistent one until the entry is
+evicted. Since `release.yml` also caches no `.cxx` tree, the choice was binary — accept that on the
+shipped path, or get nothing from ccache there. Removed: it costs build minutes on the least frequent
+workflow, and it frees a ~850 MB entry from a cache budget already over cap. `ci.yml` keeps ccache; its
+artifacts are never published.
 
 The `.cxx` cache is `ci.yml` only: a restored tree is only useful while ninja's mtime comparison
 against `node_modules/llama.rn/cpp/` still holds, and `ci.yml` caches `node_modules` so those mtimes
