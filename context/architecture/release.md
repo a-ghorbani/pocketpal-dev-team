@@ -199,14 +199,25 @@ exactly why its absence is silent and needs an artifact-level assertion.
    a required library, cannot parse the ELF, or reads an empty `.dynsym`. A zero-match read is an
    instrument failure, never a pass.
 4b. **It validates its manifest as strictly as it validates the artifact**, because its own failure mode
-   is passing by absence. It rejects a manifest with no ABIs, an ABI with no required libraries, no
-   symbol rules at all, and — the one that matters most — a symbol rule that names a library but
-   asserts nothing about it (no `mustExport`, no `expectedMatchCount`). That last combination was
-   measured to report PASS and exit 0 against the very APK that shipped the regression: I1 and the
-   asset rule were both *satisfied* by that build, so the symbol rule is the only thing standing
-   between it and a green pipeline. Emptying `mustExport` during a dependency bump is a plausible
-   edit, which is exactly why it must fail rather than degrade. A repeated `--apk`/`--aab`/`--manifest`
-   is refused for the same reason, as is `--print-variants` alongside an artifact.
+   is passing by absence. The rule it enforces is that **a symbol rule must demand that something is
+   present**: `mustExport` non-empty, or an `expectedMatchCount` with a non-empty `pattern` and a
+   `count` greater than zero. Everything else about the manifest is rejected too — no ABIs, an ABI
+   with no required libraries, no symbol rules at all, a rule naming no library, a malformed
+   `expectedMatchCount`, and an allowlist that comes out empty because every required library is a
+   JNI wrapper.
+
+   Two weakenings were **measured to report PASS and exit 0 against the very APK that shipped the
+   regression**: a rule that named the library and asserted nothing, and a rule whose only demand was
+   `{pattern: "hexagon", count: 0}` — which does not merely assert nothing, it asserts the backend is
+   *absent*, so the incident build satisfies it exactly. In both cases I1 and the asset rule were
+   already *satisfied* by that build, so the symbol rule is the only thing standing between it and a
+   green pipeline. `count: 0` is also self-contradictory beside `mustExport` — required symbols cannot
+   be present and match zero times — so demanding a positive count costs nothing legitimate. Emptying
+   `mustExport` during a dependency bump is a plausible edit, which is exactly why these must fail
+   rather than degrade.
+
+   A repeated `--apk`/`--aab`/`--manifest` is refused for the same reason, as is `--print-variants`
+   alongside an artifact.
 5. It checks **both** shipped forms on the release path — the APK attached to the GitHub Release and
    the AAB uploaded to Play — resolving paths per form: an APK holds `lib/<abi>/…` and `assets/…`, an
    AAB holds `base/lib/<abi>/…` and `base/assets/…`. The `base/` layout is verified against a genuine
@@ -291,7 +302,9 @@ only through the environment and both used to fail silently, and the gate sees n
   separate step greps for `Building rnllama variants: <the exact list>`. `build.gradle:155-158` prints
   that line **only** when the property arrived by the `ORG_GRADLE_PROJECT_` route, so its presence
   proves transport and its content proves the value. An unarrived allowlist builds all seven arm64
-  variants, which §4c.6 would pass as permitted extras.
+  variants, which §4c.6 would pass as permitted extras. Note the grep is a *substring* match, so it
+  proves the declared list was reported, not that the built set is exactly it — extras are permitted
+  by design and the payload gate is what reports them. The step's message says so.
 - **Mode — asserted from the environment, not a log line.** `rnllamaBuildFromSource` has a competing
   definition with the same value today, so a typo in our variable name produces a build
   *indistinguishable* from a correct one — until the day upstream flips its flag to `false`, at which
