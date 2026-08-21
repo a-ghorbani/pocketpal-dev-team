@@ -206,9 +206,10 @@ exactly why its absence is silent and needs an artifact-level assertion.
    | --- | --- |
    | `abis` | non-empty |
    | `requiredLibs` | non-empty, per ABI |
-   | `requiredSymbols` | at least one rule overall; and for any ABI declaring a `_hexagon` library, at least one rule **whose `lib` is that accelerator library** — not merely a rule |
+   | `requiredSymbols` | at least one rule overall; and for any ABI declaring a `_hexagon` library, at least one rule **whose `lib` is that accelerator library itself** — not merely a rule, and not its JNI wrapper, whose name also contains `_hexagon` but which is a shim exporting stable `Java_*` entry points and none of the backend symbols |
    | each symbol rule | `mustExport` non-empty, **or** an `expectedMatchCount` with a non-empty `pattern` and `count > 0` |
-   | `requiredAssets` | non-empty for any ABI declaring a `_hexagon` library |
+   | `requiredAssets` | non-empty for any ABI declaring a `_hexagon` library, and each entry must be an ELF object for the declared `requiredAssetElfMachine` (EM_QDSP6) — presence by filename is not enough |
+   | accelerator ABI | at least one ABI must declare a real accelerator library, or every floor below is satisfied vacuously |
    | derived allowlist | non-empty |
 
    The asset and symbol floors are conditional on the ABI carrying an accelerator, since an ABI
@@ -222,14 +223,16 @@ exactly why its absence is silent and needs an artifact-level assertion.
    nothing is declared — the summary line claims assets were checked, so a manifest that declares
    none must be visible in the evidence rather than quietly losing the row.
 
-   Four weakenings were **measured passing on real artifacts** before these floors existed: a rule
+   Six weakenings were **measured passing on real artifacts** before these floors existed: a rule
    that named the library and asserted nothing; a rule whose only demand was
    `{pattern: "hexagon", count: 0}`, which does not merely assert nothing but asserts the backend is
    *absent*, so the incident build satisfies it exactly; an emptied `requiredAssets`, which passed an
    APK with **zero** DSP libraries — backend compiled in, dead on the device; and emptied arm64
    symbol rules while x86_64 still carried one. In every case the other rules were already
    *satisfied* by the bad build, so the emptied one was the only thing standing between it and a
-   green pipeline. Each is the kind of edit a dependency bump invites: a renamed
+   green pipeline. The last two were subtler: a rule pointing at the accelerator's own **JNI wrapper**,
+   which satisfies a naive `_hexagon` name test, and a manifest declaring **no accelerator ABI at
+   all**, which satisfies every conditional floor vacuously. Both passed the incident APK. Each is the kind of edit a dependency bump invites: a renamed
    `libggml-htp-v*.so` makes the asset rule fail, and emptying the list is the single edit that
    unblocks it.
 
