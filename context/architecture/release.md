@@ -177,8 +177,15 @@ deduped across ABIs. Today that is
 Bare variant names, not filenames: `rnllama_variant_enabled` matches the bare name and gates both the
 library and its JNI wrapper.
 
-`e2e-tests.yml` applies the same allowlist but **not** the gate and **no** SDK: its APK is never
-published and emulators have no DSP (D14).
+**Every workflow that builds an Android APK builds the same one we ship, and asserts that it did
+(D14).** There is no exemption for "this artifact is not published". `e2e-tests.yml` provisions the
+Hexagon SDK, applies the allowlist, and runs the payload gate exactly as the publishing jobs do,
+because the entire value of its APK is that it matches the release build — the e2e skill describes it
+as verifying *"the bit-identical artifact that would ship"*, and an artifact used to validate a release
+that differs from the release validates nothing. The native payload does not vary by flavor, so the
+manifest applies to `assembleE2eReleaseE2e` unchanged. If a build legitimately differs (signing,
+flavor, application id), that belongs in the manifest or a job-specific input, never in skipping the
+check.
 
 **Why the backend rule names Hexagon and not OpenCL.** OpenCL cannot degrade the same way. Its sources
 and `-DLM_GGML_USE_OPENCL` are added *outside* the `if (EXISTS ${OPENCL_STUB})` guard
@@ -492,7 +499,7 @@ upload lane never runs; Play receives nothing; no tag is pushed; no GitHub Relea
 | D11 | Keep prebuilt-forcing as a documented, gated emergency lever | Works, and cheap — but its ABI pairing is unverifiable |
 | D12 | The payload gate does not absorb the DCE check | Different subject, different manifest; coupling them helps neither |
 | D13 | Split the fastlane release lane; gate between build and upload | A gate the publish step can outrun is not a gate |
-| D14 | `e2e-tests.yml` declares mode + allowlist, but no SDK and no gate | Emulators have no DSP; its APK never ships |
+| D14 | Every workflow that builds an Android APK provisions the SDK, applies the allowlist and runs the gate — no exemption for unpublished artifacts | An artifact used to validate a release must match the release |
 | D15 | Push the release tag after the gate, not after the version bump | A failed gate should leave no tag to reuse or delete |
 | D16 | Set the full ccache env, not just dir and size | The NDK is reinstalled per run, so `compiler_check=mtime` would miss on everything and read as cold rather than misconfigured |
 | D17 | No ccache on the release path | Only a prefix restore could ever hit there, and that links objects of unreviewed provenance into the shipped artifact |
@@ -578,7 +585,7 @@ second, larger build pipeline. That is a scope boundary, not a preference.
 | 9i | iOS build | Unaffected — vendors the prebuilt xcframework; its from-source path excludes hexagon/opencl |
 | 9j | Local build by a developer without the SDK | Still produces a backend-less binary; the gate is runnable locally to expose it (deferred cleanup 3) |
 | 9k | Gate fails during a release run | The version bump commit is already pushed, but the tag is not (D15) and nothing is published. The residue is a pushed bump commit, which is already the behaviour for any post-bump failure |
-| 9l | `e2e-tests.yml` Android build | Declares mode + allowlist, is **not** gated: the APK is never published and emulators have no DSP |
+| 9l | `e2e-tests.yml` Android build | Treated exactly as a publishing job: SDK provisioned, allowlist applied and asserted, payload gated before the APK is uploaded. The earlier exemption was wrong twice over — the APK's whole purpose is to be bit-identical to the release, and e2e runs on **real devices** including a Snapdragon 8 Gen 2 (`e2e/baselines/benchmark/samsung-s23.json`), the one SoC family `isHexagonSupported()` accepts. Excluding the SDK there blinded the only place on-device Hexagon behaviour could be observed before release |
 | 9m | `RNLLAMA_SKIP_POSTINSTALL=1` on the release Android job | Safe: from-source ignores the downloaded `jniLibs` and that job builds no iOS target. If the mode declaration ever failed, the absent `jniLibs` would drop variants and the gate would fail on I1 — loudly. Not set on `ci.yml`, whose Linux `node_modules` cache is shared with `build-and-test` |
 
 ---
@@ -616,6 +623,10 @@ build and upload, the AAB path and the moved tag push are therefore verified by 
 risk is bounded in the safe direction: a lane-name or path error fails *before* `upload_to_play_store`,
 and supply's `verify_block` rejects a wrong `aab:` path.
 
+> **On-device confirmation is now reachable before release.** `e2e-tests.yml` builds with the SDK and
+> is gated, and the fleet includes a Snapdragon 8 Gen 2, so an e2e run on that device is the first
+> opportunity to observe the backend actually engaging rather than merely being present.
+>
 > **Live obligation: the first release run after this landed must be watched**, and the backend
 > confirmed on a real device. Two separate reasons:
 >
