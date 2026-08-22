@@ -35,6 +35,13 @@ If any are missing, emit `NEEDS_INPUT:` with the exact unanswered questions and 
 
 The Figma MCP tools are **deferred** — they aren't in your tool list until you load their schemas, and a bare call fails with "tool not found." Load them first: run `ToolSearch` with the query `figma` to discover and load the Figma tools (you need *get-metadata*, *get-design-context*, *get-screenshot*, and *whoami*; read the exact names from the search result).
 
+Two servers can serve these tools:
+
+- **`plugin:figma:figma`** — hosted (`mcp.figma.com`). Reads any file by `fileKey`, so it needs no desktop app, but it is OAuth-gated. If a `ToolSearch` for `figma` returns only `authenticate` / `complete_authentication`, nobody has authorized it in this session: call `authenticate`, hand the URL to the user, and wait. Do not improvise layout while you wait.
+- **`figma-local`** — the Figma **desktop** app's Dev Mode server on `http://127.0.0.1:3845/mcp`, registered in this repo's `.mcp.json`. **No auth** — it inherits the desktop session. It serves whichever file is open in the app, so `nodeId` alone is enough (no `fileKey`). Requires the desktop app running with the canonical file open.
+
+Prefer whichever is already live. The hosted one is better for pulling a specific node out of a file nobody has open; the local one is better when the user is actively in the file and there is no authorization to wait on.
+
 Call the Figma `whoami` tool once to confirm you're authenticated, then work directly against the canonical file — pull metadata, design context, and screenshots yourself. If `whoami` genuinely errors (auth/transport), stop and report it as a real outage; do not improvise layout from a screenshot alone.
 
 ## Step 1 — Metadata first, then design context
