@@ -23,12 +23,19 @@ No app runtime state is involved.
 ```
 AndroidPayloadManifest                       scripts/android-payload-manifest.json
   abis: AbiRequirement[]
+  assets: AssetRequirement        // artifact-scoped, so declared beside abis[] and not inside it
 
 AbiRequirement
   abi: "arm64-v8a" | "x86_64"
   requiredLibs: string[]          // librnllama*.so + librnllama_jni*.so that MUST be present
+  requiredLibAlignment: int       // minimum p_align of every PT_LOAD of every shipped library
   requiredSymbols: SymbolRule[]   // per-library exported-symbol assertions
-  requiredAssets: string[]        // non-lib payload the backend needs at runtime
+
+AssetRequirement
+  scope: "artifact"               // refusal hook, not an assertion (§4g)
+  required: string[]              // non-lib payload the backend needs, from the artifact root
+  elfMachine: int                 // 164 (EM_QDSP6)
+  usableByAbis: string[]          // ABIs whose shipped libraries can load them
 
 SymbolRule
   lib: string
@@ -50,6 +57,11 @@ Persisted: the manifest, in the app repo. Derived: the variant allowlist (§4b).
   manifest.
 - **DSP assets** — `assets/ggml-hexagon/libggml-htp-v{73,75,79,81}.so`, synced from
   `node_modules/llama.rn/bin/arm64-v8a` by llama.rn's `syncRNLlamaHtpAssets` task.
+- **`p_align`** — the alignment field of an ELF program header. Android 15+ requires every `PT_LOAD`
+  of a shared library to be 16 KB-aligned on a 16 KB-page device.
+- **Building job** — a job running an Android gradle `assemble*`/`bundle*` task, directly or through
+  a fastlane lane that does. **Gate step** — a step running `verify-android-payload.js` with
+  `--apk`/`--aab`. **Publishing step** — the five classifications in §4h.
 
 ### 1b. External inputs
 
@@ -153,10 +165,15 @@ is worth (deferred cleanup 6).
 
 Declared in the manifest (§1), enforced by the gate (§4c).
 
-| ABI | Required libraries | Required assets |
+| ABI | Required libraries | Minimum `p_align` |
 | --- | --- | --- |
-| `arm64-v8a` | `librnllama.so`, `librnllama_v8.so`, `librnllama_v8_2.so`, `librnllama_v8_2_dotprod.so`, `librnllama_v8_2_dotprod_i8mm.so`, `librnllama_v8_2_dotprod_i8mm_hexagon_opencl.so` — each with its `librnllama_jni*.so` wrapper | `assets/ggml-hexagon/libggml-htp-v{73,75,79,81}.so` |
-| `x86_64` | `librnllama.so`, `librnllama_x86_64.so` — each with its wrapper | — |
+| `arm64-v8a` | `librnllama.so`, `librnllama_v8.so`, `librnllama_v8_2.so`, `librnllama_v8_2_dotprod.so`, `librnllama_v8_2_dotprod_i8mm.so`, `librnllama_v8_2_dotprod_i8mm_hexagon_opencl.so` — each with its `librnllama_jni*.so` wrapper | 16384 |
+| `x86_64` | `librnllama.so`, `librnllama_x86_64.so` — each with its wrapper | 16384 |
+
+The DSP assets — `assets/ggml-hexagon/libggml-htp-v{73,75,79,81}.so` — are required once per
+artifact, not per ABI: Android packages `assets/` once, so an ABI could never have had its own set
+(§4g). The alignment requirement is per ABI and covers **every** shipped library, not only the ones
+named above (§4f).
 
 Required exported symbols, `arm64-v8a` / `librnllama_v8_2_dotprod_i8mm_hexagon_opencl.so`:
 
@@ -209,7 +226,8 @@ exactly why its absence is silent and needs an artifact-level assertion.
 1. One implementation (`scripts/verify-android-payload.js`), one manifest, consumed by every workflow
    that produces a shippable Android artifact, and runnable locally against a local build. No workflow
    restates a rule inline.
-2. It runs **before any upload, publish, or release step**, in every such workflow.
+2. It runs **before any upload, publish, or release step**, in every such workflow, and having
+   examined the very artifact that step publishes — asserted by a test, not by review (§4h).
 3. It reads `.dynsym`. Not `strings`, not file size: `strings` false-positives on `codec_*_ht` symbols,
    and the two builds that differ in whether the backend exists have identical `opencl` string counts
    (644). `.dynsym` survives stripping.
@@ -226,26 +244,37 @@ exactly why its absence is silent and needs an artifact-level assertion.
    | `requiredLibs` | non-empty, per ABI |
    | `requiredSymbols` | at least one rule overall; and for any ABI declaring a `_hexagon` library, at least one rule **whose `lib` is that accelerator library itself** — not merely a rule, and not its JNI wrapper, whose name also contains `_hexagon` but which is a shim exporting stable `Java_*` entry points and none of the backend symbols |
    | each symbol rule | `mustExport` non-empty, **or** an `expectedMatchCount` with a non-empty `pattern` and `count > 0` |
-   | `requiredAssets` | non-empty for any ABI declaring a `_hexagon` library, and each entry must be an ELF object for the declared `requiredAssetElfMachine` (EM_QDSP6) — presence by filename is not enough |
+   | `assets` | the block must exist |
+   | `abis[].requiredAssets` / `requiredAssetElfMachine` | **refused.** Nothing reads them since the assets moved to the top-level block, and a key nothing reads is worse than a missing one: an editor working from the old shape declares assets, is never told they are ignored, and gets a green gate. The base version's shape guard went away with the key it guarded, so even `requiredAssets: "not even a list"` passed |
+   | `assets.scope` | `"artifact"` and nothing else — a refusal hook, counted as no check (D21) |
+   | `assets.required` | non-empty, and each entry must be an ELF object for `assets.elfMachine` (EM_QDSP6) — presence by filename is not enough |
+   | `assets.elfMachine` | an integer |
+   | `assets.usableByAbis` | present, and naming only ABIs the manifest declares — an ABI nobody declared is never enumerated, so naming one is a claim the check never reaches |
+   | `requiredLibAlignment` | present per ABI, an integer power of two, **≥ 16384** (D20) |
    | accelerator ABI | at least one ABI must declare a real accelerator library, or every floor below is satisfied vacuously |
    | derived allowlist | non-empty |
 
-   The asset and symbol floors are conditional on the ABI carrying an accelerator, since an ABI
-   without one legitimately declares neither.
+   The symbol floor is conditional on the ABI carrying an accelerator, since an ABI without one
+   legitimately declares none. The asset floors are unconditional, and safe to be so **only** because
+   the accelerator-ABI guard above them refuses a manifest declaring no accelerator at all; that
+   guard keys off `abis[].requiredLibs` and survives the assets moving out of `abis[]` (scenario O).
+
+   The alignment floor runs **last**, after every other manifest floor, so a manifest weakened in
+   some other way is still refused with the message naming what it weakened.
 
    **Ground truth for why the symbol rule carries so much weight:** the APK that shipped the
    regression contains **all 12 declared libraries and all 4 DSP assets**. Every other rule in the
    manifest passes on it. The symbol rule is the only load-bearing assertion, which is why each way of
    quietly disarming it — asserting nothing, demanding a count of zero, or pointing the rule at a
-   different library — mattered more than it looked. The report also prints the `assets:` row even when
-   nothing is declared — the summary line claims assets were checked, so a manifest that declares
-   none must be visible in the evidence rather than quietly losing the row.
+   different library — mattered more than it looked. The report prints the `assets:` row once per
+   artifact, and a per-ABI usability row beside it — the summary line claims assets were checked, so
+   what was checked has to be visible in the evidence rather than inferred from a pass.
 
    Six weakenings were **measured passing on real artifacts** before these floors existed: a rule
    that named the library and asserted nothing; a rule whose only demand was
    `{pattern: "hexagon", count: 0}`, which does not merely assert nothing but asserts the backend is
-   *absent*, so the incident build satisfies it exactly; an emptied `requiredAssets`, which passed an
-   APK with **zero** DSP libraries — backend compiled in, dead on the device; and emptied arm64
+   *absent*, so the incident build satisfies it exactly; an emptied required-asset list, which passed
+   an APK with **zero** DSP libraries — backend compiled in, dead on the device; and emptied arm64
    symbol rules while x86_64 still carried one. In every case the other rules were already
    *satisfied* by the bad build, so the emptied one was the only thing standing between it and a
    green pipeline. The last two were subtler: a rule pointing at the accelerator's own **JNI wrapper**,
@@ -336,15 +365,301 @@ what makes it usable at all.
   `lm_ggml_backend_is_hexagon` in `.dynsym`.
 - **I3 — evidence source**: backend presence is decided from `.dynsym` only.
 - **I4 — instrument honesty**: a check that could not run fails; it never passes by absence. This
-  applies to the gate's read paths and to the workflow's declaration assertions alike.
-- **I5 — gate precedes publication**: no upload/publish step runs before a passing gate, in any
-  workflow and inside any lane it invokes.
+  applies to the gate's read paths and to the workflow's declaration assertions alike, and now to
+  both new instruments: a library whose program headers cannot be read, or a workflow that cannot be
+  parsed, fails.
+- **I5 — gate precedes publication**: no upload/publish step runs before a passing gate **that
+  examined the bytes being published**, in any workflow and inside any lane it invokes. Checked
+  mechanically (§4h), not by review of the workflow graph.
 - **I6 — mode is not evidence**: build mode is a cost and provenance choice. Correctness is asserted on
   the artifact, never inferred from the mode.
 - **I7 — ladder coverage**: the compiled-variant allowlist contains every rung the ladder can select.
   A rung may be omitted only when it is **build-equivalent** to a retained rung — same `-march`, same
   source list, same compile definitions — or as a *named, costed* bet with the fall-through rung
   recorded. "Same `-march`" alone never qualifies.
+- **I8 — page alignment**: every shipped `lib/<abi>/*.so` in a declared ABI has every `PT_LOAD` at
+  `p_align >= 16384`, **and**, where the APK stores it uncompressed, begins at a zip data offset
+  that is a multiple of 16384. The app maps its libraries in place, so both are required to load.
+- **I9 — scope is structural**: a required path's scope is declared by where it sits in the manifest,
+  never inferred from where it happens to be written.
+
+### 4f. 16 KB page alignment (C)
+
+Android 15+ refuses to load a shared library whose segments are not page-aligned on a 16 KB-page
+device. The NDK already produces that alignment; this is a tripwire holding it, not a repair.
+
+1. Every `lib/<abi>/*.so` entry of a **declared** ABI is read, and **two** properties are asserted,
+   because a library needs both to load and neither is the Android 15 requirement on its own:
+   every `PT_LOAD` at `p_align >= requiredLibAlignment` with a power-of-two `p_align`, and the
+   entry's **zip data offset** at a multiple of the same number. The app ships
+   `extractNativeLibs=false`, so bionic maps each library in place out of the archive; conforming
+   segments at an unaligned offset still cannot be loaded. Asserting only the first certified
+   exactly that artifact — the fixture repacked without zip padding, every ELF untouched, printed
+   `PASS / EXIT=0` on 68/68 misaligned offsets.
+
+   The offset is read from the archive's **local** header. `unzip -Z -v` reports the *central*
+   directory's extra-field length, which is 0 here, while the padding that does the aligning lives
+   in the local header — 599 bytes for `lib/arm64-v8a/librnllama.so`. Scoped to **stored** entries
+   of an **APK**: a deflated entry is extracted at install rather than mapped, and an AAB is
+   repackaged by bundletool on the way to the device, so neither offset decides anything. Both are
+   reported as counts rather than skipped silently.
+
+   The fixtures had to gain a stored-mode zip writer for this. `zip -q -r -X` deflates even
+   incompressible data, so a stored-scoped rule would have had an **empty subject set across every
+   existing fixture and passed having checked nothing** — the same defect as the rule it implements,
+   one level up.
+2. The subject is **every** shipped library, not only `requiredLibs` (D19): alignment is a property
+   of what the platform loads, not of the llama.rn payload. Measured on the release APK: 68
+   libraries — 38 arm64, 30 x86_64 — of which 52 are not `librnllama*`, all at `p_align` 16384. The
+   whole scan costs **0.7 s** against a 233 MB artifact.
+3. `assets.required` was never in the subject set, which is scoping rather than exclusion — the
+   distinction still matters, because the four DSP assets are ELF32 `EM_QDSP6` objects at `p_align`
+   **4096**, loaded by the DSP and not by Android. One floor spanning libraries and assets would fail
+   the gate on a correct artifact.
+4. The program-header reader handles **both ELF widths and both byte orders**, like `readElfMachine`
+   and unlike `readDynsym`, which is ELF64-LE by assertion. It is a separate function for exactly
+   that reason (scenario L).
+5. Being a tripwire on what the toolchain already emits, it has to be shown capable of failing —
+   against the artifact (scenario H) and against a weakened declaration (scenario N).
+
+### 4g. Asset scope and usability (C)
+
+Declaring artifact-scoped paths under an ABI is what invited the belief that they could be scoped to
+one; they now sit in a top-level `assets` block (D22).
+
+1. `assets.required` paths resolve from the artifact root, and the block's **position** is what makes
+   that structural rather than implied (I9).
+2. `assets.scope` admits only `"artifact"`. It is a **refusal hook, not an assertion** — it cannot
+   fail except on a typo — and exists so a maintainer reaching for `"abi"` is refused with the reason
+   rather than shipping a scope no packager delivers (D21).
+3. **`usableByAbis` is checked against the artifact, never against the manifest** (D23). For each
+   declared ABI, `lib/<abi>/` must contain a library that is a non-wrapper `_hexagon` variant **iff**
+   that ABI is listed. The subject is the whole `lib/<abi>/` tree, not the "extra libraries"
+   enumeration: the accelerator variant is itself in `requiredLibs`, so a set derived from the
+   leftovers is empty for arm64 and would refuse a correct artifact. Measured: the unmodified release
+   APK yields `[arm64-v8a]`; a hexagon variant appearing under `x86_64` yields `[arm64-v8a, x86_64]`
+   and fails; arm64 reduced to its JNI wrapper yields `[]` and fails.
+4. The report prints per-ABI usability, so the 2.84 MB of DSP assets that reach `x86_64` is a stated
+   fact rather than an oversight (deferred cleanup 12).
+
+**No supported mechanism scopes `assets/` to an ABI**, which is why the asked-for exclusion was
+refused rather than deferred (D26). bundletool parses five directory-targeting keys — `countries`,
+`group`, `lang`, `tcf`, `tier` — and no `abi` key; asset packs target min-SDK, device feature, tier,
+texture format and country; AGP asset source sets are per flavor and build type; and `splits { abi }`
+copies the whole asset tree into every split. The two mechanisms that would work — an ABI flavor
+dimension, or an upstream llama.rn move of the HTP payload into `jniLibs` — cost more than the 1.2%
+of artifact size at stake.
+
+### 4h. No publish outruns the gate, mechanically (C)
+
+`scripts/__tests__/android-publish-ordering.test.js` parses every `.github/workflows/*.yml` with
+`js-yaml`, and the three Fastfiles by their explicit paths — `fastlane/`, `android/fastlane/`,
+`ios/fastlane/`, never by glob, since a fourth ships under `vendor/bundle` wherever `bundle install`
+has run and a glob count would be environment-dependent. `js-yaml` is declared in `devDependencies`
+rather than relied on transitively; it was already resolved at the version the lockfile pins, so
+declaring it left `yarn.lock` unchanged.
+
+`release.yml/build_android` runs **no `gradlew` at all**, so that job's building-ness — and with it
+every ordering rule over the release path — rests entirely on resolving the lane name its step
+invokes. Lane names are therefore matched against the known set rather than by position, because
+`fastlane <lane>`, `fastlane android <lane>` and `fastlane run <action>` are all valid here:
+`android/fastlane/Fastfile` declares `default_platform :android`, so the platform-prefixed form
+works, and a position-based parse silently resolved it to the platform instead and emptied the rule.
+A cliff edge rather than a bypass — the building-job count fails first — but a sharp one.
+
+Both files are read as **code, not commentary**: Ruby and shell both use `#`, and the upload lane's
+own comment quotes `gradle(task: "bundle")` to explain why it does not build — read literally, that
+comment makes the upload lane look like a build lane.
+
+| Classification | Publishing step |
+| --- | --- |
+| `workflow-artifact` | `uses: actions/upload-artifact@*` whose `path` names an `.apk` or `.aab` |
+| `play-upload` | a `run` reaching `upload_to_play_store`, directly or via a fastlane lane whose body does |
+| `tag-push` | a `run` pushing a git **tag** — a `git push` carrying a refspec, as against the bare `git push` of the version bump |
+| `github-release` | `uses: softprops/action-gh-release@*` |
+| `gh-release-cli` | a `run` invoking `gh release create`/`upload` |
+
+The rule and classification names below are the identifiers the test uses, so the doc and the code
+cannot drift into two vocabularies.
+
+**Rules.**
+
+1. **R1a — ordering** (`violationsOfOrdering`). In every building job, each publishing step sits at a higher step index than
+   some gate step in the same job.
+2. **R1b — path identity, and no interposition** (`violationsOfPathIdentity`). Every artifact path a publishing step names must
+   also be named by a gate step at a lower index in the same job, compared by basename (fastlane runs
+   under `working-directory: android`, so roots legitimately differ). Ordering alone binds the gate
+   to nothing: gating `--apk` while publishing the `.aab` is ordered and examines neither. And no step
+   between that gate and the publish may name the artifact again — otherwise gate at *i*, rewrite at
+   *i+1*, publish at *i+2* satisfies ordering and identity while the published bytes were never
+   examined. The realistic accidental form is a post-gate `zipalign`, `apksigner` or re-sign step
+   added to fix a signing problem.
+3. **R2 — the gate must still be able to fail the job** (`violationsOfGateCanFail`). A gate step carries no `if:` at all, no
+   `continue-on-error`, no `shell:` override; its `run` invokes the script as the **final** command,
+   with no `||`, no pipe, no trailing `exit`, no `set +e`, and no `--manifest` (a test flag). Banning
+   only `always()`/`failure()`/`cancelled()` would leave cheaper edits standing, and a *skipped* step
+   is not a failed step, so R1a stays green while nothing is asserted. **The pipe is the likeliest of
+   these**: no `shell:` key appears in any workflow, so every `run` executes under GitHub's default
+   `bash -e {0}`, which does not set `pipefail`, and `… 2>&1 | tee gate.log` therefore exits with
+   `tee`'s status. That is not a reach — `ci.yml` already pipes gradle through `tee` a few steps
+   above, so a maintainer wanting the gate's output in a log writes the same line without thinking.
+   The enumeration also covers the forms `bash -e` never reports a failure for: `&` (backgrounded),
+   a leading `!`, and a gate wrapped in a single-line `if <gate>; then …; fi` or
+   `while <gate>; do …; done` — each verified to exit 0 for a gate exiting 7. The multi-line `if`
+   was already caught, so a check testing only for the script's *presence* rewarded collapsing it
+   onto one line; the invocation must now **begin** the final command. `set +o errexit` is the same
+   instruction as `set +e` spelled long, and the pattern read only the short form.
+
+   **The mirror of this rule sat unwritten until review.** `if: always()` on a *publishing* step runs
+   it on a build the gate has just refused, while its position in the job stays perfectly correct —
+   on `release.yml` that is the AAB reaching Play Alpha, the tag pushed and the Release created. The
+   idiom already appears three and seven lines above two of the uploads, so it is the natural thing
+   to write there. This rule's own recorded reasoning — *a skipped step is not a failed step, so
+   ordering stays green while nothing is asserted* — had been applied to the gate side and never to
+   the publisher side. A publishing step in a gated job may now carry no `if:` mentioning
+   `always()`, `failure()` or `cancelled()`; an ordinary branch conditional is untouched.
+4. **R3 — cross-job** (`violationsOfCrossJobPublish`). A publishing step in a non-building job is refused unless the job obtains no
+   Android build output: no `actions/download-artifact`, no `gh run download`, no `curl`/`wget`
+   fetch, and no `actions/cache` restore whose `path` reaches a `build/outputs` directory. Named as
+   four mechanisms because absence-of-`download-artifact` misses the other three, and `actions/cache`
+   is already in use.
+5. **R4** (`violationsOfLaneSplit`) — no fastlane lane both builds and publishes an Android artifact. D13's split is invisible
+   to the workflow graph, so only this rule holds it.
+6. **R5 — suspicion net** (`violationsOfSuspicionNet`). Every step whose `run` matches a broad publish-or-fetch pattern
+   (`upload|publish|release|git push|gh |curl|wget|scp|rsync|aws s3`) or whose `uses:` is outside the
+   reviewed action allowlist must be either classified as one of the publishers above or listed in `NON_PUBLISHERS` with its
+   reason **and** the assertion that makes the reason checkable.
+
+**Both exemption surfaces carry the same floor** — a reason plus a machine-checked assertion, and a
+stale entry fails rather than lying dormant. That covers the action allowlist as much as
+`NON_PUBLISHERS`: otherwise the cheapest way to publish through a new third-party action is to add
+its name. The allowlist is keyed by the full `uses:` value including its version, so an action bump
+costs a reviewed edit; there are 14 distinct values today, 12 third-party and 2 local composite.
+
+**An exemption assertion must constrain the step, and must be falsifiable.** Two ways of getting
+that wrong were found by review and both are closed:
+
+- **Constraining the job instead of the step.** The three `Build …` entries first asserted only that
+  a gate step follows them in the same job — true of the *job*, so adding `curl -T`, `wget
+  --post-file`, `scp` or `gh api` to the build step itself left every rule green. They now also
+  assert that the step names no Android artifact and carries no transport; measured on the committed
+  files, all three already satisfied both, so the strengthening cost nothing. The transport pattern
+  gained `curl`, `wget` and `gh api` — the DCE check cannot use "names no artifact", since it names
+  the APK by design, so a widened transport pattern is its only defence.
+- **An assertion no input can falsify.** Every assertion that reads a step is applied to one
+  adversarial step — it names the APK, sends it out, pushes a tag — and **must return false**. The
+  composites are held to the same standard through their own source rather than the step. This is
+  the floor that caught the second problem below, and it is the mechanism to add to whenever a new
+  exemption appears.
+- **An assertion that decides on the job and discards its step.** One probe job was not enough: an
+  assertion reading only the job is falsified by an adversarial *job* without ever looking at the
+  step it was handed, and reads as sound. `runsNoAndroidGradle` did exactly that, so a `curl -T`
+  appended to the iOS upload step left it exempt and every rule at zero. The probe now runs a second
+  job that satisfies **every** job-level predicate — builds nothing, gate below the step — where only
+  the step half can carry the assertion. Each such assertion is now paired with a step-reading one.
+- **A composite's `with:` block.** `shipsNothing` read `run` and `uses` and dropped `with` entirely,
+  while its step-level twin went through `stepText`, which includes it. A composite whose only step
+  was `uses: actions/upload-artifact@v4` with `path: …apk` returned *ships nothing* — and its probe
+  exercised four `run:` spellings and no `uses:` spellings, so half of what the function read had
+  never been shown able to fail it. Both composites run in the job holding the keystore and the Play
+  key. It now reads all three fields and refuses an inner publishing action outright.
+
+**Two allowlist entries carry no assertion of their own, and say so.** For
+`actions/upload-artifact@v4` and `softprops/action-gh-release@v1`, whether a step is a publisher is
+decided by the action name and its own path — so any assertion phrased over the step restates its
+own lookup key and cannot fail. Both originally had one, and both were tautologies. They now declare
+`carriedBy: 'ordering and path identity'` instead, and negative tests prove the carrying is real:
+an `upload-artifact` step and a release-action step, each shipping ungated bytes, are caught by the
+path-identity rule. Only those two names may stand on `carriedBy`; a third costs a reviewed edit.
+Writing a tautology and labelling it a check is the same shape as the six manifest holes, so it is
+better to name the rule that actually holds the property than to manufacture a local one.
+
+**A path the parse cannot resolve is refused, not skipped.** The classifier first read only literal
+`.apk`/`.aab` filenames, so a publishing step whose `path` was a **glob**
+(`…/apk/**/*.apk`), a **bare directory** (`…/apk/prod/release/`) or an **expression**
+(`${{ env.APK_PATH }}`) resolved to no artifact at all — and, resolving to none, was not classified
+as a publisher. Measured: such a step spliced *above* the gate in `ci.yml/build-android` — an APK
+published before the gate had run — was invisible to every rule at once. The suspicion net could not
+recover it either, because the allowlist exempts the action by name whatever its `with` says.
+
+Those spellings now classify as a publisher carrying an **unresolvable** path, which no gate step
+can ever be shown to have examined, so ordering and path identity both refuse it. In a `with:` path
+field the whole value is a path, so the test is simply *is this a concrete filename* — which also
+catches `dist/`, `artifacts/` and `android/app/release/`, none of which mention `build/outputs` and
+all of which classified as **no publisher at all** while that was the key. The carrying probe runs
+over every spelling rather than the one that already worked: a rule keyed on literal filenames holds
+only for the spelling it can read. Nothing committed moves — today's `upload-artifact` paths and the
+single `files:` are all explicit filenames.
+
+**Classification is additive, and a path list is read entry by entry.** Both were first-match, and
+both hid a second artifact behind the first one recognised: a path naming the gated APK *and* a glob
+reaching the bundle reported only the APK, and `gh release upload <dir>` appended to the Play-upload
+step was swallowed whole by the `upload_to_play_store` branch, since the classifier returned on its
+first hit. A step can be two publishers at once, and one path field can name a file the gate read
+beside one it never saw.
+
+**The same fallback applies to the command-line publishers**, which name their paths as arguments
+rather than in a `with:` block. `gh release create v1.0.0 dist/*.apk` was *classified* — so ordering
+held it on position — while path identity had an empty path list and therefore nothing to compare:
+**vacuous, which reads exactly like satisfied**. Below the gate it was unguarded outright. Both CLI
+branches now take the same treatment, and the negative cases assert path identity fires, not merely
+ordering. The Fastfile's `aab:` literal is unaffected and still resolves to `app-prod-release.aab`;
+it is separately pinned by the lane test, so replacing it with a variable fails there first.
+
+Refusing the expression form goes one step past what the classifier can prove: `${{ … }}` may well
+name something harmless. It fails closed on purpose. A future step that legitimately publishes
+through an expression costs a reviewed exemption, which is the same price as a fourth building job
+and the right direction for a rule whose whole subject is bytes nobody examined. The clause is read
+differently in the two places, deliberately: in a `with:` path field the whole value is the path, so
+any expression hides one; in a shell command a `${{ }}` is as likely to be a tag or a secret — `gh
+release create v1.0.0` publishes no binary at all — so only an expression sitting against an
+`.apk`/`.aab` counts there.
+
+`NON_PUBLISHERS` holds 14 entries, not the three the design predicted. The pattern is deliberately
+broader than the concept: `release` matches `pocketpal-release-key.keystore`, `assembleProdRelease`
+and `app-prod-release.apk`, so the keystore steps, the build steps, the DCE check and the gate steps
+themselves are all caught. Each carries an assertion worth having rather than a restatement of
+"this is not a publisher" — the build steps assert that a gate step follows them in the same job, the
+bump step asserts that its `git push` carries no refspec, the iOS upload asserts that no iOS lane
+publishes to Play, and the gate steps assert they are still gate steps, which puts them under R2
+instead. Narrowing the pattern to make the count match would have been the cheaper edit and the
+weaker net.
+
+**One committed file changed to satisfy the rules rather than be exempted from them.** `ci.yml`'s DCE
+sanity check reads the built APK by name and sat between the gate and the upload, which R1b's
+no-interposition clause refuses. It reads the artifact and does not rewrite it, so an exemption was
+available; moving it above the gate was preferred, because the invariant then holds rather than
+having a hole with a note attached. The gate is now the last step to name the APK before it is
+uploaded.
+
+That reorder has one benign side effect worth knowing before it is met in a log. Both steps are
+unconditional and the job halts at the first failure, so a **DCE failure now stops the gate from
+running**, and the `if: always()` report upload finds no `payload-report.txt` (`if-no-files-found:
+ignore` swallows it silently). Before the move, a DCE failure still left a payload report behind.
+That is a swap of diagnostic coverage, not a weakening of the gate — the two checks are independent
+and either one failing blocks the upload either way. Everything else about the job is unchanged:
+same `steps:` list, same `needs:`, no `if:` added or removed, and gate → report upload → APK upload
+still in that order.
+
+**Vacuity guards**, in the shape the ladder-coverage test already uses:
+
+- **V1** every workflow parses to at least one job with a non-empty `steps` array; the four known
+  filenames are present; a newly-globbed file is parsed, never exempted.
+- **V2** exactly **three** building jobs — `release.yml/build_android`, `ci.yml/build-android`,
+  `e2e-tests.yml/build-android` — each with at least one gate step. A legitimate new Android build
+  job costs a reviewed edit to this list, which is the intended price: an ungated fourth one fails
+  here before R1a is reached.
+- **V3** the three `release.yml` publishing steps are found **by name** — Play upload, tag push,
+  GitHub Release — as a positive control on the classifier. Two of the three resolve to a path R1b can
+  compare; the tag push names no artifact, and R1b is properly vacuous for it.
+- **V4** the suspicion net matches more than zero steps, and no `NON_PUBLISHERS` entry and no
+  allowlist entry goes unmatched.
+- **V5** exactly two lanes in `android/fastlane/Fastfile`, with `gradle(` in the build lane and
+  `upload_to_play_store` plus an `aab:` literal in the upload lane.
+
+**Every rule is exercised against a deliberately broken in-memory copy of the parse**, never against
+the committed files. A rule that has only ever been seen passing is not known to be capable of
+failing, which is exactly how the six manifest weakenings became possible.
 
 ---
 
@@ -357,6 +672,10 @@ what makes it usable at all.
 | Hexagon backend compiled in | `HEXAGON_SDK_ROOT` + `HEXAGON_TOOLS_ROOT` reaching a tree containing `libcdsprpc.so` |
 | DSP assets in the artifact | llama.rn's `syncRNLlamaHtpAssets`, sourced from `node_modules/llama.rn/bin/arm64-v8a` |
 | required payload | the committed manifest |
+| minimum library alignment | `abis[].requiredLibAlignment` (D6), floored at 16384 by the script (D20) |
+| where required assets resolve from | the `assets` block's position in the manifest (D22) |
+| which ABIs can load the assets | the **artifact**: `lib/<abi>/` carrying a non-wrapper `_hexagon` library, asserted equal to `usableByAbis` (D23) |
+| publish ordering and path identity | the committed workflow and Fastfile text, asserted by one test (§4h) |
 | what the Play upload ships | the `aab:` path passed explicitly by `upload_android_alpha` (`Fastfile`) |
 | what the payload gate reads | the `--aab` path in `release.yml` |
 
@@ -479,6 +798,81 @@ release workflow, build lane produces APK + AAB, gate fails on I2
 upload lane never runs; Play receives nothing; no tag is pushed; no GitHub Release is created
 ```
 
+Lettering continues H–Q. There is no J: the case it held became edge case 9t.
+
+### H. A library regresses below 16 KB
+```
+lib/arm64-v8a/librnllama_v8.so has a PT_LOAD at p_align 4096
+─────
+gate fails on I8, naming the entry, the segment alignment and the declared floor
+```
+
+### H2. The archive is repacked without alignment padding
+```
+every ELF untouched and conforming; stored libraries land on arbitrary offsets
+─────
+segment alignment still reports 68/68; the zip data offset half fails on I8,
+naming the entry and the byte it begins at. Before this half existed: PASS, exit 0
+```
+
+### I. A publishing step is moved above the gate
+```
+release.yml — "Upload Android app to Alpha track" precedes "Verify the Android payload"
+─────
+R1a fails, naming the job, the step and the index it publishes at
+```
+
+### K. The fastlane lanes are re-merged
+```
+build_android_release regains upload_to_play_store
+─────
+R4 fails; the workflow graph still looks correctly ordered, which is why R4 exists
+```
+
+### L. The program-header reader accepts ELF32
+```
+assets/ggml-hexagon/libggml-htp-v73.so — ELF32 LE, EM_QDSP6, PT_LOAD p_align 4096
+─────
+reader returns [4096, 4096]; one that had copied readDynsym's ELF64-LE guard throws instead
+```
+
+### M. The arm64 assets survive — positive evidence, not absence of failure
+```
+the release APK, unmodified (233,443,745 bytes, built from the merged payload-gate code)
+─────
+assets 4/4 present, all EM_QDSP6; usableByAbis ≡ {arm64-v8a}, read from the lib/ trees;
+16 rnllama libraries (12 arm64 + 4 x86_64); 68/68 libraries at p_align >= 16384; exit 0 in 0.76 s
+```
+
+### N. The alignment declaration is weakened
+```
+manifest lowers arm64-v8a requiredLibAlignment to 4096
+─────
+gate refuses the manifest before opening any artifact (D20)
+```
+
+### O. The accelerator guard survives the assets restructure
+```
+assets{} populated, but no ABI declares a non-wrapper _hexagon library
+─────
+still refused by the accelerator-ABI guard — the guard was relocated past, not orphaned
+```
+
+### P. A publisher ships bytes the gate never examined
+```
+ci.yml gains a bundle build and a Play upload; the gate still passes --apk only
+─────
+R1a passes (ordered); R1b fails — no gate step below it named the .aab basename
+```
+
+### Q. The gate is neutered in place
+```
+"Verify the Android payload" gains `if: false`, a trailing `|| true`,
+or `… 2>&1 | tee gate.log` (which exits with tee's status under the default bash -e)
+─────
+R2 fails on each; a skipped, suppressed or piped gate would keep R1a green
+```
+
 ---
 
 ## 7. Signals
@@ -489,7 +883,8 @@ upload lane never runs; Play receives nothing; no tag is pushed; no GitHub Relea
 | `HEXAGON_SDK_AVAILABLE` | `rnllama/CMakeLists.txt:168-178` | the variant's source list | above ∧ `libcdsprpc.so` exists |
 | `RNLLAMA_BUILD_FROM_SOURCE` | `-DRNLLAMA_BUILD_FROM_SOURCE` from `build.gradle:148` | both CMake entry points | build mode is from-source |
 | `Building rnllama variants: …` | `build.gradle:155-158` (`println`) | the workflow's allowlist assertion | the property arrived by the `ORG_GRADLE_PROJECT_` route |
-| manifest conformance | the payload gate | the workflow's publish step | I1–I4 hold on the produced artifact |
+| manifest conformance | the payload gate | the workflow's publish step | I1–I4, I8 and I9 hold on the produced artifact |
+| publish ordering | the committed workflow and Fastfile text | `android-publish-ordering.test.js` | I5 holds across every workflow and lane |
 
 ---
 
@@ -515,6 +910,14 @@ upload lane never runs; Play receives nothing; no tag is pushed; no GitHub Relea
 | D16 | Set the full ccache env, not just dir and size | The NDK is reinstalled per run, so `compiler_check=mtime` would miss on everything and read as cold rather than misconfigured |
 | D17 | No ccache on the release path | Only a prefix restore could ever hit there, and that links objects of unreviewed provenance into the shipped artifact |
 | D18 | Pin the Hexagon SDK by content, not by tag | A third party redistributes it without checksums, and a tag names a mutable asset |
+| D19 | Alignment is checked on every shipped library, not only the required ones | The platform loads all of them; the whole scan costs 0.7 s |
+| D20 | The 16384 floor is a script constant the manifest cannot undercut | Otherwise a weaker declaration is the cheapest edit that unblocks a build |
+| D21 | `assets.scope` is a refusal hook, counted as no check | One legal value cannot fail; structure carries I9 |
+| D22 | Assets move to a top-level `assets` block | Declaring artifact-scoped paths under an ABI invited exactly this bug |
+| D23 | `usableByAbis` is asserted against the shipped `lib/` trees | Equality with a value derived from the same document is vacuous |
+| D24 | Ordering is checked as order **and** path identity | An ordered gate that examined other bytes proves nothing |
+| D25 | Both exemption surfaces need a reason plus a checked assertion | An asserted exemption is the hole the payload work kept finding |
+| D26 | The x86_64 asset exclusion is refused, not deferred silently | Measured impossible; the alternatives cost more than the 1.2% at stake |
 
 **On D2, the cache budget and the subset alternative.** The Android host build reads only `incs`,
 `incs/stddef`, `ipc/fastrpc/rpcmem/inc`, and links
@@ -598,6 +1001,13 @@ second, larger build pipeline. That is a scope boundary, not a preference.
 | 9k | Gate fails during a release run | The version bump commit is already pushed, but the tag is not (D15) and nothing is published. The residue is a pushed bump commit, which is already the behaviour for any post-bump failure |
 | 9l | `e2e-tests.yml` Android build | Treated exactly as a publishing job: SDK provisioned, allowlist applied and asserted, payload gated before the APK is uploaded. The earlier exemption was wrong twice over — the APK's purpose is to exercise the release's production payload, and e2e runs on **real devices** including a Snapdragon 8 Gen 2 (`e2e/baselines/benchmark/samsung-s23.json`), the one SoC family `isHexagonSupported()` accepts. Excluding the SDK there blinded the only place on-device Hexagon behaviour could be observed before release |
 | 9m | `RNLLAMA_SKIP_POSTINSTALL=1` on the release Android job | Safe: from-source ignores the downloaded `jniLibs` and that job builds no iOS target. If the mode declaration ever failed, the absent `jniLibs` would drop variants and the gate would fail on I1 — loudly. Not set on `ci.yml`, whose Linux `node_modules` cache is shared with `build-and-test` |
+| 9n | A library has zero `PT_LOAD` segments | Instrument failure (I4), not a pass — a stripped or synthetic object proves nothing about its alignment |
+| 9o | `p_align` is 65536 | Passes: the rule is `>= declared`, and a larger page size conforms |
+| 9p | x86_64 stops being 16 KB-aligned upstream | Gate fails. No platform rule requires it there, so this is a tripwire; the fix is a reviewed schema change, never a lowered number |
+| 9q | A step adds an unrecognised `uses:` | R5 refuses it until it is classified or allowlisted with a checkable assertion |
+| 9r | A publishing step names a path built in another job | R3: refused unless the job obtains no Android build output by any of the four named mechanisms |
+| 9s | Two artifacts, one gate step | R1b holds only if that step names both basenames — the `release.yml` shape today |
+| 9t | A new workflow builds and publishes an Android APK with no gate | Parsed by V1; **V2 fails first**, on a fourth building job, before R1a/R1b are reached. A legitimate new build job costs a reviewed edit to V2's list |
 
 ---
 
@@ -628,6 +1038,17 @@ against the NDK's `llvm-nm -D | grep -ci hexagon` on two real artifacts — a ba
 `.dynsym` entries, 0 hexagon matches) and a sound one (6527 entries, 16 matches) — with both readings
 agreeing exactly and both required symbols reported as *defined*. Re-run that cross-check if the reader
 is ever changed.
+
+**The program-header reader is cross-checked against an external oracle too.** The oracle is not
+`readelf` — macOS ships none, which is the same reason the reader is in-process at all — but the
+NDK's own `llvm-readelf`, under `$ANDROID_HOME/ndk/27.3.13750724/`. All **72** `.so` entries of the
+release APK (68 libraries + 4 DSP assets) were read with it and with a second, independently written
+reader: **zero mismatches** on segment type and `p_align`. The test's synthetic builders were put
+through the same oracle, including the ELF32 big-endian shape that has no real object behind it —
+which is the case a hand-rolled reader is most likely to get wrong and least likely to notice.
+
+Do not re-open this as unknown. If the reader changes, re-run that comparison; the NDK path above is
+where the oracle lives, and it is present on any machine that can build the app at all.
 
 **Stop condition, for any future repeat of this work.** If the two named symbols do not go from
 **absent to present** in a CI-produced artifact when the SDK is added, the diagnosis is wrong — stop
@@ -677,14 +1098,53 @@ and supply's `verify_block` rejects a wrong `aab:` path.
    gradle cache** (6.7 GB of ~10.6 GB, three entries). Until that is addressed, every cache in the
    repo is subject to eviction, silently. This is the larger half of the D2 budget problem and is not
    specific to the Android native build.
-10. **I5 is the only invariant enforced by prose rather than a check.** Nothing mechanically asserts
-    that no upload, publish, tag push or `upload_to_play_store` can be reached without a passing gate;
-    today it holds by review of the workflow graph and the lane split. The shape that would fix it is
-    the one `android-ladder-coverage.test.js` already uses for I7: parse the workflow YAML and the
-    Fastfile, identify every publishing step, and assert each is ordered after the gate step within its
-    job. Deferred because it is scope growth on an already-large change, not because it is unwanted.
-11. **The payload gate only inspects the ABIs the manifest names.** An artifact carrying an
-    unexpected `lib/<abi>/` directory would not be looked at, so a backend-less payload for a
-    newly-added ABI would ship unnoticed. Unreachable today — `reactNativeArchitectures` pins
-    `arm64-v8a,x86_64` and llama.rn filters 32-bit regardless — but the gate is silent rather than
-    loud about it, which is the shape of failure this contract exists to remove.
+10. ~~I5 is the only invariant enforced by prose rather than a check.~~ **Closed.** §4h mechanises
+    it, in the shape this entry predicted and then some: ordering, path identity, no interposition,
+    and the gate's own ability to fail.
+11. ~~The payload gate only inspects the ABIs the manifest names, and is silent about an undeclared
+    `lib/<abi>/` tree.~~ **Was already wrong when written, and is corrected here.** The gate
+    enumerates the shipped ABI trees, reports them, and fails loudly on one the manifest does not
+    declare (`verify-android-payload.js`, the `UNDECLARED` branch of `checkArtifact`; test *fails on
+    an ABI tree the manifest never declared*). What remains true is only the premise: the manifest
+    still describes the ABIs it names, so an undeclared tree is refused rather than inspected.
+12. **The DSP assets reach `x86_64` devices** — 2,836,288 bytes (2.84 MB / 2.70 MiB) of a 233 MB
+    artifact, 1.2%, for an ABI that can never load them. Refused rather than fixed (D26): no
+    supported toolchain mechanism scopes `assets/` by ABI, and the two that would work — an ABI
+    flavor dimension, or an upstream llama.rn move of the HTP payload into `jniLibs` — cost more than
+    the saving. `usableByAbis` makes the fact visible in every report; the disposition is the
+    requester's.
+13. ~~Zip-entry alignment is not checked.~~ **Closed for the case that ships, and it was not
+    cosmetic.** Both halves of 16 KB compatibility are now asserted (I8), and asserting only the
+    first certified an artifact that cannot load: the fixture repacked without zip padding, every
+    ELF untouched, printed `PASS / EXIT=0` on 68/68 misaligned data offsets. What remains outside
+    the subject set is deliberate — deflated entries are extracted at install rather than mapped, and
+    an AAB is repackaged by bundletool on the way to the device — and both are reported as counts
+    rather than passed over, so an artifact where nothing is stored says so.
+14. **The ordering test sees only committed text.** A publish through a third-party action whose name
+    reveals nothing is caught by R5's allowlist floor, not by understanding. The irreducible
+    remainder of R1b's no-interposition clause is the same shape: the parse reads step text, not
+    build semantics, so a step that rewrites the artifact without naming its path — through a
+    variable, a `working-directory`-relative form, or a script it invokes — is not seen. I5's claim
+    is therefore "the gate examined the bytes at that path, and nothing named it after", not a proof
+    of byte identity at publish time.
+
+    **The same remainder limits the exemption assertions**, and the widened transport pattern does
+    not close it: a step that assigns the artifact path to a shell variable and then sends `"$APK"`
+    somewhere defeats the artifact-naming half, and a transport invoked from a script the step calls
+    defeats the transport half. What the assertions do buy is that the *cheap, thoughtless* version —
+    a literal `curl -T …app-prod-release.apk` appended to a build step — fails. Deliberate
+    exfiltration through an indirection is out of reach of a text parse and is not claimed.
+
+    **The unresolvable-path fallback is bounded differently now, and more tightly.** In a `with:`
+    path field the whole value is a path, so *anything* that is not a concrete filename counts —
+    `dist/`, `artifacts/` and `android/app/release/` included, which keying on `build/outputs` did
+    not catch. In a shell command only the tokens that reach a build output or carry an `.apk`/`.aab`
+    are read that way, because most of a command's words are not paths. What remains outside both:
+    a token that is a bare word naming an APK by some other route.
+15. ~~`codeOf`'s comment stripping is quote-unaware.~~ **Closed, and the reasoning that deferred it
+    was wrong.** The measurement behind the deferral — zero committed lines carry a `#` inside a
+    string — was correct; the conclusion drawn from it was not, because the question is reachability
+    by an ordinary edit and `--notes "Fixes #862"` is one. The direction mattered: every consumer is
+    an unanchored presence test, so a truncated line can only *lose* matches, which moves a step
+    toward "publishes nothing" and "carries no transport". It is quote-aware now, and an unbalanced
+    quote leaves the line unstripped — keeping text rather than losing it.
