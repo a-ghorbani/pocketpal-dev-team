@@ -39,15 +39,23 @@ the Background Download row (§4). (C)
    weight-repacking), Model Loading (auto-offload / auto-navigate), API
    (HF token + use-HF-token), iOS Cache & Storage, and legacy Export. The
    Advanced accordion is dissolved into flat stacked containers. (D)
-   - Speculative decoding (global engine knobs: master toggle + draft K/V
-     cache-type menus gated on flash-attn compatibility) is a control group in
-     the same model-engine surface. It currently lives in the live monolithic
-     `SettingsScreen.tsx` Advanced accordion (the `PreferencesScreen` split is
-     redesign-track, not yet on main); folds into this surface on that cutover.
+   - Speculative decoding (master toggle + draft-model picker + draft
+     GPU-layers + draft K/V cache-type menus gated on flash-attn compatibility)
+     is a control group in the same model-engine surface, below the target's own
+     K/V cache rows. The fold out of the monolithic `SettingsScreen.tsx`
+     Advanced accordion happened in the second `main` → `redesign/phase-3`
+     reconcile; the accordion is gone, so the group renders flat like the rest.
      Contract in `model-loading.md`. (C)
+   - All four cache-type rows (target K/V + draft K/V) render through the shared
+     `CacheTypeMenuRow` + `useMenuAnchor` pair, which moved from
+     `SettingsScreen/` to `PreferencesScreen/` with that fold. Each carries
+     `accessibilityLabel = "<label>, <value>"` and the disabled explanation as
+     its hint. (C)
 3. **App Settings sub-screen** (`AppSettingsScreen`, pushed route): Dark Mode,
-   Background Download, Language, TTS availability, and (iOS-only) Display
-   Memory Usage. (D)
+   Background Download, Language, TTS availability, (iOS-only) Display Memory
+   Usage, and the Internet Search section (§9). (D)
+   - The screen scrolls (`ScrollView`): with Internet Search folded in, the
+     content exceeds a phone viewport. (C)
    - **Language** is the self-contained `LanguageSelector`
      (`src/components/LanguageSelector/`): a content-sized trigger plus the
      shared `SearchableSelectSheet` (title, search field, full-bleed rows,
@@ -312,10 +320,12 @@ New testIDs are additive (`internet-search-card`, `internet-search-consent*`,
 side of this feature (the `web_search` / `read_url` engines, the provider
 adapters, and the `searchBudget` util) lives in `pals-and-talents.md`.
 
-**Relocation note**: when the reskin cutover lands (launcher +
-`AppSettingsScreen`), this section moves verbatim into the App Settings
-sub-screen as an app-level pref — same store, same writers, same testIDs, no
-behaviour change (I_S1).
+**Location**: the section lives in the App Settings sub-screen, below Display
+Memory Usage, as an app-level pref. It was relocated there verbatim from the
+monolithic `SettingsScreen` card in the second `main` → `redesign/phase-3`
+reconcile — same store, same writers, same testIDs, no behaviour change (I_S1).
+The Paper `Card` wrapper became a `styles.group` block to match the sub-screen's
+grouping, and the section's own rows became `styles.row`; nothing else changed.
 
 ---
 
