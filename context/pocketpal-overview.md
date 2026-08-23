@@ -18,7 +18,7 @@ Location: `./repos/pocketpal-ai`
 | Navigation | React Navigation     | 7.x         |
 | Database   | WatermelonDB         | 0.28.0      |
 | UI Kit     | React Native Paper   | 5.14.5      |
-| LLM        | llama.rn (llama.cpp) | 0.13.0-rc.0 |
+| LLM        | llama.rn (llama.cpp) | 0.13.0-rc.1 |
 | Testing    | Jest + Appium        | 29.6.3      |
 
 ## Project Structure

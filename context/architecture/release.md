@@ -91,7 +91,7 @@ Verified from code; the whole contract rests on it.
 4. Backend inclusion is gated **twice**, and both gates degrade to a *warning*:
    - `build.gradle:143-169` — `hexagonPresent = file(HEXAGON_SDK_ROOT).exists() &&
      file(HEXAGON_TOOLS_ROOT).exists()`; false ⇒ prints `🚫 Hexagon SDK not found` and omits two `-D` args.
-   - `rnllama/CMakeLists.txt:165-240` — requires `HEXAGON_SDK_ROOT`, `HEXAGON_TOOLS_ROOT` **and**
+   - `rnllama/CMakeLists.txt:168-243` — requires `HEXAGON_SDK_ROOT`, `HEXAGON_TOOLS_ROOT` **and**
      `ipc/fastrpc/remote/ship/android_aarch64/libcdsprpc.so`; otherwise
      `message(WARNING "Hexagon backend will not be built.")`.
 5. Only variants matching `.*_hexagon.*` carry the backend — exactly one exists
@@ -128,8 +128,8 @@ change shipped without the NPU backend (issue
 | 7 | `rnllama_jni` / `rnllama` (`generic`) | fallback | mandatory regardless (§2.6) |
 
 **Rung 6 is not a duplicate of rung 7, despite matching `-march`.**
-`rnllama/CMakeLists.txt:132-135` adds `ggml-cpu/arch/${arch}/quants.c` and `repack.cpp` for every
-non-`generic` arch, and `:149-150` compiles `generic` with `-DLM_GGML_CPU_GENERIC`. So `rnllama` is the
+`rnllama/CMakeLists.txt:135-138` adds `ggml-cpu/arch/${arch}/quants.c` and `repack.cpp` for every
+non-`generic` arch, and `:152-153` compiles `generic` with `-DLM_GGML_CPU_GENERIC`. So `rnllama` is the
 portable-C fallback and `rnllama_v8` carries the ARM quantised-matmul kernels. Dropping rung 6 would
 demote every arm64 device failing the fp16 check to portable C — and silently, since `librnllama.so`
 would still be present. Same `-march` is not same build.
@@ -180,8 +180,13 @@ Required exported symbols, `arm64-v8a` / `librnllama_v8_2_dotprod_i8mm_hexagon_o
 
 - `lm_ggml_backend_hexagon_reg` and `lm_ggml_backend_is_hexagon` **must** be defined in `.dynsym`.
   These are the correctness rule.
-- The count of `.dynsym` entries matching `hexagon` is declared as `16` and is a **drift tripwire**: a
-  change fails the gate and must be consciously re-declared in the same PR that causes it.
+- The count of `.dynsym` entries matching `hexagon` is declared as `16` **at llama.rn 0.13.0-rc.1**
+  and is a **drift tripwire**: a change fails the gate and must be consciously re-declared in the same
+  PR that causes it. The count is a **version-scoped baseline**, not an invariant — the symbol surface
+  tracks llama.cpp, so a routine sync may legitimately move it, and only the two named symbols above
+  assert behaviour. A count that changes to some other non-zero N with both names still defined is a
+  re-baseline event, resolved by editing `expectedMatchCount` to N in the same PR (§6 E); a count of
+  zero, or a missing name, is an I2 breach and is never re-declared.
 
 **Matching convention, pinned in the manifest.** `expectedMatchCount` counts every `.dynsym` entry
 containing the pattern, case-insensitively, undefined imports included — the convention of
@@ -218,7 +223,7 @@ automation markers leaking into a release.
 
 **Why the backend rule names Hexagon and not OpenCL.** OpenCL cannot degrade the same way. Its sources
 and `-DLM_GGML_USE_OPENCL` are added *outside* the `if (EXISTS ${OPENCL_STUB})` guard
-(`rnllama/CMakeLists.txt:437-459`), and its `.dynsym` entries are undefined imports, so a missing
+(`rnllama/CMakeLists.txt:442-464`), and its `.dynsym` entries are undefined imports, so a missing
 `libOpenCL.so` fails loudly at link time. Hexagon's sources are added *inside* its guard — which is
 exactly why its absence is silent and needs an artifact-level assertion.
 
@@ -232,6 +237,13 @@ exactly why its absence is silent and needs an artifact-level assertion.
 3. It reads `.dynsym`. Not `strings`, not file size: `strings` false-positives on `codec_*_ht` symbols,
    and the two builds that differ in whether the backend exists have identical `opencl` string counts
    (644). `.dynsym` survives stripping.
+3b. The count line it prints names the `llama.rn` version it read from `node_modules/llama.rn/package.json`,
+   resolved relative to the script rather than the caller's cwd, so `payload-report.txt` dates the count
+   to the tree that was **built** rather than to the version `package.json` declares — the two diverge on
+   a stale or cache-restored `node_modules`. It is printed, never asserted: an unreadable package prints
+   `unknown` and leaves the verdict alone, because a provenance check that can go red is a failure mode
+   with no correctness behind it. A re-typed version in the manifest would be a second declaration a
+   human must keep in step, and would red every otherwise-correct bump.
 4. It self-checks its instrument before judging: it fails if it cannot open the artifact, cannot locate
    a required library, cannot parse the ELF, or reads an empty `.dynsym`. A zero-match read is an
    instrument failure, never a pass.
@@ -833,7 +845,7 @@ only through the environment and both used to fail silently, and the gate sees n
   definition with the same value today, so a typo in our variable name produces a build
   *indistinguishable* from a correct one — until the day upstream flips its flag to `false`, at which
   point a mis-named declaration would silently switch CI to prebuilt mode with the gate still passing.
-  The build step therefore fails when the variable is empty. `CMakeLists.txt:30`'s
+  The build step therefore fails when the variable is empty. `android/src/main/CMakeLists.txt:30`'s
   `message(STATUS "Building rnllama libraries from source")` is deliberately **not** used: it is
   configure-time output, so a warm `.cxx` restore can skip configure and drop it.
 
@@ -852,7 +864,8 @@ Past pain: the regression itself — three independent silent-degrade paths and 
 ubuntu-latest, mode=from-source, SDK provisioned, allowlist = manifest set
 ─────
 artifact holds 12 arm64 + 4 x86_64 rnllama libraries + 4 DSP assets;
-hexagon variant defines both named symbols, 16 hexagon .dynsym matches; gate passes; upload proceeds
+hexagon variant defines both named symbols, 16 hexagon .dynsym matches (llama.rn 0.13.0-rc.1);
+gate passes; upload proceeds
 ```
 
 ### B. The regression
@@ -886,6 +899,33 @@ named symbols still present; count tripwire fails
 manifest re-declared to 18 in the same PR, with the diff visible in review
 ```
 
+**What an upgrade actually has to re-derive.** Three things move independently and must not be conflated
+by a global find-and-replace of the version string: a **pin** (a version literal naming the currently
+consumed release) is updated; a **historical statement** is frozen; a **measurement** is re-scoped to the
+version it was taken on, or re-taken. A number measured from a llama.rn build always carries that version.
+Version-independent constants — `EM_QDSP6` = 164, the 16384 alignment floor, ABI names, exit codes, the
+seven-variant ladder — are declarations, not measurements, and carry no version.
+
+The `.dynsym` count is the only one of these that a local build cannot supply: the Hexagon SDK is
+distributed for `amd64-lnx` only (§1b, D8), so a macOS host lands in scenario B and reads 0 matches. That
+zero is compile health, never a re-baseline source, and it is never written into the manifest.
+
+**At the bump to 0.13.0-rc.1.** `android/build.gradle`, `android/gradle.properties`,
+`android/src/main/CMakeLists.txt`, `cmake/rnllama-build-options.cmake` and `RNLlama.java` are
+byte-identical, so the build mode, the variant ladder and every citation into them are unmoved.
+`rnllama/CMakeLists.txt` grew by five lines (the `hash/` sources and two OpenCL kernels); its
+`build_rnllama_library` call sites are identical in name, arch and flags, so `requiredLibs` and the
+derived allowlist do not change (I7 holds unmodified). Line citations into that one file shift by a
+published offset map — **+1** for rc.0 lines ≥19, **+3** for ≥83, **+4** for ≥251, **+5** for ≥389 — so the
+next bump re-applies a map rather than re-greps. Enumerate those citations by line reference *within
+scope*, not by grepping the filename: several are bare continuations (`:132`, `:902`, `:903`) that a
+filename grep does not find.
+
+The one behavioural change in the package, an added `embd.clear()` in
+`llama_rn_context_completion::embedding`, was **diffed and is unreachable** from PocketPal, which never
+calls llama.rn's embedding API — recorded as diffed-and-unreachable rather than as "no change", because
+the two are different claims and only one of them was checked.
+
 ### F. Ladder coverage — every rung a device can land on is buildable (I7)
 
 Checked over the manifest and llama.rn's CMake call sites, not over a built artifact.
@@ -899,14 +939,14 @@ name ∈ manifest.requiredLibs
 otherwise: fail
 ```
 
-The near-miss the predicate must get right: `rnllama_v8_2_dotprod_i8mm` (`:479`) and
-`rnllama_v8_2_dotprod_i8mm_hexagon_opencl` (`:480`) have **identical `arch` and identical `cpu_flags`**.
+The near-miss the predicate must get right: `rnllama_v8_2_dotprod_i8mm` (`:484`) and
+`rnllama_v8_2_dotprod_i8mm_hexagon_opencl` (`:485`) have **identical `arch` and identical `cpu_flags`**.
 They diverge only inside the function body, where `.*_hexagon.*` and `.*_opencl$` match on the *name*
 and add sources and `-D` macros. A predicate reading "(arch, flags) match ⇒ interchangeable" would
 license dropping the hexagon variant — the one this whole contract exists to protect.
 
 **Coupling assumption.** The check quantifies over `build_rnllama_library`
-(`rnllama/CMakeLists.txt:471-484`), but the ladder loads `librnllama_jni_*`, produced by
+(`rnllama/CMakeLists.txt:476-489`), but the ladder loads `librnllama_jni_*`, produced by
 `build_rnllama_jni` (`android/src/main/CMakeLists.txt:153-174`) in a different file. The two lists are
 1:1 today because both gate on `rnllama_variant_enabled(<rnllama_name>)`, and the test asserts that
 1:1-ness rather than assuming it.
@@ -1005,7 +1045,7 @@ R2 fails on each; a skipped, suppressed or piped gate would keep R1a green
 | Signal | Set by | Read by | True when |
 | --- | --- | --- | --- |
 | `hexagonPresent` | `llama.rn/android/build.gradle:145` | gradle → CMake args | both SDK and tools dirs exist on the runner |
-| `HEXAGON_SDK_AVAILABLE` | `rnllama/CMakeLists.txt:168-178` | the variant's source list | above ∧ `libcdsprpc.so` exists |
+| `HEXAGON_SDK_AVAILABLE` | `rnllama/CMakeLists.txt:171-181` | the variant's source list | above ∧ `libcdsprpc.so` exists |
 | `RNLLAMA_BUILD_FROM_SOURCE` | `-DRNLLAMA_BUILD_FROM_SOURCE` from `build.gradle:148` | both CMake entry points | build mode is from-source |
 | `Building rnllama variants: …` | `build.gradle:155-158` (`println`) | the workflow's allowlist assertion | the property arrived by the `ORG_GRADLE_PROJECT_` route |
 | manifest conformance | the payload gate | the workflow's publish step | I1–I4, I8 and I9 hold on the produced artifact |
@@ -1043,6 +1083,9 @@ R2 fails on each; a skipped, suppressed or piped gate would keep R1a green
 | D24 | Ordering is checked as order **and** path identity | An ordered gate that examined other bytes proves nothing |
 | D25 | Both exemption surfaces need a reason plus a checked assertion | An asserted exemption is the hole the payload work kept finding |
 | D26 | The x86_64 asset exclusion is refused, not deferred silently | Measured impossible; the alternatives cost more than the 1.2% at stake |
+| D27 | `expectedMatchCount` is a version-scoped baseline, not an invariant | Symbol surface tracks llama.cpp; only the named symbols prove behaviour |
+| D28 | The baseline is measured only on a from-source CI build with the SDK | macOS cannot provision the amd64-lnx SDK, so it has no number to give |
+| D29 | Provenance is a printed report line, not an asserted manifest stamp | A re-typed version proves nothing and would red every correct bump |
 
 **On D2, the cache budget and the subset alternative.** The Android host build reads only `incs`,
 `incs/stddef`, `ipc/fastrpc/rpcmem/inc`, and links
@@ -1094,9 +1137,10 @@ against `node_modules/llama.rn/cpp/` still holds, and `ci.yml` caches `node_modu
 are tar-preserved, while `release.yml` does not. Upstream caches ccache but not `.cxx`, a weak prior in
 the same direction.
 
-**On D11, what was actually checked**: the pinned 0.13.0-rc.0 prebuilt hexagon variant measures **16**
-hexagon `.dynsym` symbols and **15** `barbet` strings. So the "missing Barbet arch" half of upstream's
-stated reason for forcing from-source is false for the assets this version pins. The completion-loop
+**On D11, what was actually checked**: the **0.13.0-rc.0** prebuilt hexagon variant measures **16**
+hexagon `.dynsym` symbols and **15** `barbet` strings. The measurement is scoped to that release — it was
+taken on the prebuilt payload rc.0 pinned, and is not re-labelled when the pin moves. So the "missing
+Barbet arch" half of upstream's stated reason for forcing from-source is false for the assets rc.0 pinned. The completion-loop
 half is not checkable at this cost, and the risk it names — struct-layout drift across a header/binary
 boundary — does not announce itself. One falsified half does not license ignoring the other.
 
@@ -1115,7 +1159,7 @@ second, larger build pipeline. That is a scope boundary, not a preference.
 | --- | --- | --- |
 | 9a | SDK dirs present but `libcdsprpc.so` missing | The provisioning step fails first; if it were bypassed, CMake warns and the gate fails on I2 |
 | 9b | SDK present, QAIC `htp/v73` artifacts missing | CMake `FATAL_ERROR`; build fails loudly (relevant only under D9) |
-| 9c | `node_modules` restored from cache without llama.rn's postinstall | Hits the **escape hatch**, not from-source. Missing `jniLibs` makes `CMakeLists.txt:52-58` log "Skipping … no prebuilt" and drop variants silently — caught by I1. From-source is immune, and the DSP assets are safe either way: `bin/` is tarball content |
+| 9c | `node_modules` restored from cache without llama.rn's postinstall | Hits the **escape hatch**, not from-source. Missing `jniLibs` makes `android/src/main/CMakeLists.txt:52-58` log "Skipping … no prebuilt" and drop variants silently — caught by I1. From-source is immune, and the DSP assets are safe either way: `bin/` is tarball content |
 | 9d | Emergency lever in use | I1 satisfied as a superset, I2 holds; extras reported |
 | 9e | Hexagon symbol count changes on upgrade | Tripwire fails; re-declared in the same PR (scenario E) |
 | 9f | Translation-only PR | `build-android` is skipped, so no artifact and no gate; the release workflow's gate is the backstop |
