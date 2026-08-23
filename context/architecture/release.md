@@ -906,9 +906,20 @@ version it was taken on, or re-taken. A number measured from a llama.rn build al
 Version-independent constants — `EM_QDSP6` = 164, the 16384 alignment floor, ABI names, exit codes, the
 seven-variant ladder — are declarations, not measurements, and carry no version.
 
-The `.dynsym` count is the only one of these that a local build cannot supply: the Hexagon SDK is
-distributed for `amd64-lnx` only (§1b, D8), so a macOS host lands in scenario B and reads 0 matches. That
-zero is compile health, never a re-baseline source, and it is never written into the manifest.
+The `.dynsym` count is legitimate only from a from-source build with the Hexagon SDK provisioned. A host
+without it lands in scenario B and reads 0 matches; that zero is compile health, never a re-baseline
+source, and it is never written into the manifest.
+
+**A macOS host is not excluded from producing that count.** Measured at this bump: with the SDK extracted
+to `~/.hexagon-sdk/6.4.0.2`, a local darwin `assembleE2eReleaseE2e` builds from source with
+`HEXAGON_SDK_ROOT`/`HEXAGON_TOOLS_ROOT` passed through and yields both named symbols defined and 16
+matches. §1b's `amd64-lnx` scope is a property of the SDK's **host** toolchain — `hexagon-clang` is an
+x86-64 Linux ELF and does not run on macOS — but nothing on the Android path invokes it: llama.rn's
+gradle only tests that the two SDK directories exist, CMake only additionally requires
+`ipc/fastrpc/remote/ship/android_aarch64/libcdsprpc.so` to exist, and the DSP payloads that would need
+`hexagon-clang` ship prebuilt in llama.rn's `bin/` and are copied, not compiled. What remains true is
+that **GitHub's macOS runners do not provision the SDK**, so CI's Hexagon evidence comes from
+`build-android` on `ubuntu-latest` — that is a provisioning fact, not a platform impossibility.
 
 **At the bump to 0.13.0-rc.1.** `android/build.gradle`, `android/gradle.properties`,
 `android/src/main/CMakeLists.txt`, `cmake/rnllama-build-options.cmake` and `RNLlama.java` are
