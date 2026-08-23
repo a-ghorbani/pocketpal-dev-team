@@ -1014,11 +1014,19 @@ rename when Cleanup-DEFERRED lands.
 
 ---
 
-## 8b. Sidebar session list — grouping and pinning
+## 8b. Session list — grouping and pinning
+
+> **Post-bottom-tab status.** The drawer is gone and `SidebarContent` is unmounted,
+> so `groupedSessions` currently has **no consumer**: Home renders a flat
+> recency list, sorting `pinned` first rather than adopting the grouped sections
+> (`app-shell.md` D14). The pin *writer* is live again — Home's row kebab calls
+> `togglePinSession` (`app-shell.md` §4a). Everything below still describes
+> `groupedSessions` because the computed and its traps survive unchanged and the
+> next surface that wants grouped sections inherits them; the grouping behaviour
+> itself is not on screen today.
 
 The drawer's session list is derived, not stored. `ChatSessionStore.groupedSessions`
-is a MobX computed; `SidebarContent` is its only consumer and turns it into
-`SectionList` sections.
+is a MobX computed that turned into `SectionList` sections.
 
 - **The map key is the localized label, and insertion order carries display
   order.** `SessionGroup` is `{[label: string]: SessionMetaData[]}`, so the
