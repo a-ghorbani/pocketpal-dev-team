@@ -67,8 +67,18 @@ Persisted: the manifest, in the app repo. Derived: the variant allowlist (§4b).
 ### 1b. External inputs
 
 - The Hexagon SDK, a public GitHub release (`snapdragon-toolchain/hexagon-sdk` v6.4.0.2, `amd64-lnx`,
-  673 MB compressed / ~3.1 GB extracted, no account or licence gate). `amd64-lnx` only — usable on
-  `ubuntu-latest`, **not** on macOS runners. (C)
+  673 MB compressed / ~3.1 GB extracted, no account or licence gate). The `amd64-lnx` scope is a
+  property of the SDK's **host** toolchain: `tools/HEXAGON_Tools/19.0.04/Tools/bin/hexagon-clang` is an
+  `ELF 64-bit … x86-64 … GNU/Linux` binary and does not run on macOS (C). **That does not exclude a
+  macOS host from building the backend in.** Nothing on the Android path invokes `hexagon-clang`: both
+  gates in §2.4 only test that files *exist* — the two SDK directories, and `libcdsprpc.so`, which CMake
+  links as a prebuilt stub. The host QAIC artifacts it compiles ship prebuilt at
+  `cpp/ggml-hexagon/htp/v73/htp_iface{_stub.c,.h}`, and the DSP payloads that *would* need the Hexagon
+  compiler ship prebuilt in `bin/arm64-v8a/` and are copied by `syncRNLlamaHtpAssets`. Measured on a
+  darwin host at the 0.13.0-rc.1 bump: SDK extracted to `~/.hexagon-sdk/6.4.0.2`, from-source build,
+  both named symbols defined, 16 matches (C). What is true of runners is a **provisioning** fact:
+  GitHub's macOS runners are not provisioned with the SDK, so Hexagon evidence in CI comes from
+  `ubuntu-latest` (D8, D28).
 - llama.rn's checksum-pinned native artifacts, downloaded by its own postinstall from
   `releases/download/v<version>/` and verified against `install/native-artifacts.json`. Excluded from
   the npm tarball and absent from the upstream git repo. (C)
@@ -91,7 +101,7 @@ Verified from code; the whole contract rests on it.
 4. Backend inclusion is gated **twice**, and both gates degrade to a *warning*:
    - `build.gradle:143-169` — `hexagonPresent = file(HEXAGON_SDK_ROOT).exists() &&
      file(HEXAGON_TOOLS_ROOT).exists()`; false ⇒ prints `🚫 Hexagon SDK not found` and omits two `-D` args.
-   - `rnllama/CMakeLists.txt:168-243` — requires `HEXAGON_SDK_ROOT`, `HEXAGON_TOOLS_ROOT` **and**
+   - `rnllama/CMakeLists.txt:168-244` — requires `HEXAGON_SDK_ROOT`, `HEXAGON_TOOLS_ROOT` **and**
      `ipc/fastrpc/remote/ship/android_aarch64/libcdsprpc.so`; otherwise
      `message(WARNING "Hexagon backend will not be built.")`.
 5. Only variants matching `.*_hexagon.*` carry the backend — exactly one exists
@@ -910,16 +920,13 @@ The `.dynsym` count is legitimate only from a from-source build with the Hexagon
 without it lands in scenario B and reads 0 matches; that zero is compile health, never a re-baseline
 source, and it is never written into the manifest.
 
-**A macOS host is not excluded from producing that count.** Measured at this bump: with the SDK extracted
-to `~/.hexagon-sdk/6.4.0.2`, a local darwin `assembleE2eReleaseE2e` builds from source with
-`HEXAGON_SDK_ROOT`/`HEXAGON_TOOLS_ROOT` passed through and yields both named symbols defined and 16
-matches. §1b's `amd64-lnx` scope is a property of the SDK's **host** toolchain — `hexagon-clang` is an
-x86-64 Linux ELF and does not run on macOS — but nothing on the Android path invokes it: llama.rn's
-gradle only tests that the two SDK directories exist, CMake only additionally requires
-`ipc/fastrpc/remote/ship/android_aarch64/libcdsprpc.so` to exist, and the DSP payloads that would need
-`hexagon-clang` ship prebuilt in llama.rn's `bin/` and are copied, not compiled. What remains true is
-that **GitHub's macOS runners do not provision the SDK**, so CI's Hexagon evidence comes from
-`build-android` on `ubuntu-latest` — that is a provisioning fact, not a platform impossibility.
+**The qualifying condition is the SDK, not the runner — a macOS host is not excluded.** Measured at this
+bump: with the SDK extracted to `~/.hexagon-sdk/6.4.0.2` (llama.rn's own default probe path), a local
+darwin `assembleE2eReleaseE2e` builds from source with `HEXAGON_SDK_ROOT`/`HEXAGON_TOOLS_ROOT` passed
+through and yields both named symbols defined and 16 matches. §1b owns why the SDK's `amd64-lnx` host
+toolchain does not stand in the way. So a developer holding the SDK re-derives the baseline locally in
+minutes instead of waiting on a cold CI build; CI remains what lands it, because CI is the host the
+project can *guarantee* is provisioned.
 
 **At the bump to 0.13.0-rc.1.** `android/build.gradle`, `android/gradle.properties`,
 `android/src/main/CMakeLists.txt`, `cmake/rnllama-build-options.cmake` and `RNLlama.java` are
@@ -1075,7 +1082,7 @@ R2 fails on each; a skipped, suppressed or piped gate would keep R1a green
 | D5 | `rnllama` is mandatory in every ABI's list | `System.loadLibrary("rnllama")` runs unconditionally |
 | D6 | Requirement lives in a committed manifest with one gate | One declaration, every workflow, runnable locally |
 | D7 | Named `.dynsym` symbols are the rule; the count is a tripwire | Names prove behaviour; count catches silent upgrade drift |
-| D8 | iOS is out of scope | From-source excludes hexagon/opencl; macOS can't use the amd64-lnx SDK |
+| D8 | iOS is out of scope | Its from-source path excludes hexagon/opencl outright (`llama-rn.podspec:37`) |
 | D9 | Commit-pinning a llama.rn git ref deferred to its own story | Git installs lack DSP, OpenCL, jniLibs and `lib/` artifacts |
 | D10 | Declare the build mode; delete the root `gradle.properties` knob | Measured inert; detection is inference where declaration is available |
 | D11 | Keep prebuilt-forcing as a documented, gated emergency lever | Works, and cheap — but its ABI pairing is unverifiable |
@@ -1095,7 +1102,7 @@ R2 fails on each; a skipped, suppressed or piped gate would keep R1a green
 | D25 | Both exemption surfaces need a reason plus a checked assertion | An asserted exemption is the hole the payload work kept finding |
 | D26 | The x86_64 asset exclusion is refused, not deferred silently | Measured impossible; the alternatives cost more than the 1.2% at stake |
 | D27 | `expectedMatchCount` is a version-scoped baseline, not an invariant | Symbol surface tracks llama.cpp; only the named symbols prove behaviour |
-| D28 | The baseline is measured only on a from-source CI build with the SDK | macOS cannot provision the amd64-lnx SDK, so it has no number to give |
+| D28 | The baseline is measured only on a from-source build with the SDK provisioned | The SDK is the condition, not the runner (§1b); CI is the guaranteed such host |
 | D29 | Provenance is a printed report line, not an asserted manifest stamp | A re-typed version proves nothing and would red every correct bump |
 
 **On D2, the cache budget and the subset alternative.** The Android host build reads only `incs`,
