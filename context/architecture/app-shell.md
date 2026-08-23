@@ -202,12 +202,41 @@ No new lifecycle. Tab focus is owned by `@react-navigation/bottom-tabs`.
 | `RootStack` | `MainTabs` + full-bleed pushed routes (Chat, Models, Pals, Preferences, App Settings, Benchmark, App Info, Dev Tools, BenchmarkRunner) | a drawer; chat conversation UI |
 | `MainTabs` | three tab roots (Home, Explore, Settings) + floating `BottomNavBar` | native tab bar; pushed-route content |
 | `BottomNavBar` floating variant | rounded floating bar; active item on a yellow pill (`accent.yellowSubtle` fill `#f5dbbc` + `accent.yellowMute` border `#f8f1e2`); icon + label | change to the `default` variant's snapshot |
-| `HomeScreen` | bottom-anchored hero: two-line serif title "Chat / with your pals", pal carousel (rounded-rect image cards, active card yellow-bordered; `palStore.pals` + Add affordance), composer **launcher** card (`Pressable`; static placeholder text + boxed attach + mic + resting-tone gradient send — no `TextInput`, no Home keyboard), two-tone model chip, then chat-history (search header + white rows with pal avatar / clock / time / more) or empty hint; bottom gradient fade | chat conversation UI; an editable composer / Home keyboard; Explore/Settings content; new persistence |
+| `HomeScreen` | bottom-anchored hero: two-line serif title "Chat / with your pals", pal carousel (rounded-rect image cards, active card yellow-bordered; `palStore.pals` + Add affordance), composer **launcher** card (`Pressable`; static placeholder text + boxed attach + mic + resting-tone gradient send — no `TextInput`, no Home keyboard), two-tone model chip, then chat-history (search header + white rows with pal avatar / clock / time / kebab; pinned rows starred and sorted first) or empty hint; bottom gradient fade; per-row action menu + `RenameModal` | chat conversation UI; an editable composer / Home keyboard; Explore/Settings content; new persistence; bulk-selection mode (drawer-only, not re-homed) |
 | `ExploreScreen` | header + sign-in promo card + pill `[Pals \| Models]` sub-tabs; Pals is the PalsHub discovery surface, Models is a disabled stub (see `explore-tab.md`) | model discovery/management; nav topology |
 | Pushed routes (reused) | each screen's existing UI with a Stack header/back | the tab bar |
 | Pushed routes (new — Settings) | `Preferences` + `App Settings` sub-screens with a Stack header/back (`settings.md` owns their contract) | the tab bar; account rows |
 
 ---
+
+### 4a. Home history row actions
+
+The canonical Home row (`888:33822` → `Chat item` `888:33844`) ends in a kebab.
+The reskin drew the glyph but wired nothing, so it read as tappable and was not.
+It now anchors a per-row menu — the same set the drawer's session list offered:
+
+| Item | Routes to | Notes |
+| --- | --- | --- |
+| Pin / Unpin | `chatSessionStore.togglePinSession` | Label flips on `session.pinned`; the row shows a filled star and sorts first |
+| Rename | shared `RenameModal` → `updateSessionTitleBySessionId` | Same modal the chat header uses |
+| Export | `exportChatSession` | JSON. Alerts `sidebarContent.exportError` on failure |
+| Delete | `deleteSession`, behind an `Alert` confirm | Resets the active session first, so Chat never resolves a session mid-deletion |
+
+Canonical does not specify the menu's contents or appearance — a metadata sweep
+of the Homepage section (`888:33821`) finds no dropdown frame. The item set is
+therefore inherited from the drawer rather than from Figma, and the presentation
+reuses the existing `Menu`/`Menu.Item` pair (the same DS-derived precedent as the
+chat header's overflow). Flagged for the designer; not a blocker.
+
+**Not re-homed:** bulk selection mode (`Select…`, bulk delete/export). It was a
+drawer-list affordance with no canonical Home equivalent, and Home's flat
+recency list has nowhere to put a selection bar. `bulkDeleteSessions` /
+`bulkExportSessions` stay unreferenced by the shell — track with the
+`SidebarContent` deletion in POC-13.
+
+**testID note:** the row keeps its frozen `home-history-<id>`; the new controls
+use a `home-session-*` prefix deliberately, because an existing ordering test
+selects rows by `/^home-history-/` and a shared prefix would silently widen it.
 
 ## 5. Single-writer rule
 
@@ -217,6 +246,9 @@ No new lifecycle. Tab focus is owned by `@react-navigation/bottom-tabs`.
 | `BottomNavBar.selectedValue` | derived read of the focused tab route (no writer) |
 | active pal for start-chat | `chatSessionStore.setActivePal` (existing) |
 | active session for history open | `chatSessionStore.setActiveSession` (existing) |
+| session pinned flag | `chatSessionStore.togglePinSession` (existing) — Home row menu is its only caller since the drawer went |
+| session title | `chatSessionStore.updateSessionTitleBySessionId` via the shared `RenameModal` (existing) |
+| session deletion | `chatSessionStore.deleteSession` (existing) — Home row menu and the chat-header overflow both call it |
 | chat prefill text | `deepLinkStore.setPendingMessage` (existing — deep links only; the Home composer is a launcher and no longer prefills) |
 | chat auto-focus request | `deepLinkStore.setAutoFocusChat` — set by the Home composer launcher only; consumed/cleared once by `ChatScreen` |
 | active model | existing `modelStore` selection path (via `ChatPalModelPickerSheet`) |
@@ -226,13 +258,12 @@ Cross-store reads: Home reads `palStore.pals`, `chatSessionStore.sessions`,
 
 ### Deferred cleanups (out of current scope)
 
-1. Delete dead `SidebarContent` + drawer-only files → POC-13. **Re-home the
-   pin/unpin affordance first.** The pinned-sessions feature splits across the
-   shell boundary: the `chat_sessions.pinned` column, `togglePinSession`, and the
-   `Pinned` group in `groupedSessions` are nav-shell-independent and survive, but
-   the *only* entry point that sets the flag is the `SidebarContent` long-press
-   menu. Deleting the drawer without re-homing it ships a persisted column and a
-   `Pinned` section that can never become non-empty. See `chat-flow.md` §8b.
+1. Delete dead `SidebarContent` + drawer-only files → POC-13. The pin/unpin
+   re-homing this entry used to gate on is **done**: the Home history row's
+   kebab now carries pin/unpin, rename, export and delete (§4a below), so
+   `togglePinSession` has a live call site again and the persisted
+   `chat_sessions.pinned` column is reachable. `SidebarContent` is now dead in
+   full and can be deleted outright. See `chat-flow.md` §8b.
 2. Re-home Models / Benchmark / Pals / App Info under their conceptual tab →
    POC-8 / POC-9 / POC-11. The Settings launcher now hosts canonical rows that
    reach Benchmark, App Info, and Dev Tools (`__DEV__`-gated), so the interim
@@ -321,6 +352,8 @@ pocketpal://e2e/benchmark (e2e build)
 | D10 | Floating variant is additive; `default` snapshot frozen | Honors theming I_UI5 DS-snapshot invariant |
 | D11 | Home composer is a launcher (`Pressable`), not a `TextInput` | Keyboard only on Chat; resting card stays pixel-identical; deletes the Home keyboard-occlusion machinery |
 | D12 | Auto-focus Chat input via one-shot `autoFocusChat`, gated on model loaded, fired after `transitionEnd` | Scopes focus to the launcher only; avoids dropping the keyboard mid-transition (Android) and focusing an unsendable field |
+| D13 | Home history row kebab opens a per-row action menu (pin/unpin · rename · export · delete) | Canonical Home (`888:33822` → row `888:33844`) draws the kebab; the reskin drew it as an inert `View`. Restores the per-row set the drawer offered rather than adding capability — every operation already existed in `chatSessionStore` |
+| D14 | Pinned rows sort above unpinned and carry a filled star | A toggle whose effect is invisible is not a feature. Home orders by `pinned` then recency; it does **not** adopt the store's `Pinned`/date `groupedSessions` grouping, which was a drawer-list affordance and would fight Home's flat recency list |
 
 ---
 

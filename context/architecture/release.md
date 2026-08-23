@@ -24,6 +24,7 @@ No app runtime state is involved.
 AndroidPayloadManifest                       scripts/android-payload-manifest.json
   abis: AbiRequirement[]
   assets: AssetRequirement        // artifact-scoped, so declared beside abis[] and not inside it
+  nativeLibsMappedInPlace: true   // the app ships extractNativeLibs=false; floored at true
 
 AbiRequirement
   abi: "arm64-v8a" | "x86_64"
@@ -244,6 +245,7 @@ exactly why its absence is silent and needs an artifact-level assertion.
    | `requiredLibs` | non-empty, per ABI |
    | `requiredSymbols` | at least one rule overall; and for any ABI declaring a `_hexagon` library, at least one rule **whose `lib` is that accelerator library itself** — not merely a rule, and not its JNI wrapper, whose name also contains `_hexagon` but which is a shim exporting stable `Java_*` entry points and none of the backend symbols |
    | each symbol rule | `mustExport` non-empty, **or** an `expectedMatchCount` with a non-empty `pattern` and `count > 0` |
+   | `nativeLibsMappedInPlace` | must be exactly `true`. It records that the platform maps libraries out of the APK, which is what makes both the offset rule and the stored requirement apply; `false` would retire them both in one word |
    | `assets` | the block must exist |
    | `abis[].requiredAssets` / `requiredAssetElfMachine` | **refused.** Nothing reads them since the assets moved to the top-level block, and a key nothing reads is worse than a missing one: an editor working from the old shape declares assets, is never told they are ignored, and gets a green gate. The base version's shape guard went away with the key it guarded, so even `requiredAssets: "not even a list"` passed |
    | `assets.scope` | `"artifact"` and nothing else — a refusal hook, counted as no check (D21) |
@@ -357,6 +359,71 @@ linked against a binary from a different snapshot. A missing symbol would surfac
 **struct-layout drift would not surface at all.** Using the lever does not weaken the gate; the gate is
 what makes it usable at all.
 
+### 4h-bis. The default is inverted inside a building job (C)
+
+Rules R1a through R5 all answer the same question — *does this step publish?* — by recognising what
+publishing looks like across free-form shell and arbitrary actions. That is a **blacklist over an
+open set**, and it behaved like one: five review rounds produced five new spellings of a single
+defect, each closing the ones someone had thought of. `uses:` branches, then command-line branches,
+then composite actions, then a command-token pre-filter, then quote state spanning lines. The
+finding was never about a fix; it was about the approach.
+
+So inside a job that builds Android, the default is the other way round. **A step is a violation
+unless something accounts for it**: it is the gate, or it classifies as a publisher (and then the
+ordering rules apply to it), or its `uses:` is in the reviewed action allowlist, or it is named in
+`ACCOUNTED_STEPS` with a reason and an assertion that holds. Nothing falls through to "nobody
+looked at it".
+
+This trades an impossible question for a finite one. Recognising every way a step might publish
+cannot be completed; naming the steps this repository actually has can — **55** across the three
+building jobs: 3 gate steps, 8 publishers, 17 allowlisted actions and 27 ordinary `run` steps.
+`ACCOUNTED_STEPS` holds 58 rows, the extra three being the steps outside those jobs that the
+suspicion net flags. Those counts are asserted, not described, because a count in a comment is a
+claim nothing checks — and the first version of this paragraph had one wrong.
+
+A new step costs a reviewed line whether or not it looks dangerous: `echo hello` is refused exactly
+as `bash tools/ship.sh` is, because the point is that no judgement about the step's text is being
+made.
+
+**Being recognised is not an exemption, and neither is being unchanged.** Two things had to follow
+before the inversion was real. First, classification as a publisher — or as the gate, or as an
+allowlisted action — used to end the enquiry, which left the largest steps in the workflow outside
+it: appending a line to `Push the release tag` moved nothing. Every step is accounted for now,
+publishers and gates included. Second, and more important, **each row pins a digest of the step's
+content**. The list of steps was closed while what a step contained stayed open, so an edit *inside*
+an accounted step cost nothing, and each exemption's assertion could only refuse the transports
+somebody had thought of — a census over 30 entries × 10 hostile appends left every assertion holding
+for `gcloud storage cp`, `az storage blob upload`, `nc`, `ssh`, `python -m http.server` and plain
+`cp`. With content pinned, all of those fail on the digest without anyone having anticipated them.
+The transport predicates remain as a second line of defence and are no longer load-bearing.
+
+The two local composite actions are pinned the same way. A composite is free-form shell behind one
+`uses:`, so reading it for transports would be the same enumeration; its `action.yml` carries a
+digest, and `shipsNothing` is what stands behind that.
+
+Two consequences worth stating. The suspicion net now applies **only outside** the building jobs,
+where it remains the weaker instrument it always was — the inversion is strictly stronger and would
+make it redundant there. And a publisher class that must name an artifact (everything except a tag
+push) is refused when the parse can read **no** path out of it: an empty path set is otherwise
+indistinguishable from a satisfied one.
+
+`actions/upload-artifact` classifies whenever it carries a `path:`, not only when an `.apk`/`.aab`
+can be read out of it. Conditioning the classification made the empty-resolution refusal unreachable
+for the one class it was written for, and handed the step to an action allowlist that asserts
+nothing about it — three committed report uploads sat in exactly that state, each under
+`if: always()`. What a report upload legitimately ships is pinned instead as a short list of
+**non-artifact upload paths**, asserted disjoint from `build/outputs`: a concrete filename that is
+not an `.apk`/`.aab` is not thereby harmless, since `tar czf out/x.tgz …/apk` produces one.
+
+The gate step's own shape is pinned the same way, for the same reason. Every way `bash -e` can be
+made to report success for a failing command is a shell feature — `||`, a pipe, `&`, `!`,
+`if`/`while`, `set +e` in four spellings, `trap … ERR`, another command after it on the same line —
+and enumerating them leaked in three consecutive rounds. What the gate step is *permitted* to be is
+one command, optionally preceded by `set -euo pipefail`, and its **key set** is pinned to `name` and
+`run`: the script is only one of the things that decide what executes, and `env` can preload a
+module, `working-directory` can move the paths the flags name. That is a list of two either way, and
+all three gate steps already have that shape.
+
 ### 4e. Hard invariants
 
 - **I1 — declared payload**: every shipped Android artifact contains, for each ABI, at least every
@@ -378,8 +445,8 @@ what makes it usable at all.
   source list, same compile definitions — or as a *named, costed* bet with the fall-through rung
   recorded. "Same `-march`" alone never qualifies.
 - **I8 — page alignment**: every shipped `lib/<abi>/*.so` in a declared ABI has every `PT_LOAD` at
-  `p_align >= 16384`, **and**, where the APK stores it uncompressed, begins at a zip data offset
-  that is a multiple of 16384. The app maps its libraries in place, so both are required to load.
+  `p_align >= 16384` and, in an APK, is **stored uncompressed** at a zip data offset that is a
+  multiple of 16384. The app maps its libraries in place, so all three are required to load.
 - **I9 — scope is structural**: a required path's scope is declared by where it sits in the manifest,
   never inferred from where it happens to be written.
 
@@ -398,11 +465,23 @@ device. The NDK already produces that alignment; this is a tripwire holding it, 
    `PASS / EXIT=0` on 68/68 misaligned offsets.
 
    The offset is read from the archive's **local** header. `unzip -Z -v` reports the *central*
-   directory's extra-field length, which is 0 here, while the padding that does the aligning lives
-   in the local header — 599 bytes for `lib/arm64-v8a/librnllama.so`. Scoped to **stored** entries
-   of an **APK**: a deflated entry is extracted at install rather than mapped, and an AAB is
-   repackaged by bundletool on the way to the device, so neither offset decides anything. Both are
-   reported as counts rather than skipped silently.
+   directory's extra-field length, which is 0 for every library, while the padding that does the
+   aligning lives in the local header and is whatever it took to reach the next page boundary — so
+   the difference between the two is the entire field, and the magnitude varies per entry.
+
+   Scoped to an **APK**, because an AAB is repackaged by bundletool on the way to the device:
+   `p_align` survives that and is still checked there, and only the offset, which repackaging
+   destroys, is dropped.
+
+   **A deflated library is refused, not excused.** An earlier draft skipped deflated entries as
+   "extracted at install" — a true statement about Android in general and a false one about this
+   app. The manifest declares `nativeLibsMappedInPlace`, matching the `extractNativeLibs=false` that
+   AGP injects from the `useLegacyPackaging=false` default, so nothing is extracted and a compressed
+   `lib/*/*.so` cannot be loaded on **any** device, 16 KB-page or not. The skip excused the more
+   serious of the two faults and was reachable: deflating every library left the gate printing
+   `0/0 stored` and exit 0. The declaration is floored at `true`, so retiring the rule now means
+   editing the manifest to claim the app extracts its libraries — a reviewed change, and a false
+   one.
 
    The fixtures had to gain a stored-mode zip writer for this. `zip -q -r -X` deflates even
    incompressible data, so a stored-scoped rule would have had an **empty subject set across every
@@ -525,10 +604,15 @@ cannot drift into two vocabularies.
    is already in use.
 5. **R4** (`violationsOfLaneSplit`) — no fastlane lane both builds and publishes an Android artifact. D13's split is invisible
    to the workflow graph, so only this rule holds it.
-6. **R5 — suspicion net** (`violationsOfSuspicionNet`). Every step whose `run` matches a broad publish-or-fetch pattern
+6. **R5 — suspicion net** (`violationsOfSuspicionNet`), **outside the building jobs only.** Every step
+   whose `run` matches a broad publish-or-fetch pattern
    (`upload|publish|release|git push|gh |curl|wget|scp|rsync|aws s3`) or whose `uses:` is outside the
-   reviewed action allowlist must be either classified as one of the publishers above or listed in `NON_PUBLISHERS` with its
-   reason **and** the assertion that makes the reason checkable.
+   reviewed action allowlist must be either classified as one of the publishers above or listed in
+   `ACCOUNTED_STEPS` with its reason **and** the assertion that makes the reason checkable.
+7. **R6 — every step accounted for** (`violationsOfUnaccountedSteps`), **inside them.** A step in a
+   building job that is not the gate, not a publisher, not an allowlisted action and not named in
+   `ACCOUNTED_STEPS` is a **violation**. See "The default is inverted" below — this is the rule the
+   other five rest on.
 
 **Both exemption surfaces carry the same floor** — a reason plus a machine-checked assertion, and a
 stale entry fails rather than lying dormant. That covers the action allowlist as much as
@@ -807,12 +891,13 @@ lib/arm64-v8a/librnllama_v8.so has a PT_LOAD at p_align 4096
 gate fails on I8, naming the entry, the segment alignment and the declared floor
 ```
 
-### H2. The archive is repacked without alignment padding
+### H2. The archive is repacked, losing alignment or compressing the libraries
 ```
-every ELF untouched and conforming; stored libraries land on arbitrary offsets
+every ELF untouched and conforming; libraries land on arbitrary offsets, or are deflated
 ─────
-segment alignment still reports 68/68; the zip data offset half fails on I8,
-naming the entry and the byte it begins at. Before this half existed: PASS, exit 0
+segment alignment still reports 68/68; the archive-side half of I8 fails, naming the
+entry and either the byte it begins at or that it is compressed at all. A deflated
+library is unloadable on every device, not only 16 KB ones, so it is refused too
 ```
 
 ### I. A publishing step is moved above the gate
@@ -1117,9 +1202,9 @@ and supply's `verify_block` rejects a wrong `aab:` path.
     cosmetic.** Both halves of 16 KB compatibility are now asserted (I8), and asserting only the
     first certified an artifact that cannot load: the fixture repacked without zip padding, every
     ELF untouched, printed `PASS / EXIT=0` on 68/68 misaligned data offsets. What remains outside
-    the subject set is deliberate — deflated entries are extracted at install rather than mapped, and
-    an AAB is repackaged by bundletool on the way to the device — and both are reported as counts
-    rather than passed over, so an artifact where nothing is stored says so.
+    the subject set is only the AAB, which bundletool repackages on the way to the device. A deflated
+    library is **not** outside it: this app maps its libraries in place, so a compressed one is
+    unloadable everywhere and is refused.
 14. **The ordering test sees only committed text.** A publish through a third-party action whose name
     reveals nothing is caught by R5's allowlist floor, not by understanding. The irreducible
     remainder of R1b's no-interposition clause is the same shape: the parse reads step text, not
