@@ -1,15 +1,12 @@
-# Release — what a shipped artifact must contain, and what guarantees it
+# Release — the Android native build and the shipped payload
 
-Cumulative truth for how PocketPal's shipped artifacts get what they must contain, and what guarantees
-it before they ship. Most of this doc is the Android native llama.rn payload, which is where the
-subject was first paid down; § 1c and § 4i are the iOS binary's sensitive-API surface.
+Cumulative truth for how PocketPal's Android artifacts get their native llama.rn payload, and what
+guarantees that payload before it ships.
 
 **Scope.** The Android native build (build mode, compiled variants, the Hexagon/NPU backend) and the
-payload gate that guards publication; the iOS binary's declared API surface and the gate that guards
-it. TestFlight and Play upload mechanics, signing, and version bumping are **not** documented here yet
-— they accrue when a story needs them (deferred cleanup 4). **The iOS *native payload* is out of
-scope**: it vendors the prebuilt `ios/rnllama.xcframework` and cannot regress the Android way. That is
-a statement about the payload only, not about the iOS binary as a subject (D30).
+payload gate that guards publication. TestFlight and Play upload mechanics, signing, and version
+bumping are **not** documented here yet — they accrue when a story needs them (deferred cleanup 4).
+iOS is out of scope: it vendors the prebuilt `ios/rnllama.xcframework` and cannot regress this way.
 
 Cross-reads: `model-loading.md § Build note` states the dependency shape and the llama.rn version
 rationale and points here for the build contract; this doc does not restate it.
@@ -85,48 +82,6 @@ Persisted: the manifest, in the app repo. Derived: the variant allowlist (§4b).
 - llama.rn's checksum-pinned native artifacts, downloaded by its own postinstall from
   `releases/download/v<version>/` and verified against `install/native-artifacts.json`. Excluded from
   the npm tarball and absent from the upstream git repo. (C)
-
-### 1c. The iOS binary's declared API surface (C)
-
-The second durable declaration: what a built iOS binary must **not** reference, and what it must.
-
-```
-IosApiSurfaceManifest                    scripts/ios-api-surface-manifest.json
-  forbidden: ForbiddenSurface[]          // what the shipped binary must not reference
-  sentinels: Sentinel[]                  // what it must reference — the instrument's own control
-
-ForbiddenSurface
-  framework: string                      // "CoreLocation" — the reason, and the report heading
-  purposeStringKey: string               // "NSLocationWhenInUseUsageDescription" — the warning it clears
-  symbolPatterns: string[]               // case-insensitive nm -u substrings: "cllocation", "corelocation"
-  ignoredSymbols: IgnoredSymbol[]        // exact names exempted from the patterns above (D34)
-  selectors: string[]                    // exact __objc_methname entries denoting API use
-  reportOnlyDylibs: string[]             // LC_LOAD_DYLIB names printed, never asserted (D34)
-
-IgnoredSymbol
-  symbol: string                         // exact nm name
-  reason: string                         // why it is not an API access
-
-Sentinel
-  undefinedSymbols: string[]             // must be present in nm -u
-  selectors: string[]                    // must be present in __objc_methname
-  reason: string                         // the shipped feature that guarantees it
-```
-
-Persisted: the manifest, in the app repo. Derived: nothing.
-
-**Glossary** — **Sentinel**: a reference the app's shipped features guarantee, asserted **present** on
-the same reading that asserts the forbidden ones absent; without one, an empty result is an empty grep.
-**Slice**: one architecture of a fat Mach-O — the CI binary has two, the shipped one has one. **iOS
-surface gate**: `scripts/verify-ios-api-surface.js`, reading a built `.app` or `.ipa`.
-
-**The patterns are broad and the exemptions are named** (D34): an exact forbidden list cannot fail on a
-symbol nobody predicted, while a broad pattern plus a reviewed `ignoredSymbols` list fails closed on it.
-That list has one entry today — `__swift_FORCE_LOAD_$_swiftCoreLocation`, emitted by *any* file
-importing the CoreLocation overlay, including five vision-camera files that name only CoreLocation
-value types (`CLLocation`, `CLHeading`, `CLAuthorizationStatus`) and must keep compiling. It is a linker
-autolink hint, not an API access; without the entry the gate would fail a build that has cleared the
-warning by every other measure.
 
 ---
 
@@ -542,21 +497,6 @@ and workflow scope, which is why those are pinned too — naming them on the ste
   multiple of 16384. The app maps its libraries in place, so all three are required to load.
 - **I9 — scope is structural**: a required path's scope is declared by where it sits in the manifest,
   never inferred from where it happens to be written.
-- **I10 — no forbidden surface**: no iOS binary built by CI references, in any slice, a symbol matching
-  a declared pattern and absent from `ignoredSymbols`, or a declared selector. Scoped to what a
-  mechanism holds: the release artifact is covered only transitively, via the ref CI ran on (deferred
-  cleanup 16).
-- **I11 — sentinel present**: every reading that asserts an absence also asserts a sentinel's presence,
-  in the same invocation over the same binary. An absence without a control is not evidence.
-- **I12 — levers are not evidence**: the `$VCEnableLocation` Podfile flag and the two patches under
-  `patches/` are how I10 is achieved, never how it is asserted. (I6, restated for this subject.)
-- **I13 — exemptions are named, corrections are not exemptions**: a symbol matching a forbidden pattern
-  passes only by an `ignoredSymbols` entry carrying a reason. **Which repair applies is decided by
-  whether the symbol belongs to `forbidden[].framework`**: a symbol of that framework which is
-  nonetheless not an API access is an **exemption** (`__swift_FORCE_LOAD_$_swiftCoreLocation`); a symbol
-  of some *other* origin that the pattern selected by accident is an **over-match**, and the repair is
-  to **correct the pattern**, never to exempt the symbol. Exempting a mangling accident would put a
-  non-judgement in a list whose every entry is meant to be a reviewed API-surface judgement.
 
 ### 4f. 16 KB page alignment (C)
 
@@ -867,115 +807,6 @@ still in that order.
 the committed files. A rule that has only ever been seen passing is not known to be capable of
 failing, which is exactly how the six manifest weakenings became possible.
 
-### 4i. The iOS binary's sensitive-API surface (C)
-
-App Store Connect returns **ITMS-90683** when the uploaded binary references an API needing a purpose
-string the `Info.plist` does not declare. PocketPal's `Info.plist` declares `NSCamera`,
-`NSLocalNetwork`, `NSPhotoLibrary` and `NSSiri` and no location key, and the app uses no location
-feature — yet 146 builds shipped with CoreLocation API references, from two dependencies.
-
-**What was there.** `react-native-vision-camera` 4.7.2 compiles its CoreLocation code behind the Swift
-condition `VISION_CAMERA_ENABLE_LOCATION`, which `VisionCamera.podspec` sets **on by default** — but the
-condition is narrower than the code. Ten files `import CoreLocation`; the condition appears in three,
-and three of the unguarded ones name `CLLocationManager` or a CoreLocation constant:
-`Core/LocationProvider.swift` (only its `authorizationStatus` property is inside the `#if`; the class
-body — `CLLocationManager()`, `kCLLocationAccuracyNearestTenMeters`, `startUpdating*`, `stopUpdating*` —
-is not), `Core/Extensions/CLLocationManager+requestAccess.swift` (whole file), and
-`Core/MetadataProvider.swift` (`var locationProvider`, its three readers, and
-`createLocationMetadataItem`). So `$VCEnableLocation = false` alone removes *call sites*, not the API
-surface. `react-native-device-info` 14.1.1 has no flag at all: `RNDeviceInfo.m` imports CoreLocation
-and calls `locationServicesEnabled`, `significantLocationChangeMonitoringAvailable`, `headingAvailable`
-and `isRangingAvailable` from two methods whose `RCT_EXPORT_METHOD` /
-`RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD` wrappers register at module-load time — reachable by
-construction, so dead-stripping cannot remove them.
-
-**Measured baseline**, `Release-iphonesimulator/PocketPal.app/PocketPal`, fat `x86_64 arm64`, identical
-in both slices: `nm -u` yields exactly three CoreLocation matches —
-`_OBJC_CLASS_$_CLLocationManager`, `_kCLLocationAccuracyNearestTenMeters`, and
-`__swift_FORCE_LOAD_$_swiftCoreLocation`; `__TEXT,__objc_methname` carries seven CoreLocation selectors
-once each; `otool -L` names `CoreLocation.framework/CoreLocation` and `libswiftCoreLocation.dylib`.
-A third pattern `"kcl"` was **refused**: the Itanium mangling of a `(char const*, long)` parameter list
-ends `PKcl`, so it selects `std::basic_ostream<char>::write` and `std::basic_streambuf<char>::xsputn` in
-every slice, and adds no true positive — `_kCLLocationAccuracyNearestTenMeters` already contains
-`CLLocation`. Dropping the pattern is the repair; exempting the two symbols is not (I13).
-
-**What clears it.**
-
-1. `ios/Podfile` sets `$VCEnableLocation = false` at top level, beside `$RNFirebaseAsStaticFramework`.
-   `pod install` logs `[VisionCamera] $VCEnableLocation is set to false!`.
-2. `patches/react-native-vision-camera+4.7.2.patch` **extends the existing guard** — the same
-   `#if VISION_CAMERA_ENABLE_LOCATION`, with **no `#else`** — to exactly the three files that contribute
-   a forbidden symbol: `LocationProvider.swift` (whole class body), `CLLocationManager+requestAccess.swift`
-   (whole extension), and `MetadataProvider.swift` (`:19`, `:35-40`, `:54-58`, `:73-81`). The only writer
-   of `metadataProvider.locationProvider` sits inside `CameraSession+Location.swift`'s existing guard, so
-   nothing references the removed declarations when the condition is off. The five value-type-only
-   importers are **not** touched — measured, they contribute no forbidden symbol. Upstreamable as a bug
-   fix (D31).
-3. `patches/react-native-device-info+14.1.1.patch` removes the CoreLocation import and the two method
-   groups. `RNDeviceInfo.h` declares neither and the package has no `codegenConfig`, so nothing is left
-   unimplemented; the JS side keeps exporting both names, and nothing in `src/` or `e2e/` calls them (D32).
-4. **No `NSLocationWhenInUseUsageDescription` is added.** A local-first app does not declare a purpose
-   string for an API it never calls (D33).
-5. **None of 1–4 is evidence.** Only the gate is (I12).
-
-**The gate.** `scripts/verify-ios-api-surface.js --app <PocketPal.app | executable>` or `--ipa <path>`,
-against `scripts/ios-api-surface-manifest.json`. One implementation, one manifest, consumed by every
-workflow that builds an iOS binary and runnable locally; no workflow restates a rule inline (D6, second
-subject). It reads **every slice** `lipo -archs` reports — a read stopping at slice 0 would miss the
-other and would read as a pass — and takes three readings per slice: `nm -u` against `symbolPatterns`
-minus `ignoredSymbols`; `__TEXT,__objc_methname` against `selectors`; `LC_LOAD_DYLIB` against
-`reportOnlyDylibs`. The first two decide the verdict; the third is **printed, never asserted** (D34).
-`-arch` is passed on every call, including `otool -L`, which on a fat file otherwise concatenates both
-slices' load commands. There is no report file — the log is the evidence.
-
-**It self-checks before judging** (I4): it fails if it cannot locate the binary, cannot run
-`lipo`/`nm`/`otool`, reads an empty symbol table, reads an empty selector section, or finds **any**
-sentinel missing. A zero-match read is an instrument failure, never a pass. It shells out to those three
-rather than parsing Mach-O in process: § 4c.7 chose an in-process ELF reader because macOS ships no
-`readelf`, but a Mach-O gate runs only on macOS, where all three are guaranteed (D35).
-
-**The manifest has floors**, because emptying a list is the cheapest edit that unblocks a build
-(§ 4c.4b): `forbidden` non-empty; each entry's `symbolPatterns` **and** `selectors` both non-empty;
-each entry's `symbolPatterns` containing its own `framework` lowercased; every `ignoredSymbols` and
-`sentinels` entry carrying a non-empty `reason`; `sentinels` non-empty with at least one entry declaring
-symbols and at least one declaring selectors. **Both, not either**: these are different surfaces, not
-two views of one. A Swift-only API use emits no ObjC selector, the device-info half is selector-visible,
-and `_kCLLocationAccuracyNearestTenMeters` is symbol-visible only, so clearing `symbolPatterns` alone
-disarms half the surface and would pass an `or` floor. (The Android floor uses `or` because `mustExport`
-and `expectedMatchCount` *are* one thing read twice.) The framework-name clause is what makes I13's
-second half checkable rather than decorative — deleting `"corelocation"` is refused by the floor, not by
-prose.
-
-`scripts/__tests__/verify-ios-api-surface.test.js` exercises every rule against a **deliberately broken
-in-memory copy** of the readings, built from the committed manifest: a rule seen only passing is not
-known to be able to fail. `ignoredSymbols` is exercised both ways — the entry suppresses its own symbol;
-a second pattern-matching symbol absent from the list still fails.
-
-**Where it runs.** `ci.yml/build-ios`, on the `PocketPal.app` it already builds, as its own step after
-it, with **no `if:` and no `continue-on-error`** (R2's rule for the Android gate). That step's
-`xcodebuild` passed no `-derivedDataPath`, so the product landed under a hashed
-`~/Library/Developer/Xcode/DerivedData/PocketPal-<hash>/…` path nothing declared. It gains
-`-derivedDataPath derived-data`, written exactly so: the step's `run` begins `cd ios`, so the flag
-resolves relative to `ios/` and a literal `ios/build` would land at `ios/ios/build`. Subject:
-`ios/derived-data/Build/Products/Release-iphonesimulator/PocketPal.app/PocketPal` (D37). The name avoids
-`build` because `ios/build` is already fastlane's `output_directory`, which `release.yml` step 10 reads
-`PocketPal.app.dSYM.zip` from — no collision today, but a name that says what it holds forecloses one.
-
-**The subject is a proxy, and the claim is scoped to it**: `-sdk iphonesimulator`, two slices, not the
-shipped binary. Sound for these two dependencies because neither guards CoreLocation behind
-`#if targetEnvironment(simulator)` — stated, not assumed (D38). **The release path is deliberately not
-gated here** (D36): `release_ios_testflight` runs `build_ios_app` **and** `upload_to_testflight` in one
-lane, so a workflow gate would run after TestFlight held the IPA; covering it means D13's lane split on
-an unrehearsable `workflow_dispatch` path. Cleanup 16 carries it.
-
-**Recorded outcome**, both readings on the same instrument, same manifest, same worktree, one commit
-apart. Before (`80e3d8f0`, levers absent): exit 1 — both API symbols and all seven selectors present in
-both slices, sentinels present, the force-load hint matched and suppressed. After (`71af67ed`, levers
-applied, `ios/derived-data` removed first so no control object survived): exit 0 — zero unignored matches
-and zero forbidden selectors in both slices, sentinels present, the force-load hint still matched and
-suppressed. `CoreLocation.framework/CoreLocation` also left `LC_LOAD_DYLIB`, leaving only
-`libswiftCoreLocation.dylib`; that is reported, not asserted, and 6b holds either way.
-
 ---
 
 ## 5. Single-writer rule
@@ -993,12 +824,6 @@ suppressed. `CoreLocation.framework/CoreLocation` also left `LC_LOAD_DYLIB`, lea
 | publish ordering and path identity | the committed workflow and Fastfile text, asserted by one test (§4h) |
 | what the Play upload ships | the `aab:` path passed explicitly by `upload_android_alpha` (`Fastfile`) |
 | what the payload gate reads | the `--aab` path in `release.yml` |
-| which APIs a built iOS binary may reference | `scripts/ios-api-surface-manifest.json` |
-| which matching symbols are nonetheless allowed | `forbidden[].ignoredSymbols`, one reviewed line each |
-| whether vision-camera compiles its CoreLocation API use | `$VCEnableLocation` in `ios/Podfile`, **once** `patches/react-native-vision-camera+4.7.2.patch` makes the condition cover § 4i's three files |
-| whether device-info compiles its CoreLocation code | `patches/react-native-device-info+14.1.1.patch` — no flag exists |
-| which purpose strings the app declares | `ios/PocketPal/Info.plist` |
-| what the iOS surface gate reads | `-derivedDataPath derived-data` on the `ci.yml/build-ios` build step, which runs under `cd ios` → `ios/derived-data/…` (D37) |
 
 The last two rows are the one place the lane split traded a single determinant for two: the path is now
 written in both `release.yml` and the `Fastfile`, and they must agree. A fresh runner makes divergence
@@ -1231,49 +1056,6 @@ or `… 2>&1 | tee gate.log` (which exits with tee's status under the default ba
 R2 fails on each; a skipped, suppressed or piped gate would keep R1a green
 ```
 
-### R. The iOS fix, verified
-```
-$VCEnableLocation=false, both patches applied, Release build
-─────
-0 unignored pattern matches and 0 forbidden selectors in every slice; sentinels present;
-__swift_FORCE_LOAD_$_swiftCoreLocation matched and suppressed by its named exemption;
-CoreLocation dylib reported but not asserted; gate exits 0
-```
-
-### S. The regression the iOS gate exists to catch
-```
-device-info bumped; the patch applies but the new RNDeviceInfo.m grew a
-CoreLocation call the patch does not cover
-─────
-ci.yml/build-ios fails on I10, naming the symbol and the framework, on the bump PR
-```
-
-### T. An iOS lever silently stops working
-```
-upstream renames or drops VISION_CAMERA_ENABLE_LOCATION, so $VCEnableLocation
-becomes inert while the Podfile line still reads false
-─────
-patch-package fails loudly, or the patch applies and the gate fails on I10.
-The flag's inertness cannot be mistaken for a pass — this is what I12 buys
-```
-
-### U. The iOS instrument is broken, not the binary
-```
-the gate is pointed at a stripped binary, the wrong path, or an unreadable slice
-─────
-sentinels absent → instrument failure (I11), never a green "no CoreLocation found"
-```
-
-### V. The iOS declaration is weakened to unblock a build
-```
-(i) forbidden[].symbolPatterns and .selectors both cleared
-(ii) _OBJC_CLASS_$_CLLocationManager added to ignoredSymbols
-─────
-(i) refused by the § 4i floor before any binary is opened
-(ii) passes — a reviewed line whose stated reason is false. That is the D34 line
-past which the control is a reviewed manifest diff, not more validation
-```
-
 ---
 
 ## 7. Signals
@@ -1300,7 +1082,7 @@ past which the control is a reviewed manifest diff, not more validation
 | D5 | `rnllama` is mandatory in every ABI's list | `System.loadLibrary("rnllama")` runs unconditionally |
 | D6 | Requirement lives in a committed manifest with one gate | One declaration, every workflow, runnable locally |
 | D7 | Named `.dynsym` symbols are the rule; the count is a tripwire | Names prove behaviour; count catches silent upgrade drift |
-| D8 | The iOS **native payload** is out of scope | Its from-source path excludes hexagon/opencl outright (`llama-rn.podspec:37`). Says nothing about the iOS binary's API surface (D30) |
+| D8 | iOS is out of scope | Its from-source path excludes hexagon/opencl outright (`llama-rn.podspec:37`) |
 | D9 | Commit-pinning a llama.rn git ref deferred to its own story | Git installs lack DSP, OpenCL, jniLibs and `lib/` artifacts |
 | D10 | Declare the build mode; delete the root `gradle.properties` knob | Measured inert; detection is inference where declaration is available |
 | D11 | Keep prebuilt-forcing as a documented, gated emergency lever | Works, and cheap — but its ABI pairing is unverifiable |
@@ -1322,15 +1104,6 @@ past which the control is a reviewed manifest diff, not more validation
 | D27 | `expectedMatchCount` is a version-scoped baseline, not an invariant | Symbol surface tracks llama.cpp; only the named symbols prove behaviour |
 | D28 | The baseline is measured only on a from-source build with the SDK provisioned | The SDK is the condition, not the runner (§1b); CI is the guaranteed such host |
 | D29 | Provenance is a printed report line, not an asserted manifest stamp | A re-typed version proves nothing and would red every correct bump |
-| D30 | The iOS API surface extends this doc; no new flow doc | Same subject: what ships, and what guarantees it |
-| D31 | Complete vision-camera's guard rather than delete the feature | Upstreamable; keeps the flag honest |
-| D32 | device-info gets a patch, not a flag | The package offers no compile-time switch |
-| D33 | No location purpose string is declared | Local-first app declares nothing for an uncalled API |
-| D34 | Broad patterns, named exemptions; dylib linkage reported only | The overlay force-load is a link hint, not an API access |
-| D35 | The iOS gate shells out to `nm`/`otool`/`lipo` | Mach-O gates run only on macOS, where all three exist |
-| D36 | Gate iOS CI now; defer the release-path lane split | Unrehearsable path, and CI catches the bump regression |
-| D37 | Pin the iOS CI subject with `-derivedDataPath derived-data` | A discovered path is not a declared determinant |
-| D38 | The iOS gate reads the simulator binary and says so | Cheap per-PR tripwire; the proxy gap is stated, not hidden |
 
 **On D2, the cache budget and the subset alternative.** The Android host build reads only `incs`,
 `incs/stddef`, `ipc/fastrpc/rpcmem/inc`, and links
@@ -1422,15 +1195,6 @@ second, larger build pipeline. That is a scope boundary, not a preference.
 | 9r | A publishing step names a path built in another job | R3: refused unless the job obtains no Android build output by any of the four named mechanisms |
 | 9s | Two artifacts, one gate step | R1b holds only if that step names both basenames — the `release.yml` shape today |
 | 9t | A new workflow builds and publishes an Android APK with no gate | Parsed by V1; **V2 fails first**, on a fourth building job, before R1a/R1b are reached. A legitimate new build job costs a reviewed edit to V2's list |
-| 9u | Bare `authorizationStatus` selector | **Not** declared forbidden — it is ambiguous. Measured **once per slice**; `_OBJC_CLASS_$_PHPhotoLibrary` is referenced and `+[PHPhotoLibrary authorizationStatus]` exports the bare name, as does `CLLocationManager` in the pre-fix baseline. `AVCaptureDevice` is *not* the exporter: it compiles to `authorizationStatusForMediaType:`, present separately and once. Only unambiguous CoreLocation selectors are listed |
-| 9v | CoreLocation still in `otool -L` after a clean symbol reading | Passes. Autolink hints are per-object and outlive dead-stripping; reported for the reader (D34). If ITMS-90683 persists, linkage is the next hypothesis, not a gate failure |
-| 9w | `__swift_FORCE_LOAD_$_swiftCoreLocation` survives the patch | Expected in both slices, and required to — the value-type-only importers emit it. Suppressed by its named exemption, printed in the report (D34) |
-| 9x | A CoreLocation symbol no pattern matches (`_OBJC_CLASS_$_CLGeocoder`) | Not caught. The patterns **are** the declared surface; widening them is a one-line manifest edit. This is the cost of D34's direction — broad patterns with named exemptions, rather than an exact forbidden list that would miss it too *and* exempt it silently |
-| 9y | Fat binary, one clean slice and one dirty | Fails. Every slice is read (§ 4i) |
-| 9z | A dependency bump moves a patched file | If the patch stops applying, `patch-package` exits non-zero and the build fails before the gate. If it applies but no longer suffices, only the binary catches it — scenario S |
-| 9aa | A dependency guards its CoreLocation call behind `#if targetEnvironment(simulator)` | **Not caught today.** CI reads the simulator slice and passes; the device binary would carry it. This is the concrete form of D38's proxy gap, and the second half of deferred cleanup 16's residual risk |
-| 9ab | Android, under the iOS story's changes | Unaffected. No vision-camera location permission reaches the merged manifest — confirm on the build, do not assume. The device-info patch is shared, so an Android build is still required |
-| 9ac | vision-camera `takePhoto` EXIF | Unchanged. `<Camera>` never sets `enableLocation`, so `locationProvider` was already `nil` and no GPS EXIF was ever attached. `createVideoMetadata`'s GPS branch was likewise unreachable |
 
 ---
 
@@ -1500,27 +1264,6 @@ and supply's `verify_block` rejects a wrong `aab:` path.
 >   Confirming engagement needs a real 8-series device.
 >
 > Remove this note once a release has gone through cleanly and a device has been checked.
-
-**What the iOS API surface contract does not prove.** That the *shipped* binary is clean — only that the
-one CI builds from the same sources is, on the simulator slices, at the commit CI ran. Three gaps,
-recorded rather than defended: the release path is ungated (cleanup 16), the subject is a simulator
-proxy (9aa), and the forbidden set is a declared pattern, not a complete enumeration of CoreLocation
-(9x). Close the first next; it subsumes the second.
-
-**Stop condition, for any future repeat of this work.** If the baseline symbols in § 4i do not go from
-**present to absent** on a build with the levers applied, the diagnosis is wrong — stop and report
-rather than widening the patch. A surviving `__swift_FORCE_LOAD_$_swiftCoreLocation` is **not** a stop:
-it is expected (9w).
-
-> **Live obligation: the next TestFlight upload after this lands must be watched.** Everything in § 4i
-> is read from a binary CI builds; **nothing that contract examines is ever uploaded to App Store
-> Connect**, and ITMS-90683 is emitted against the uploaded IPA. The headline success criterion — the
-> warning stops arriving — is confirmed by the next delivery email and by nothing before it. If it
-> persists on a build carrying both patches, 9v is the next hypothesis (CoreLocation in `LC_LOAD_DYLIB`
-> with no symbol reference) and cleanup 16 moves up: gating the shipped IPA is then the only way to see
-> what Apple sees.
->
-> Remove this note once a delivery has come back clean.
 
 ## Deferred cleanups
 
@@ -1593,13 +1336,3 @@ it is expected (9w).
     an unanchored presence test, so a truncated line can only *lose* matches, which moves a step
     toward "publishes nothing" and "carries no transport". It is quote-aware now, and an unbalanced
     quote leaves the line unstripped — keeping text rather than losing it.
-16. **The TestFlight upload is not gated** — `release_ios_testflight` builds and uploads in one lane, so
-    the bytes reaching TestFlight are never examined (I5 does not reach iOS). Closing it needs D13's
-    lane split, an explicit `ipa:` on the upload lane (`lane_context[SharedValues::IPA_OUTPUT_PATH]` is
-    `nil` across two `bundle exec fastlane` invocations — the defect that let the Play upload go green
-    having shipped no binary), and a path-identity assertion, since ordering alone binds a gate to
-    nothing (R1b). **Residual risk**: a release built from a ref CI never gated, plus the
-    device-vs-simulator gap (9aa). Bounded by CI gating every PR.
-17. `build_for_device_farm` produces an ungated IPA. Harmless today — it publishes to no store.
-18. Other sensitive-API surfaces are undeclared. The iOS manifest is per framework, so a future
-    ITMS-90683 for a different purpose string costs a row, not a script.
