@@ -1267,8 +1267,8 @@ ci.yml/build-ios fails on I10, naming the symbol and the framework, on the bump 
 upstream renames or drops VISION_CAMERA_ENABLE_LOCATION, so $VCEnableLocation
 becomes inert while the Podfile line still reads false
 ─────
-the gate fails on I10. The flag's inertness cannot be mistaken for a pass —
-this is what I12 buys, and the gate is the only thing that buys it (9z)
+patch-package fails loudly, or the patch applies and the gate fails on I10.
+The flag's inertness cannot be mistaken for a pass — this is what I12 buys
 ```
 
 ### U. The iOS instrument is broken, not the binary
@@ -1441,7 +1441,7 @@ second, larger build pipeline. That is a scope boundary, not a preference.
 | 9w | `__swift_FORCE_LOAD_$_swiftCoreLocation` survives the patch | Expected in both slices, and required to — the value-type-only importers emit it. Suppressed by its named exemption, printed in the report (D34) |
 | 9x | A CoreLocation symbol no pattern matches (`_OBJC_CLASS_$_CLGeocoder`) | Not caught. The patterns **are** the declared surface; widening them is a one-line manifest edit. This is the cost of D34's direction — broad patterns with named exemptions, rather than an exact forbidden list that would miss it too *and* exempt it silently |
 | 9y | Fat binary, one clean slice and one dirty | Fails. Every slice is read (§ 4i) |
-| 9z | A dependency bump moves a patched file | **The gate is the only catcher, in both directions.** `scripts/postinstall.sh` runs `npx patch-package` with no `set -e` and not as its last command, so a failed patch leaves the script — and therefore `yarn install` — exiting 0 (measured). Whether the patch fails to apply or applies and no longer suffices, the reference returns and I10 fails on the bump PR. Making the install fail too would be a second layer, and is deferred cleanup 19 |
+| 9z | A dependency bump moves a patched file | If the patch stops applying, `patch-package` exits non-zero and the build fails before the gate. If it applies but no longer suffices, only the binary catches it — scenario S |
 | 9aa | A dependency guards its CoreLocation call behind `#if targetEnvironment(simulator)` | **Not caught today.** CI reads the simulator slice and passes; the device binary would carry it. This is the concrete form of D38's proxy gap, and the second half of deferred cleanup 16's residual risk |
 | 9ab | Android, under the iOS story's changes | Unaffected. No vision-camera location permission reaches the merged manifest — confirm on the build, do not assume. The device-info patch is shared, so an Android build is still required |
 | 9ac | vision-camera `takePhoto` EXIF | Unchanged. `<Camera>` never sets `enableLocation`, so `locationProvider` was already `nil` and no GPS EXIF was ever attached. `createVideoMetadata`'s GPS branch was likewise unreachable |
@@ -1619,8 +1619,3 @@ it is expected (9w).
 17. `build_for_device_farm` produces an ungated IPA. Harmless today — it publishes to no store.
 18. Other sensitive-API surfaces are undeclared. The iOS manifest is per framework, so a future
     ITMS-90683 for a different purpose string costs a row, not a script.
-19. **A failed patch does not fail the install** (9z). `scripts/postinstall.sh` has no `set -e` and
-    ends on the OpenCL-headers branch, so `npx patch-package` exiting non-zero is discarded and
-    `yarn install` reports success having patched nothing. Every patch under `patches/` rests on this,
-    not only the two CoreLocation ones. The repair is one line, but it also makes the OpenCL clone
-    fatal, so it wants its own change and its own verification rather than a rider.
