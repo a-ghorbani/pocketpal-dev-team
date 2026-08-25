@@ -946,10 +946,24 @@ and `expectedMatchCount` *are* one thing read twice.) The framework-name clause 
 second half checkable rather than decorative — deleting `"corelocation"` is refused by the floor, not by
 prose.
 
+**`symbolPatterns` are substrings; `selectors` are matched exactly**, because a selector is a whole name
+rather than a fragment. The declared list is therefore the whole of the selector surface, the same way
+the patterns are the whole of the symbol surface (9x, 9ad).
+
 `scripts/__tests__/verify-ios-api-surface.test.js` exercises every rule against a **deliberately broken
 in-memory copy** of the readings, built from the committed manifest: a rule seen only passing is not
 known to be able to fail. `ignoredSymbols` is exercised both ways — the entry suppresses its own symbol;
 a second pattern-matching symbol absent from the list still fails.
+
+**The reading half needs its own suite, and its own runner.**
+`scripts/__tests__/verify-ios-api-surface.binary.test.js` compiles Mach-O fixtures with `clang` and is
+the only cover for slice iteration, selector and dylib parsing, `.app` resolution and the whole `--ipa`
+path. `lipo`/`nm`/`otool`/`clang` are macOS-only, so it gates itself on a darwin toolchain and **skips
+silently** on the Linux jest job — 15 cases skipped, exit 0, green having read no binary. It therefore
+runs on `build-ios` instead, after the Xcode selection its fixtures compile against and before the long
+build. That step **refuses a skipped run** rather than trusting the exit code (9ae): a suite that quietly
+gates itself off is this doc's own failure mode one level up, and the repair is the toolchain, never the
+guard.
 
 **Where it runs.** `ci.yml/build-ios`, on the `PocketPal.app` it already builds, as its own step after
 it, with **no `if:` and no `continue-on-error`** (R2's rule for the Android gate). That step's
@@ -1431,6 +1445,8 @@ second, larger build pipeline. That is a scope boundary, not a preference.
 | 9aa | A dependency guards its CoreLocation call behind `#if targetEnvironment(simulator)` | **Not caught today.** CI reads the simulator slice and passes; the device binary would carry it. This is the concrete form of D38's proxy gap, and the second half of deferred cleanup 16's residual risk |
 | 9ab | Android, under the iOS story's changes | Unaffected. No vision-camera location permission reaches the merged manifest — confirm on the build, do not assume. The device-info patch is shared, so an Android build is still required |
 | 9ac | vision-camera `takePhoto` EXIF | Unchanged. `<Camera>` never sets `enableLocation`, so `locationProvider` was already `nil` and no GPS EXIF was ever attached. `createVideoMetadata`'s GPS branch was likewise unreachable |
+| 9ad | A forbidden selector's near-variant (`requestWhenInUseAuthorizationWithCompletion:`) | Not caught. `selectors` are matched **exactly** — a selector is a whole name, not a fragment — so the declared list is the whole selector surface, exactly as the patterns are the whole symbol surface (9x). Widening it is a one-line manifest edit, and is meant to be a decision rather than a surprise |
+| 9ae | The real-binary suite skips itself | Fails the job. Every case is gated on `clang`/`lipo`/`nm`/`otool`/`zip`/`unzip` resolving, and jest exits 0 on a fully skipped suite, so the step greps its own output for a skip and fails on one. Without that, moving the suite to a macOS runner would buy nothing the day the toolchain check stopped resolving |
 
 ---
 
