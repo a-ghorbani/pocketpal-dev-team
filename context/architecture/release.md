@@ -430,17 +430,39 @@ The transport predicates remain as a second line of defence and are no longer lo
   this was a one-line edit inside an existing one.
 - **The Fastfiles.** `release.yml/build_android` — the job holding the keystore and the Play key —
   runs its entire build as 1,313 bytes of Ruby behind one `run: bundle exec fastlane
-  build_android_release`. All three Fastfiles are pinned by content, and lane calls are followed
-  **transitively**: a lane reached only through another lane is as much part of what the step does as
-  the one it names.
+  build_android_release`. Every **tracked** Fastfile is pinned by content, enumerated by
+  `git ls-files` rather than by a literal list: a named list is a pin whose subject is enumerated, so
+  a fourth Fastfile is simply never read and a lane in it can build *and* publish unseen. The source
+  matters — 3 tracked against 4 on disk, the extra being a vendored copy under `vendor/bundle`
+  wherever `bundle install` has run — so a filesystem walk would make the subject depend on the
+  machine. Lane calls are followed **transitively**: a lane reached only through another lane is as
+  much part of what the step does as the one it names.
 - **The composite actions.** A composite is free-form shell behind one `uses:`, so reading it for
   transports would be the same enumeration; each `action.yml` carries a digest and `shipsNothing`
   stands behind it.
 
-The digest is 96-bit and covers every key. It hashes the comment-stripped script, so rewording a
+All four digests — step, job, Fastfile, composite — are 96-bit and cover every key. It hashes the comment-stripped script, so rewording a
 comment is not a change — adding or removing a comment *line* is, because stripping leaves the blank
 line behind. What remains unpinned by construction: a shebang or `#define` inside a heredoc, which
 `codeOf` removes before hashing.
+
+**Where the pins stop, stated as the standing remainder.** Three boundaries are pinned — step, job,
+workflow — and two are not:
+
+- **The set of files a pin enumerates.** Each fix of this kind has moved a subject from *named* to
+  *derived*: the steps, then the Fastfiles, then the gate's report path. What remains named is the
+  action allowlist and the one non-artifact upload path, both floored and both asserted against the
+  committed tree. A pin whose subject is a literal list is the shape to look for first.
+- **What a pinned `run:` delegates to.** The Fastfiles are pinned by exactly the argument that a
+  build behind one `run:` is not covered by pinning the `run:` — and that argument applies equally to
+  `android/app/build.gradle`, `tools/*.sh` and `scripts/*.js`, none of which is pinned. This is scope
+  rather than oversight: the Fastfiles were pinned because a *publishing* lane lives there, and the
+  same case has not been made for the rest. It is the obvious next container.
+
+The transitive lane walk misses four call spellings — `ship_it(...)`, `ship_it()`,
+`ship_it if true`, `send(:ship_it)`. That is a bound on the walk, not on the property: the Fastfile
+content digest fired on all thirty mutations tried against it, so no lane can be added or reached
+without failing by name. The walk is the second line; the pin is the first.
 
 **What is deliberately outside all of this**: the three rows with no digest — the iOS TestFlight
 upload, the iOS build and the Weblate upload. They sit outside the Android building jobs, so the
@@ -458,9 +480,15 @@ indistinguishable from a satisfied one.
 can be read out of it. Conditioning the classification made the empty-resolution refusal unreachable
 for the one class it was written for, and handed the step to an action allowlist that asserts
 nothing about it — three committed report uploads sat in exactly that state, each under
-`if: always()`. What a report upload legitimately ships is pinned instead as a short list of
-**non-artifact upload paths**, asserted disjoint from `build/outputs`: a concrete filename that is
-not an `.apk`/`.aab` is not thereby harmless, since `tar czf out/x.tgz …/apk` produces one.
+`if: always()`. A concrete filename that is not an `.apk`/`.aab` is not thereby harmless, since
+`tar czf out/x.tgz …/apk` produces one.
+
+**The gate's own report is exempt by provenance, not by name.** It is recognised as the path a gate
+step *below the upload* wrote as its `--report`, with nothing between the two touching it — the same
+ordering and no-interposition test the artifacts get. A name would have been one more enumerated
+subject: any step can `cp` the signed APK to `payload-report.txt`, and one new script plus one new
+job then ships it. The only path still exempt by name is the iOS symbol bundle, asserted to reach no
+build-output directory and to appear in no building job.
 
 The gate step's own shape is pinned the same way, for the same reason. Every way `bash -e` can be
 made to report success for a failing command is a shell feature — `||`, a pipe, `&`, `!`,
@@ -528,7 +556,9 @@ device. The NDK already produces that alignment; this is a tripwire holding it, 
    gate outright, with the report contradicting itself (`segment alignment: 13/13` beside
    `zip data offset: 12/12`) and nothing reading the contradiction. The two readings are now
    asserted to agree, the denominator is the whole subject set, and a name in one but not the other
-   is instrument failure.
+   is instrument failure, reported by naming the entries that differ. A central directory that
+   repeats a name is refused too: the later entry overwrites the earlier one, so the index holds
+   fewer libraries than the archive declares and every count taken from it reads as complete.
 
    *This was recorded here as unreachable in the previous round, on an argument that the two readings
    came from the same directory and could not differ. The argument was never tested. It is the same
