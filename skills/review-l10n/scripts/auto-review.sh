@@ -39,12 +39,25 @@ gh pr view "${PR}" --repo "${REPO}" \
 # Fetch locale JSONs at head + base.
 bash "${HERE}/fetch-pr.sh" "${PR}" "${SCRATCH}" "${REPO}"
 
+# Which languages actually ship, derived from src/locales/index.ts at the base
+# commit — the tree this PR merges into. Never hardcode this list: it went stale
+# once and three shipping languages silently fell out of the gate.
+BASE_OID=$(gh pr view "${PR}" --repo "${REPO}" --json baseRefOid --jq .baseRefOid)
+if ! WIRED=$(node "${HERE}/wired-langs.mjs" --ref="${BASE_OID}" --repo="${REPO}"); then
+  echo "!! could not derive the wired-language list from ${REPO}@${BASE_OID}"
+  echo "!! decide.mjs will gate EVERY changed locale rather than guess."
+  WIRED=""
+fi
+echo "${WIRED}" > "${SCRATCH}/wired.txt"
+echo ">> wired languages: ${WIRED:-UNKNOWN (gating all)}"
+
 # Machine checks.
-node "${HERE}/coverage.mjs" "${SCRATCH}/head" > "${SCRATCH}/coverage.txt" || true
+node "${HERE}/coverage.mjs" "${SCRATCH}/head" --wired="${WIRED}" > "${SCRATCH}/coverage.txt" || true
 node "${HERE}/find-placeholder-issues.mjs" "${SCRATCH}/head" > "${SCRATCH}/placeholders.txt" || true
 
-# Per-language diff for the semantic subagents.
-node "${HERE}/diff-entries.mjs" "${SCRATCH}/head" "${SCRATCH}/base" "${SCRATCH}/diff-report.txt" || true
+# Per-language diff for the semantic subagents, plus the chunk plan.
+node "${HERE}/diff-entries.mjs" "${SCRATCH}/head" "${SCRATCH}/base" "${SCRATCH}/diff-report.txt" \
+  --manifest="${SCRATCH}/review-manifest.json" || true
 if [[ -s "${SCRATCH}/diff-report.txt" ]]; then
   awk -v scratch="${SCRATCH}" '
     /^## [A-Za-z_]+:/ { f=scratch "/diff-" $2 ".txt"; sub(":","",f) }
@@ -57,3 +70,4 @@ gh pr view "${PR}" --repo "${REPO}" --json files --jq '.files[].path' | sed 's/^
 
 echo "SCRATCH=${SCRATCH}"
 echo "PR=${PR}"
+echo "WIRED=${WIRED}"

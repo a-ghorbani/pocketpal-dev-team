@@ -14,7 +14,11 @@
 //   --base=<dir>        locale JSONs at PR base            (required)
 //   --pr=<pr.json>      `gh pr view` json: {number, files:[{path}], mergeable, mergeStateStatus}
 //   --findings=<f.json> per-language semantic findings (array; see schema below)  (optional)
-//   --wired=fa,he,...   languages exposed in-app; only these gate the merge
+//   --wired=fa,he,...   languages exposed in-app, from wired-langs.mjs (derived
+//                       from src/locales/index.ts — never hand-written here).
+//                       Omitted or empty => every changed locale is gated, because
+//                       a gate that silently narrows its own scope is worse than
+//                       one that over-reports.
 //   --out=<dir>         where to write decision.json + plan.json (default: cwd)
 //
 // findings.json schema (produced by the per-language review subagents):
@@ -45,9 +49,10 @@ if (!headDir || !baseDir) {
 const prPath = arg('pr');
 const findingsPath = arg('findings');
 const outDir = arg('out', '.');
-const wired = new Set(
-  arg('wired', 'fa,he,id,ja,ko,ms,ru,uk,zh,zh_Hant').split(',').filter(Boolean),
-);
+const wiredArg = (arg('wired', '') || '').split(',').filter(Boolean);
+const wiredKnown = wiredArg.length > 0;
+const wired = new Set(wiredArg);
+const wiredSource = wiredKnown ? 'derived' : 'unknown-gate-all';
 
 const LOCALE_PATH = /^src\/locales\/[^/]+\.json$/;
 
@@ -79,20 +84,28 @@ for (const p of changedPaths) {
 const changedLangs = changedPaths
   .filter(p => LOCALE_PATH.test(p))
   .map(p => p.replace(/^src\/locales\//, '').replace(/\.json$/, ''));
-const gateLangs = changedLangs.filter(l => wired.has(l));
+// With no derived wired list we cannot tell shipping locales from dormant ones,
+// so everything changed is gated. Over-blocking is recoverable; under-blocking
+// ships a broken placeholder.
+const gateLangs = wiredKnown ? changedLangs.filter(l => wired.has(l)) : [...changedLangs];
+const skippedLangs = changedLangs.filter(l => !gateLangs.includes(l));
 
-// JSON validity + placeholder integrity for each gated (wired, changed) lang.
-for (const lang of gateLangs) {
+// JSON validity + placeholder integrity. These run on EVERY changed locale —
+// the checks are free and a malformed placeholder is a latent bug whether or not
+// the locale ships today. Only whether they *block* depends on wiring.
+const structuralWarnings = [];
+for (const lang of changedLangs) {
+  const sink = gateLangs.includes(lang) ? hardBlockers : structuralWarnings;
   const f = join(headDir, `${lang}.json`);
   if (!existsSync(f)) continue;
   let data;
   try { data = JSON.parse(readFileSync(f, 'utf-8')); }
-  catch (e) { hardBlockers.push({kind: 'malformed-json', lang, detail: e.message}); continue; }
+  catch (e) { sink.push({kind: 'malformed-json', lang, detail: e.message}); continue; }
   for (const [p, enVal] of enLeaves) {
     const v = getAt(data, p);
     if (typeof v !== 'string') continue;
     if (JSON.stringify(placeholders(enVal)) !== JSON.stringify(placeholders(v))) {
-      hardBlockers.push({
+      sink.push({
         kind: 'placeholder', lang, key: p,
         detail: `expected [${placeholders(enVal).join(', ')}] found [${placeholders(v).join(', ')}]`,
         en: enVal, current: v,
@@ -113,9 +126,10 @@ const findings = findingsPath && existsSync(findingsPath)
 const wrong = [];     // WRONG in a wired lang — the session adjudicates these
 const awkward = [];   // AWKWARD — deferrable suggestions
 const ignoredUnwired = [];
+const isGated = lang => (wiredKnown ? wired.has(lang) : true);
 for (const fi of findings) {
   if (fi.severity === 'WRONG') {
-    (wired.has(fi.lang) ? wrong : ignoredUnwired).push(fi);
+    (isGated(fi.lang) ? wrong : ignoredUnwired).push(fi);
   } else if (fi.severity === 'AWKWARD') {
     awkward.push(fi);
   }
@@ -138,6 +152,13 @@ const plan = {
 for (const b of hardBlockers) {
   if (b.kind === 'placeholder') {
     plan.comments.push({lang: b.lang, key: b.key, comment: `[review-l10n] blocker (placeholder): ${b.detail}`});
+  }
+}
+// Same defect in a non-shipping locale: still worth a comment so it is fixed
+// before that locale is ever wired, but it does not hold the merge.
+for (const w of structuralWarnings) {
+  if (w.kind === 'placeholder') {
+    plan.comments.push({lang: w.lang, key: w.key, comment: `[review-l10n] placeholder mismatch (unwired locale, non-blocking): ${w.detail}`});
   }
 }
 // WRONG findings → overwrite if a concrete fix is given, else a flag comment.
@@ -164,28 +185,43 @@ const decisionObj = {
   adjudication: null,       // session fills {decision, reasoning} when verdict=ADJUDICATE
   pr: pr.number ?? null,
   mergeable, mergeStateStatus: pr.mergeStateStatus ?? null,
-  gateLangs,
+  wiredSource, wired: [...wired],
+  changedLangs, gateLangs, skippedLangs,
   counts: {
     hardBlockers: hardBlockers.length,
+    structuralWarnings: structuralWarnings.length,
     wrong: wrong.length,
     awkward: awkward.length,
     overwrites: plan.overwrites.length,
     suggestions: plan.suggestions.length,
     comments: plan.comments.length,
   },
-  hardBlockers, hardReasons,
+  hardBlockers, hardReasons, structuralWarnings,
   wrong, awkward, ignoredUnwired,
 };
 
 writeFileSync(join(outDir, 'decision.json'), JSON.stringify(decisionObj, null, 2));
 writeFileSync(join(outDir, 'plan.json'), JSON.stringify(plan, null, 2));
 
-console.log(`mechanical verdict: ${mechanical_verdict}  (pr=${decisionObj.pr ?? '?'}, gated langs: ${gateLangs.join(', ') || 'none'})`);
-console.log(`hard blockers=${hardBlockers.length} | semantic: wrong=${wrong.length} awkward=${awkward.length}`);
+console.log(`mechanical verdict: ${mechanical_verdict}  (pr=${decisionObj.pr ?? '?'})`);
+console.log(`wired list: ${wiredSource}${wiredKnown ? ` (${wired.size} langs)` : ' — every changed locale gated'}`);
+console.log(`changed locales (${changedLangs.length}): ${changedLangs.join(', ') || 'none'}`);
+console.log(`  gated  (${gateLangs.length}): ${gateLangs.join(', ') || 'none'}`);
+console.log(`  SKIPPED(${skippedLangs.length}): ${skippedLangs.join(', ') || 'none'}`);
+if (skippedLangs.length) {
+  console.log(`  ^ these were NOT gated. Confirm they are genuinely unwired before reading this run as full coverage.`);
+}
+console.log(`hard blockers=${hardBlockers.length} | structural warnings (unwired)=${structuralWarnings.length} | semantic: wrong=${wrong.length} awkward=${awkward.length}`);
 console.log(`plan: overwrites=${plan.overwrites.length} suggestions=${plan.suggestions.length} comments=${plan.comments.length}`);
 if (hardReasons.length) {
   console.log('\nHard HOLD (non-overridable):');
   for (const r of hardReasons) console.log(`  - ${r}`);
+}
+if (structuralWarnings.length) {
+  console.log('\nStructural issues in unwired locales (non-blocking, fix before wiring):');
+  for (const w of structuralWarnings) {
+    console.log(`  - ${w.lang}${w.key ? `/${w.key}` : ''}: ${w.kind} — ${w.detail}`);
+  }
 }
 if (mechanical_verdict === 'ADJUDICATE') {
   console.log(`\n${wrong.length} WRONG finding(s) need session adjudication → MERGE or HOLD.`);
