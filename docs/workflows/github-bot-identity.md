@@ -29,7 +29,7 @@ tools/gh-app-token.sh --info
 
 The installation id is discovered from the key; set `GH_APP_INSTALLATION_ID` in the env file only if the app is installed on more than one account.
 
-`tools/gh-app-token.sh` mints an installation token (one-hour lifetime) and caches it under `~/.cache/pocketpal-dev-team/`. `tools/ghb` runs `gh` with that token. The key and the cache are under `Read` deny rules in `.claude/settings.json`; agents never see either.
+`tools/gh-app-token.sh` mints an installation token (one-hour lifetime) and caches it under `~/.cache/pocketpal-dev-team/`. `tools/ghb` runs `gh` with that token. The key and the cache are guarded by `tools/guard-secrets-read.sh` (the PreToolUse secrets hook), so agents never read either.
 
 ## Behaviour to know
 
