@@ -31,7 +31,9 @@
       "Edit(**/.env)",
       "Edit(.env.*)",
       "Edit(**/.env.*)",
-      "Edit(**/repos/pocketpal-ai/**)"
+      "Edit(**/repos/pocketpal-ai/**)",
+      "Read(**/*.pem)",
+      "Read(**/gh-app-token.json)"
     ]
   },
   "hooks": {
