@@ -39,7 +39,7 @@ Captures are not evidence until they are on the PR. After the draft PR exists, p
   <path/to/capture-1.png> <path/to/capture-2.png> ...
 ```
 
-The helper uploads each PNG to GitHub's `user-attachments` CDN via the `gh image` extension — public URLs that render inline, so nothing is committed to the app repo — and posts one comment as `pocketpal-dev-team[bot]` via `tools/ghb` (see `docs/workflows/github-bot-identity.md`). If no GitHub session token or no bot token is available it prints `MANUAL_POST_REQUIRED` with the exact hand-run command and exits non-zero; record that as a pending condition on the PR and do **not** report the evidence as posted. Recording only a local screenshot path is a fallback for a documented capture/post failure (see Failure handling), never the default when posting is possible.
+The helper uploads each PNG to GitHub's `user-attachments` CDN via the `gh image` extension — public URLs that render inline, so nothing is committed to the app repo — and posts one comment as `pocketpal-dev-team[bot]` via `tools/ghb` (see `docs/workflows/github-bot-identity.md`). If no GitHub session token is available for the upload, or the comment fails, it prints `MANUAL_POST_REQUIRED` with the exact hand-run command and exits non-zero; record that as a pending condition on the PR and do **not** report the evidence as posted. Recording only a local screenshot path is a fallback for a documented capture/post failure (see Failure handling), never the default when posting is possible.
 
 ## Flavour A — Parametrized (chat output)
 

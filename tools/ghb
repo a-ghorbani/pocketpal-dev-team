@@ -8,7 +8,9 @@ set -euo pipefail
 # Approvals and merges stay on the operator's account: `ghb pr merge` and
 # `ghb pr review --approve` are refused.
 #
-# Token minting: tools/gh-app-token.sh (exit 3 when the bot is not configured).
+# Getting the job done beats attribution: when the bot token cannot be minted
+# (tools/gh-app-token.sh exits 3) the command runs as the operator instead,
+# with a warning on stderr.
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -18,5 +20,8 @@ case " $* " in
   *" auth "*)       echo "ghb: auth is managed by tools/gh-app-token.sh" >&2; exit 2 ;;
 esac
 
-token="$("$here/gh-app-token.sh")" || exit 3
-GH_TOKEN="$token" GITHUB_TOKEN="$token" exec gh "$@"
+if token="$("$here/gh-app-token.sh")"; then
+  GH_TOKEN="$token" GITHUB_TOKEN="$token" exec gh "$@"
+fi
+echo "ghb: bot token unavailable, running as the operator instead" >&2
+exec gh "$@"
