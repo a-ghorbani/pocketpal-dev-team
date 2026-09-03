@@ -31,12 +31,7 @@
       "Edit(**/.env)",
       "Edit(.env.*)",
       "Edit(**/.env.*)",
-      "Write(.env)",
-      "Write(**/.env)",
-      "Write(.env.*)",
-      "Write(**/.env.*)",
-      "Edit(**/repos/pocketpal-ai/**)",
-      "Write(**/repos/pocketpal-ai/**)"
+      "Edit(**/repos/pocketpal-ai/**)"
     ]
   },
   "hooks": {
