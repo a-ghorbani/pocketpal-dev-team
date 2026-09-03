@@ -141,6 +141,18 @@ Engines stay pure — they neither produce nor read metrics.
     embedded credentials; `file:`/`data:`/other schemes and userinfo are
     rejected with an error result before any fetch. The default-reader path
     `encodeURI`s the target.
+  - **Exfiltration allowlist**: `read_url` fetches only URLs the model
+    legitimately saw. Trusted seed sources are exactly (a) user-written message
+    text and (b) structured `{type:'search'}` hit URLs — current run via
+    `WebSearchEngine`, prior turns via the run-start
+    `seedReadUrlAllowlist(messages, sessionRows)` from persisted
+    `step.toolOutcomes` — never assistant text and never tool-message text
+    (page bodies are untrusted). Matching is exact on the fragment-stripped
+    canonical URL (query/path mutation fails), and the outbound read carries
+    that canonical URL so a smuggled fragment never reaches a provider. The
+    trust definition lives in `services/talents/readUrlAllowlist.ts`;
+    `prepareCompletion` only invokes the seed at run start. Blocked calls
+    return an error result steering the model to `web_search` first.
 
   A single pure `searchBudget` util owns the on-device budgeting
   (count cap, plain-text strip, word-boundary snippet cap with char-boundary
@@ -155,7 +167,10 @@ Engines stay pure — they neither produce nor read metrics.
   buffering. BYOK keys live only in Keychain, one entry per provider under
   service `'search_provider_service_<id>'`. Search provider choice, result
   count, and the first-enable consent flag live in `SearchProviderStore` (see
-  `settings.md` Internet Search section).
+  `settings.md` Internet Search section). **Launch defaults: provider `brave`,
+  result count `5`** — revised from the earlier intent (Tavily / ~3) after the
+  ferret-bench small-model study found Brave + 5 results the stronger grounding
+  config for on-device models. Result count is user-adjustable (1–8).
 
 ### 1c. Persistence (DB v7)
 
@@ -345,6 +360,11 @@ shutdown). Aborted runs therefore land in `done`, not a dedicated status.
   `args → Promise<TalentResult>`. It must NOT touch React, MobX, or any store.
   Side-effecting talents (file write, network, audio) can live behind the
   engine boundary but must surface their output via `TalentResult` only.
+  Talent-module-internal mutable state (the search-hit cache, the read_url
+  allowlist) is permitted behind the boundary; its validity is conditional on
+  the one-agent-run-at-a-time invariant. If concurrent runs ever land, the
+  named migration path is a run-scoped trust object threaded through
+  `execute(args, runContext)`.
 - **I5 (idempotent registration)**: `registerDefaultTalents()` is called from
   multiple boot paths and from `deriveToolSchemas()`. It must be idempotent;
   the module-level `registered` flag enforces this.
@@ -399,7 +419,8 @@ shutdown). Aborted runs therefore land in `done`, not a dedicated status.
 | Field                        | Single writer                                                                                       |
 | ---------------------------- | --------------------------------------------------------------------------------------------------- |
 | `talentRegistry` entries     | (C) `registerDefaultTalents()` (and tests via `talentRegistry.reset()`).                            |
-| `talentUIRegistry` entries   | (C) `registerDefaultTalents()`.                                                                     |
+| `talentUIRegistry` entries   | (C) `registerDefaultTalentUIs()` (called from the UI layer, `TalentSurface`).                       |
+| read_url allowlist entries   | (C) `seedReadUrlAllowlist()` at run start + `WebSearchEngine.execute` per search — both inside `services/talents/`; enforced by the barrel exporting only the seed + read functions. |
 | `pal.pact`                   | (C) `PalStore` create/update flows, edited via `TalentSection` in `PalSheet`.                       |
 | `pal.greeting`               | (C) `PalStore` create/update flows, edited via `PalSheet` → `GreetingSection` (in-app editor); also sourced from `createLocalPalFromPalsHub` on PalsHub download. |
 | `pal.completionSettings`     | (C) `PalStore` create/update via the `PalSheet` form field; edited in the **Generation tab** (was the standalone `PalGenerationSettingsSheet`). Reset/Clear mutate in-form state only; persistence still happens on form Save. |
