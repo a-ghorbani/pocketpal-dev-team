@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 INPUT=$(cat)
+exec >&2
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 

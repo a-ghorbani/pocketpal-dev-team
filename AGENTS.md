@@ -36,6 +36,8 @@ Agents stop and report when:
 
 `repos/pocketpal-ai/` is read-only. Agents must never edit, switch branches, commit, build, or test inside it; never reference its build artifacts; never upload its files as generated assets. Builds, tests, screenshots, and reports happen in a worktree.
 
+Read it with absolute paths (`grep -rn … "$ROOT/repos/pocketpal-ai/src"`, `git -C "$ROOT/repos/pocketpal-ai" …`), never `cd repos/pocketpal-ai && grep … src`. A relative path after `cd` cannot be resolved against the `Read(...)` deny rules, so the harness forces a permission prompt on every such call.
+
 ### Story gate
 
 Implementation requires the artefacts the complexity level mandates. Trivial: `intent-brief.md`. Quick: + `how.md`. Standard / complex: + `what.md`.

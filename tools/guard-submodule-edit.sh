@@ -6,6 +6,7 @@
 # Exit code 0 = allow the operation
 
 INPUT=$(cat)
+exec >&2
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
 if [[ -z "$FILE_PATH" ]]; then

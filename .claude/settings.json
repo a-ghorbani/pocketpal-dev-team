@@ -26,7 +26,7 @@
       "Read(**/.env)",
       "Read(.env.*)",
       "Read(**/.env.*)",
-      "Read(**/secrets/**)",
+      "Read(**/*.keystore)",
       "Edit(.env)",
       "Edit(**/.env)",
       "Edit(.env.*)",
@@ -42,7 +42,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash(git commit:*)",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
@@ -84,7 +84,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash(*git worktree add*)",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",

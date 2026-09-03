@@ -8,6 +8,7 @@
 # Exit code 0 = allow the operation
 
 INPUT=$(cat)
+exec >&2
 
 # Quick exit: if the input doesn't mention repos/pocketpal-ai at all, allow immediately.
 # This makes the 99% case (commands unrelated to the submodule) cost nearly zero.
