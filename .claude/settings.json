@@ -22,11 +22,6 @@
       "Bash(git push --force:*)",
       "Bash(git push origin main:*)",
       "Bash(git push origin master:*)",
-      "Read(.env)",
-      "Read(**/.env)",
-      "Read(.env.*)",
-      "Read(**/.env.*)",
-      "Read(**/*.keystore)",
       "Edit(.env)",
       "Edit(**/.env)",
       "Edit(.env.*)",
@@ -75,6 +70,19 @@
           {
             "type": "command",
             "command": "${CLAUDE_PROJECT_DIR}/tools/guard-submodule-git.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/tools/guard-secrets-read.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/tools/guard-secrets-read.sh"
           }
         ]
       }

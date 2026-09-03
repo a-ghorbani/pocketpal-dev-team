@@ -36,7 +36,7 @@ Agents stop and report when:
 
 `repos/pocketpal-ai/` is read-only. Agents must never edit, switch branches, commit, build, or test inside it; never reference its build artifacts; never upload its files as generated assets. Builds, tests, screenshots, and reports happen in a worktree.
 
-Read it with absolute paths (`grep -rn … "$ROOT/repos/pocketpal-ai/src"`, `git -C "$ROOT/repos/pocketpal-ai" …`), never `cd repos/pocketpal-ai && grep … src`. A relative path after `cd` cannot be resolved against the `Read(...)` deny rules, so the harness forces a permission prompt on every such call.
+Read it with absolute paths (`grep -rn … "$ROOT/repos/pocketpal-ai/src"`, `git -C "$ROOT/repos/pocketpal-ai" …`) rather than `cd repos/pocketpal-ai && grep … src`. The harness cannot resolve a relative path after `cd`, and when a `Read(...)` deny rule is in force that unresolved read becomes a permission prompt. Secret files (`.env`, `.env.*`, `*.keystore`) are guarded by `tools/guard-secrets-read.sh`, a hook rather than a deny rule, precisely so ordinary reads never prompt.
 
 ### Story gate
 
