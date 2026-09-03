@@ -35,6 +35,16 @@ case "$TOOL" in
         if [[ -n "$FILE_PATH" ]] && echo "$FILE_PATH" | grep -qE "$SECRET_PATH"; then
             block "Cannot read $FILE_PATH."
         fi
+        # A glob overrides ripgrep's ignore rules, so a glob that matches a
+        # secret basename would surface gitignored files a plain search skips.
+        GLOB=$(echo "$INPUT" | jq -r '.tool_input.glob // empty' 2>/dev/null)
+        if [[ -n "$GLOB" ]]; then
+            for name in .env .env.local x.keystore; do
+                if [[ "$name" == $GLOB ]]; then
+                    block "Glob '$GLOB' would match secret files."
+                fi
+            done
+        fi
         ;;
 esac
 
