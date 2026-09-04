@@ -10,6 +10,7 @@
 // feedback.json:
 // {
 //   fetched_at, owner, langs,
+//   active_translators: {lang: {authors:[...], last:"<iso>"}},   // translator activity in the last 90 days
 //   units: [{lang, key, unit_id, web_url, state, source, target, last_updated,
 //            comments:    [{author, role:"bot"|"maintainer"|"translator", ts, text}],
 //            suggestions: [{author, ts, target, votes}],
@@ -79,12 +80,28 @@ for (const lang of langs) {
   console.error(`  ${lang}: ${n} feedback unit(s)`);
 }
 
-const feedback = {fetched_at: new Date().toISOString(), owner, langs, units};
+const ACTIVE_DAYS = 90;
+const cutoff = new Date(Date.now() - ACTIVE_DAYS * 86400e3).toISOString();
+const activeTranslators = {};
+for (const u of units) {
+  const events = [...u.comments.filter(c => c.role === 'translator').map(c => ({author: c.author, ts: c.ts})),
+                  ...u.suggestions.filter(s => s.author !== 'anonymous').map(s => ({author: s.author, ts: s.ts}))];
+  for (const e of events) {
+    if (e.ts < cutoff) continue;
+    const a = (activeTranslators[u.lang] ||= {authors: [], last: ''});
+    if (!a.authors.includes(e.author)) a.authors.push(e.author);
+    if (e.ts > a.last) a.last = e.ts;
+  }
+}
+
+const feedback = {fetched_at: new Date().toISOString(), owner, langs, active_days: ACTIVE_DAYS, active_translators: activeTranslators, units};
 writeFileSync(outPath, JSON.stringify(feedback, null, 2));
 
 const held = units.filter(u => u.human);
 const open = units.filter(u => u.open);
 console.log(`feedback: ${units.length} unit(s) with comments/suggestions, ${held.length} held by translator input, ${open.length} open thread(s) awaiting a reply`);
+const activeList = Object.entries(activeTranslators).map(([l, a]) => `${l} (${a.authors.join(', ')}, last ${a.last.slice(0, 10)})`);
+console.log(`active translators (last ${ACTIVE_DAYS} days): ${activeList.join('; ') || 'none'} — those languages get meaning-level review only`);
 const byLang = {};
 for (const u of open) (byLang[u.lang] ||= []).push(u);
 for (const [lang, us] of Object.entries(byLang)) console.log(`  open ${lang}: ${us.length} — ${us.map(u => u.key).join(', ')}`);

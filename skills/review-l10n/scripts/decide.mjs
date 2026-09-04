@@ -24,12 +24,20 @@
 //                       overwrite, and AWKWARD suggestions are dropped (the feedback
 //                       reviewer answers that thread instead). If the file is missing
 //                       every overwrite is downgraded to a comment — never write blind.
+//   --max-suggestions=N per-language cap on AWKWARD suggestions posted per run (default 10);
+//                       the overflow is recorded, not posted — a volunteer must never be flooded.
 //   --out=<dir>         where to write decision.json + plan.json (default: cwd)
 //
 // findings.json schema (produced by the per-language review subagents):
-//   [{lang, key, severity:"WRONG"|"AWKWARD", en, current, new?, proposal?, note?}]
+//   [{lang, key, severity:"WRONG"|"AWKWARD", kind, en, current, new?, proposal?, note?, source?}]
+//   kind    → meaning | grammar | orthography | style | brand | placeholder
+//   source  → URL actually consulted (CLDR, a dictionary, a style guide). REQUIRED for
+//             grammar and orthography findings: a norm the model merely believes is
+//             dropped, not posted. Model-internal knowledge is not a source.
 //   WRONG   → adjudicable. With `new` it becomes a Weblate overwrite candidate.
-//   AWKWARD → deferrable. With `proposal` it becomes a Weblate suggestion.
+//   AWKWARD → deferrable. With `proposal` it becomes a Weblate suggestion, unless the
+//             language has an active translator (feedback.active_translators), in
+//             which case only WRONG findings are acted on.
 //
 // Output decision.json carries:
 //   mechanical_verdict : "HOLD" | "ADJUDICATE"
@@ -54,6 +62,7 @@ if (!headDir || !baseDir) {
 const prPath = arg('pr');
 const findingsPath = arg('findings');
 const feedbackPath = arg('feedback');
+const maxSuggestions = Number(arg('max-suggestions', '10'));
 const outDir = arg('out', '.');
 const wiredArg = (arg('wired', '') || '').split(',').filter(Boolean);
 const wiredKnown = wiredArg.length > 0;
@@ -132,8 +141,12 @@ const findings = findingsPath && existsSync(findingsPath)
 const wrong = [];     // WRONG in a wired lang — the session adjudicates these
 const awkward = [];   // AWKWARD — deferrable suggestions
 const ignoredUnwired = [];
+const unsourced = []; // grammar/orthography claims with no reference — never posted
+const NORM_KINDS = new Set(['grammar', 'orthography']);
+const hasSource = fi => typeof fi.source === 'string' && /^https?:\/\//.test(fi.source.trim());
 const isGated = lang => (wiredKnown ? wired.has(lang) : true);
 for (const fi of findings) {
+  if (NORM_KINDS.has(fi.kind) && !hasSource(fi)) { unsourced.push(fi); continue; }
   if (fi.severity === 'WRONG') {
     (isGated(fi.lang) ? wrong : ignoredUnwired).push(fi);
   } else if (fi.severity === 'AWKWARD') {
@@ -148,9 +161,11 @@ const decision = mechanicalHold ? 'HOLD' : null; // null = pending session adjud
 // ---- Translator-held units: never overwrite where a human has spoken ----
 const feedbackKnown = Boolean(feedbackPath && existsSync(feedbackPath));
 const heldUnits = new Set();
+const activeLangs = new Set();
 if (feedbackKnown) {
   const fb = JSON.parse(readFileSync(feedbackPath, 'utf-8'));
   for (const u of fb.units || []) if (u.human) heldUnits.add(`${u.lang}/${u.key}`);
+  for (const l of Object.keys(fb.active_translators || {})) activeLangs.add(l);
 }
 const isHeld = (lang, key) => !feedbackKnown || heldUnits.has(`${lang}/${key}`);
 
@@ -191,11 +206,20 @@ for (const w of wrong) {
     plan.comments.push({lang: w.lang, key: w.key, comment: `[review-l10n] flagged WRONG: ${w.note || ''}`});
   }
 }
-// AWKWARD → suggestions, except on held units where the thread already exists.
+// AWKWARD → suggestions, except on held units where the thread already exists,
+// in a language a translator is actively maintaining (their style, their call),
+// or beyond the per-language cap.
+const deferredActive = [];
+const capped = [];
+const perLang = {};
 for (const a of awkward) {
   if (!a.proposal) continue;
   if (feedbackKnown && heldUnits.has(`${a.lang}/${a.key}`)) { heldAwkward.push(a); continue; }
-  plan.suggestions.push({lang: a.lang, key: a.key, current: a.current, proposal: a.proposal, comment: a.note});
+  if (activeLangs.has(a.lang)) { deferredActive.push(a); continue; }
+  perLang[a.lang] = (perLang[a.lang] || 0) + 1;
+  if (perLang[a.lang] > maxSuggestions) { capped.push(a); continue; }
+  const rationale = a.source ? `${a.note || ''} (ref: ${a.source})` : a.note;
+  plan.suggestions.push({lang: a.lang, key: a.key, current: a.current, proposal: a.proposal, comment: rationale});
 }
 
 const hardReasons = hardBlockers.map(b =>
@@ -215,6 +239,8 @@ const decisionObj = {
   wiredSource, wired: [...wired],
   feedbackSource: feedbackKnown ? feedbackPath : 'missing-no-overwrites',
   heldUnits: [...heldUnits],
+  activeTranslatorLangs: [...activeLangs],
+  maxSuggestionsPerLang: maxSuggestions,
   changedLangs, gateLangs, skippedLangs,
   counts: {
     hardBlockers: hardBlockers.length,
@@ -223,12 +249,15 @@ const decisionObj = {
     awkward: awkward.length,
     heldWrong: heldWrong.length,
     heldAwkward: heldAwkward.length,
+    unsourced: unsourced.length,
+    deferredActive: deferredActive.length,
+    capped: capped.length,
     overwrites: plan.overwrites.length,
     suggestions: plan.suggestions.length,
     comments: plan.comments.length,
   },
   hardBlockers, hardReasons, structuralWarnings,
-  wrong, awkward, ignoredUnwired, heldWrong, heldAwkward,
+  wrong, awkward, ignoredUnwired, heldWrong, heldAwkward, unsourced, deferredActive, capped,
 };
 
 writeFileSync(join(outDir, 'decision.json'), JSON.stringify(decisionObj, null, 2));
@@ -246,6 +275,16 @@ console.log(`hard blockers=${hardBlockers.length} | structural warnings (unwired
 console.log(`translator feedback: ${feedbackKnown ? `${heldUnits.size} held unit(s)` : 'MISSING — every overwrite downgraded to a comment'}`);
 if (heldWrong.length || heldAwkward.length) {
   console.log(`  held back: ${heldWrong.length} WRONG fix(es) posted as comments, ${heldAwkward.length} AWKWARD suggestion(s) dropped — the feedback reviewer owns those threads`);
+}
+if (unsourced.length) {
+  console.log(`unsourced norm claims dropped (${unsourced.length}) — grammar/orthography findings need a consulted URL:`);
+  for (const u of unsourced) console.log(`  - ${u.lang}/${u.key} [${u.kind}]: ${u.note || ''}`);
+}
+if (activeLangs.size) {
+  console.log(`active translators: ${[...activeLangs].join(', ')} — meaning-level only; ${deferredActive.length} AWKWARD suggestion(s) not posted there`);
+}
+if (capped.length) {
+  console.log(`suggestion cap ${maxSuggestions}/lang: ${capped.length} suggestion(s) held over — ${[...new Set(capped.map(c => c.lang))].join(', ')}`);
 }
 console.log(`plan: overwrites=${plan.overwrites.length} suggestions=${plan.suggestions.length} comments=${plan.comments.length}`);
 if (hardReasons.length) {

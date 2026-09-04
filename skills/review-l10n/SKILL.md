@@ -33,9 +33,9 @@ Flow (orchestrated by `scripts/auto-review.sh` → semantic subagents → feedba
 
 1. **Discover** the open Weblate PR (`author:weblate`, head `weblate-translations`). No PR → exit cleanly.
 2. **Pre-review** (`auto-review.sh`): fetch head/base locale JSONs, **derive the wired-language list** (`wired-langs.mjs` against the PR's base commit), run coverage + placeholder checks, split the diff per language, write `review-manifest.json` with the per-language entry counts and chunk plan, and **pull translator feedback** (`fetch-feedback.mjs` → `feedback.json` + `feedback/feedback-<lang>.md`, every language, see **Translator feedback** below). Its summary lists the *open* threads — translator comments or pending suggestions nobody has answered.
-3. **Semantic review**: spawn `general-purpose` subagents over the *changed gated* languages (parallel, blind to each other), each returning STRICT-JSON findings: `[{lang,key,severity:WRONG|AWKWARD,en,current,new?,proposal?,note}]`. **Honour the manifest's `chunks`** — a language over 50 entries is split across that many reviewers, each given a slice, never one agent for the whole diff (see Stage 4). Each reviewer also gets its language's `feedback-<lang>.md` when one exists, so it does not re-raise what a translator has already settled. Collate into `findings.json`.
+3. **Semantic review**: spawn `general-purpose` subagents over the *changed gated* languages (parallel, blind to each other), each returning STRICT-JSON findings: `[{lang,key,severity:WRONG|AWKWARD,kind,en,current,new?,proposal?,note,source?}]` (see **Grounded findings** in Stage 4: a grammar or orthography claim without a consulted URL is dropped by the gate; a language with an active translator gets WRONG-only review; at most 10 suggestions per language are posted). **Honour the manifest's `chunks`** — a language over 50 entries is split across that many reviewers, each given a slice, never one agent for the whole diff (see Stage 4). Each reviewer also gets its language's `feedback-<lang>.md` when one exists, so it does not re-raise what a translator has already settled. Collate into `findings.json`.
 3b. **Feedback resolution**: for every language with open threads (any language, wired or not — a translator is a translator), spawn one `general-purpose` subagent with that language's `feedback-<lang>.md`, the rules from **Translator feedback**, and the output path `feedback/replies-<lang>.json`. Then `build-feedback-plan.mjs --feedback=... --in-dir=feedback --tag="PR #<n>"` → `feedback-plan.json` (replies + adopted translator wording). It lists any open thread left unanswered; a run that leaves threads unanswered must say so in its report.
-4. **Mechanical gate** (`decide.mjs --feedback=<feedback.json> ...`): split into two layers and write `decision.json` + `plan.json`. Units with translator input are **held**: a WRONG fix there is posted as a comment, never applied, and AWKWARD suggestions on them are dropped because the thread already exists. If `feedback.json` is missing (fetch failed) *every* overwrite is downgraded to a comment — the gate never writes blind.
+4. **Mechanical gate** (`decide.mjs --feedback=<feedback.json> ...`): split into two layers and write `decision.json` + `plan.json`. It drops unsourced grammar/orthography findings, posts no AWKWARD suggestions in a language with an active translator, and caps suggestions at 10 per language (`--max-suggestions`); each of these is printed and recorded in `decision.json` so the report can say what was withheld. Units with translator input are **held**: a WRONG fix there is posted as a comment, never applied, and AWKWARD suggestions on them are dropped because the thread already exists. If `feedback.json` is missing (fetch failed) *every* overwrite is downgraded to a comment — the gate never writes blind.
    - **Layer 1 — hard blockers (non-overridable, no judgment):** out-of-scope file (anything outside `src/locales/*.json`), malformed JSON, placeholder mismatch in a gated lang, or GitHub `CONFLICTING`. These can crash/break the app or are unsafe to auto-merge, so any one of them => `mechanical_verdict: HOLD` and the decision is final. The model cannot wave these through. Structural checks run on **every** changed locale; in a genuinely unwired one they are recorded as non-blocking `structuralWarnings` (plus a Weblate comment) so they get fixed before that locale is ever wired.
    - **Layer 2 — semantic findings (adjudicable):** `WRONG` (wired) and `AWKWARD` findings. These never auto-decide. With no hard blockers, `mechanical_verdict: ADJUDICATE`.
    - Unwired-language issues are recorded (`ignoredUnwired`) but never gate — they don't ship in-app.
@@ -239,12 +239,58 @@ awk -v scratch="${SCRATCH}" '/^## [A-Za-z_]+:/ {f=scratch "/diff-" $2 ".txt"; su
 ```
 
 For each changed wired language, spawn a `general-purpose` agent **in parallel**. Each agent gets:
-- The path to its diff file only (never another language's file).
+- The path to its diff file only (never another language's file), plus its `feedback-<lang>.md` when one exists.
 - A language-specific prompt that:
   - States the app context (mobile, RN, local LLMs, Settings/Models/Chat).
   - Lists language-specific gotchas: orthography (e.g. Russian ё, missing measure word 个 in Chinese, Korean register mismatch), brand-name policy (keep `OpenAI`, `Groq`, `Hugging Face`, model names, engine names like `Kitten/Kokoro/Supertonic` in English).
   - Reminds: placeholders `{{name}}` must stay byte-identical.
-  - Asks for output limited to AWKWARD/WRONG entries with key, en, lang, one-line note.
+  - Names the reference(s) for that language (table below) and grants WebFetch to consult them.
+  - States the scope: **WRONG only** when `feedback.json` lists an active translator for the language; WRONG + AWKWARD otherwise.
+  - Asks for output limited to AWKWARD/WRONG entries with key, en, lang, `kind`, one-line note, and `source` where required.
+
+### Grounded findings — a norm needs a reference, not a belief
+
+The failure this guards against is real: on PR #884 the Belarusian reviewer asserted
+"the standard abbreviation is X" and "the genitive is Y" for a low-resource language,
+with no source, and a native translator refuted every one with CLDR. A model's
+confidence in a grammar rule is not evidence of the rule.
+
+- Every finding carries `kind`: `meaning` (sense changed, English leaked, wrong term),
+  `grammar`, `orthography`, `style`, `brand`, `placeholder`.
+- `grammar` and `orthography` findings **must** carry `source`: the URL the reviewer
+  actually fetched (CLDR data, a dictionary entry, a published style guide). The gate
+  drops any without one. The reviewer's prompt must say this outright, and say that
+  its own knowledge does not count. Language-model consensus is exactly what was wrong
+  on PR #884.
+- `meaning` findings need no external source — the English string and the app context
+  are the evidence — but the note must say what the current text means and why that
+  differs from the source.
+- **Active translator → meaning only.** If `feedback.json` shows translator activity in
+  the last 90 days for a language, the reviewer is told to report WRONG only. Style is
+  that person's job, and thirty style notes on a volunteer's work is how a locale loses
+  its translator. The gate enforces this even if the reviewer ignores it.
+- **Cap.** At most 10 AWKWARD suggestions per language per run are posted; the rest are
+  recorded in `decision.json` and mentioned in the report. Reviewers should put the
+  most consequential first.
+
+References to hand each reviewer (verify the URL works before relying on it; extend as
+languages are added):
+
+| lang | reference |
+| --- | --- |
+| any | CLDR data: `https://raw.githubusercontent.com/unicode-org/cldr/main/common/main/<code>.xml` (dates, units, relative-time abbreviations, plurals); survey tool `https://st.unicode.org/cldr-apps/v#/<code>/` |
+| be | skarnik.by (ТСБМ + Belarusian–Russian dictionaries) `https://www.skarnik.by/` |
+| ru | Грамота.ру `https://gramota.ru/` |
+| uk | Словник.ua `https://slovnyk.ua/` · СУМ `https://sum.in.ua/` |
+| pl | Słownik PWN `https://sjp.pwn.pl/` |
+| pt / pt_BR | Priberam `https://dicionario.priberam.org/` |
+| id | KBBI `https://kbbi.kemdikbud.go.id/` |
+| ms | PRPM (DBP) `https://prpm.dbp.gov.my/` |
+| fa | Vajehyab `https://www.vajehyab.com/` |
+| he | Academy of the Hebrew Language `https://hebrew-academy.org.il/` |
+| ko | 표준국어대사전 `https://stdict.korean.go.kr/` |
+| zh_Hant | 教育部重編國語辭典 `https://dict.revised.moe.edu.tw/` |
+| ja / zh | CLDR plus in-app consistency; treat grammar claims as `style` unless a source is found |
 
 **Chunk anything large — one agent per 50 entries.** `review-manifest.json` gives each language a `chunks` count; honour it. A reviewer handed 300 entries and asked "flag what's wrong" degrades badly: it reads the head of the diff carefully and skims the tail, and the whole point of the pass is the one bad string among the 299 fine ones. Give each agent a slice and a line range, and tell it the slice is a slice. A 300-entry `zh` polish pass is 7 reviewers, not one.
 
@@ -345,6 +391,8 @@ End with a short summary:
 - Don't merge or close the original auto-merge PR as part of this skill — that's a separate decision.
 - Don't overwrite, re-suggest on, or machine-fill a unit a translator has commented on or suggested for. Answer the thread instead (`build-feedback-plan.mjs`).
 - Don't post a Weblate comment without the `[review-l10n]` marker — the next run would read it as a human's.
+- Don't assert a grammar or spelling norm from model memory. Fetch the reference, cite the URL in `source`, or downgrade the finding to `style`.
+- Don't send style suggestions to a language with an active translator. WRONG only there.
 
 ## See also
 
