@@ -9,7 +9,9 @@
 #   - decision.json mechanical_verdict == HOLD  -> HOLD (non-overridable hard blocker)
 #   - else                                       -> --decision=MERGE|HOLD (session's call)
 #
-# In all cases it applies the full Weblate plan (overwrites + suggestions + comments).
+# In all cases it applies the full Weblate plan (overwrites + suggestions + comments)
+# and, when the feedback reviewers produced one, feedback-plan.json (replies to
+# translators + adopted translator wording).
 # No gh pr merge, no gh pr comment, no GitHub token needed.
 #
 # Usage: apply-decision.sh <scratch-dir> [--execute] [--decision=MERGE|HOLD] [--reason=...]
@@ -65,6 +67,14 @@ node -e '
 # Apply the full Weblate plan (overwrites + suggestions + comments). Weblate only.
 echo ">> applying Weblate writes (overwrites + suggestions + comments)"
 node "${HERE}/apply-plan.mjs" "${PLAN}" ${DRYFLAG}
+
+FBPLAN="${SCRATCH}/feedback-plan.json"
+if [[ -f "${FBPLAN}" ]]; then
+  echo ">> applying translator-feedback plan (replies + adopted wording)"
+  node "${HERE}/apply-plan.mjs" "${FBPLAN}" ${DRYFLAG}
+else
+  echo ">> no feedback-plan.json — no translator threads answered this run"
+fi
 
 # Print the recommendation for the human to act on (no GitHub write).
 echo ""

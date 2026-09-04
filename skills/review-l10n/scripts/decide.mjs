@@ -19,6 +19,11 @@
 //                       Omitted or empty => every changed locale is gated, because
 //                       a gate that silently narrows its own scope is worse than
 //                       one that over-reports.
+//   --feedback=<f.json> fetch-feedback.mjs output. Units with translator input are
+//                       HELD: a WRONG finding there becomes a flag comment, never an
+//                       overwrite, and AWKWARD suggestions are dropped (the feedback
+//                       reviewer answers that thread instead). If the file is missing
+//                       every overwrite is downgraded to a comment — never write blind.
 //   --out=<dir>         where to write decision.json + plan.json (default: cwd)
 //
 // findings.json schema (produced by the per-language review subagents):
@@ -48,6 +53,7 @@ if (!headDir || !baseDir) {
 }
 const prPath = arg('pr');
 const findingsPath = arg('findings');
+const feedbackPath = arg('feedback');
 const outDir = arg('out', '.');
 const wiredArg = (arg('wired', '') || '').split(',').filter(Boolean);
 const wiredKnown = wiredArg.length > 0;
@@ -139,6 +145,15 @@ const mechanicalHold = hardBlockers.length > 0;
 const mechanical_verdict = mechanicalHold ? 'HOLD' : 'ADJUDICATE';
 const decision = mechanicalHold ? 'HOLD' : null; // null = pending session adjudication
 
+// ---- Translator-held units: never overwrite where a human has spoken ----
+const feedbackKnown = Boolean(feedbackPath && existsSync(feedbackPath));
+const heldUnits = new Set();
+if (feedbackKnown) {
+  const fb = JSON.parse(readFileSync(feedbackPath, 'utf-8'));
+  for (const u of fb.units || []) if (u.human) heldUnits.add(`${u.lang}/${u.key}`);
+}
+const isHeld = (lang, key) => !feedbackKnown || heldUnits.has(`${lang}/${key}`);
+
 // ---- Weblate write plan (used regardless of final call) ----
 const plan = {
   target_id: pr.number ? `PR-${pr.number}` : 'unknown',
@@ -162,13 +177,25 @@ for (const w of structuralWarnings) {
   }
 }
 // WRONG findings → overwrite if a concrete fix is given, else a flag comment.
+// On a held unit the fix is only proposed: the translator's thread decides.
+const heldWrong = [];
+const heldAwkward = [];
 for (const w of wrong) {
-  if (w.new) plan.overwrites.push({lang: w.lang, key: w.key, current: w.current, new: w.new, comment: w.note});
-  else plan.comments.push({lang: w.lang, key: w.key, comment: `[review-l10n] flagged WRONG: ${w.note || ''}`});
+  if (w.new && !isHeld(w.lang, w.key)) {
+    plan.overwrites.push({lang: w.lang, key: w.key, current: w.current, new: w.new, comment: w.note});
+  } else if (w.new) {
+    heldWrong.push(w);
+    const why = feedbackKnown ? 'a translator has commented on this unit, so it is not applied' : 'feedback.json missing, so nothing is applied blind';
+    plan.comments.push({lang: w.lang, key: w.key, comment: `[review-l10n] flagged WRONG (${why}): ${w.note || ''} Proposed: ${w.new}`});
+  } else {
+    plan.comments.push({lang: w.lang, key: w.key, comment: `[review-l10n] flagged WRONG: ${w.note || ''}`});
+  }
 }
-// AWKWARD → suggestions.
+// AWKWARD → suggestions, except on held units where the thread already exists.
 for (const a of awkward) {
-  if (a.proposal) plan.suggestions.push({lang: a.lang, key: a.key, current: a.current, proposal: a.proposal, comment: a.note});
+  if (!a.proposal) continue;
+  if (feedbackKnown && heldUnits.has(`${a.lang}/${a.key}`)) { heldAwkward.push(a); continue; }
+  plan.suggestions.push({lang: a.lang, key: a.key, current: a.current, proposal: a.proposal, comment: a.note});
 }
 
 const hardReasons = hardBlockers.map(b =>
@@ -186,18 +213,22 @@ const decisionObj = {
   pr: pr.number ?? null,
   mergeable, mergeStateStatus: pr.mergeStateStatus ?? null,
   wiredSource, wired: [...wired],
+  feedbackSource: feedbackKnown ? feedbackPath : 'missing-no-overwrites',
+  heldUnits: [...heldUnits],
   changedLangs, gateLangs, skippedLangs,
   counts: {
     hardBlockers: hardBlockers.length,
     structuralWarnings: structuralWarnings.length,
     wrong: wrong.length,
     awkward: awkward.length,
+    heldWrong: heldWrong.length,
+    heldAwkward: heldAwkward.length,
     overwrites: plan.overwrites.length,
     suggestions: plan.suggestions.length,
     comments: plan.comments.length,
   },
   hardBlockers, hardReasons, structuralWarnings,
-  wrong, awkward, ignoredUnwired,
+  wrong, awkward, ignoredUnwired, heldWrong, heldAwkward,
 };
 
 writeFileSync(join(outDir, 'decision.json'), JSON.stringify(decisionObj, null, 2));
@@ -212,6 +243,10 @@ if (skippedLangs.length) {
   console.log(`  ^ these were NOT gated. Confirm they are genuinely unwired before reading this run as full coverage.`);
 }
 console.log(`hard blockers=${hardBlockers.length} | structural warnings (unwired)=${structuralWarnings.length} | semantic: wrong=${wrong.length} awkward=${awkward.length}`);
+console.log(`translator feedback: ${feedbackKnown ? `${heldUnits.size} held unit(s)` : 'MISSING — every overwrite downgraded to a comment'}`);
+if (heldWrong.length || heldAwkward.length) {
+  console.log(`  held back: ${heldWrong.length} WRONG fix(es) posted as comments, ${heldAwkward.length} AWKWARD suggestion(s) dropped — the feedback reviewer owns those threads`);
+}
 console.log(`plan: overwrites=${plan.overwrites.length} suggestions=${plan.suggestions.length} comments=${plan.comments.length}`);
 if (hardReasons.length) {
   console.log('\nHard HOLD (non-overridable):');

@@ -10,6 +10,8 @@
 //   --langs=ja,ms        languages to assemble                                 [required]
 //   --plan=<path>        output plan path (default: <out-dir>/fill-plan.json)
 //   --state=10           Weblate state for the writes (default 10 = needs-editing)
+//   --feedback=<f.json>  fetch-feedback.mjs output; keys with a pending suggestion or
+//                        translator comment are skipped (a human is already on them)
 //
 // Validation per item (rejected with a logged problem, not written):
 //   - key must be in that lang's missing list  - no duplicates
@@ -30,6 +32,11 @@ if (!missingDir || !outDir || !langs.length) {
 }
 const planPath = arg('plan', join(outDir, 'fill-plan.json'));
 const state = Number(arg('state', '10'));
+const feedbackPath = arg('feedback');
+const held = new Set();
+if (feedbackPath && existsSync(feedbackPath)) {
+  for (const u of JSON.parse(readFileSync(feedbackPath, 'utf-8')).units || []) if (u.human) held.add(`${u.lang}/${u.key}`);
+}
 
 // Gather all output items once, grouped by lang.
 const byLang = {};
@@ -48,6 +55,7 @@ const plan = {
   overwrites: [], suggestions: [], comments: [],
 };
 const problems = [];
+const heldSkipped = [];
 for (const lang of langs) {
   const mp = join(missingDir, `missing-${lang}.json`);
   if (!existsSync(mp)) { problems.push(`${lang}: no missing-${lang}.json`); continue; }
@@ -58,6 +66,7 @@ for (const lang of langs) {
     if (seen.has(it.key)) { problems.push(`${lang}/${it.key}: duplicate`); continue; }
     const en = want.get(it.key);
     if (typeof en === 'string' && en.trim().length === 0) { seen.add(it.key); continue; } // icon/space label
+    if (held.has(`${lang}/${it.key}`)) { seen.add(it.key); heldSkipped.push(`${lang}/${it.key}`); continue; }
     if (typeof it.new !== 'string' || !it.new.trim()) { problems.push(`${lang}/${it.key}: empty translation`); continue; }
     if (JSON.stringify(ph(en)) !== JSON.stringify(ph(it.new))) {
       problems.push(`${lang}/${it.key}: placeholder mismatch en[${ph(en)}] new[${ph(it.new)}]`); continue;
@@ -72,5 +81,6 @@ for (const lang of langs) {
 
 writeFileSync(planPath, JSON.stringify(plan, null, 2));
 console.log(`\nwrote ${planPath}: ${plan.overwrites.length} overwrites (state=${state})`);
+if (heldSkipped.length) console.log(`held (translator input pending, not filled): ${heldSkipped.join(', ')}`);
 if (problems.length) { console.log(`\nPROBLEMS (${problems.length}):`); for (const p of problems) console.log('  - ' + p); }
 else console.log('\nvalidation: clean');

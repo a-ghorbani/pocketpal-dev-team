@@ -29,20 +29,70 @@ gate with a deterministic rubric.
 an approving review, and merges to a prod branch stay a human decision. The routine's
 only writes are to Weblate; the recommendation is recorded for a maintainer to act on.
 
-Flow (orchestrated by `scripts/auto-review.sh` → semantic subagents → `scripts/decide.mjs` → `scripts/apply-decision.sh`):
+Flow (orchestrated by `scripts/auto-review.sh` → semantic subagents → feedback subagents → `scripts/decide.mjs` → `scripts/apply-decision.sh`):
 
 1. **Discover** the open Weblate PR (`author:weblate`, head `weblate-translations`). No PR → exit cleanly.
-2. **Pre-review** (`auto-review.sh`): fetch head/base locale JSONs, **derive the wired-language list** (`wired-langs.mjs` against the PR's base commit), run coverage + placeholder checks, split the diff per language, and write `review-manifest.json` with the per-language entry counts and chunk plan.
-3. **Semantic review**: spawn `general-purpose` subagents over the *changed gated* languages (parallel, blind to each other), each returning STRICT-JSON findings: `[{lang,key,severity:WRONG|AWKWARD,en,current,new?,proposal?,note}]`. **Honour the manifest's `chunks`** — a language over 50 entries is split across that many reviewers, each given a slice, never one agent for the whole diff (see Stage 4). Collate into `findings.json`.
-4. **Mechanical gate** (`decide.mjs`): split into two layers and write `decision.json` + `plan.json`.
+2. **Pre-review** (`auto-review.sh`): fetch head/base locale JSONs, **derive the wired-language list** (`wired-langs.mjs` against the PR's base commit), run coverage + placeholder checks, split the diff per language, write `review-manifest.json` with the per-language entry counts and chunk plan, and **pull translator feedback** (`fetch-feedback.mjs` → `feedback.json` + `feedback/feedback-<lang>.md`, every language, see **Translator feedback** below). Its summary lists the *open* threads — translator comments or pending suggestions nobody has answered.
+3. **Semantic review**: spawn `general-purpose` subagents over the *changed gated* languages (parallel, blind to each other), each returning STRICT-JSON findings: `[{lang,key,severity:WRONG|AWKWARD,en,current,new?,proposal?,note}]`. **Honour the manifest's `chunks`** — a language over 50 entries is split across that many reviewers, each given a slice, never one agent for the whole diff (see Stage 4). Each reviewer also gets its language's `feedback-<lang>.md` when one exists, so it does not re-raise what a translator has already settled. Collate into `findings.json`.
+3b. **Feedback resolution**: for every language with open threads (any language, wired or not — a translator is a translator), spawn one `general-purpose` subagent with that language's `feedback-<lang>.md`, the rules from **Translator feedback**, and the output path `feedback/replies-<lang>.json`. Then `build-feedback-plan.mjs --feedback=... --in-dir=feedback --tag="PR #<n>"` → `feedback-plan.json` (replies + adopted translator wording). It lists any open thread left unanswered; a run that leaves threads unanswered must say so in its report.
+4. **Mechanical gate** (`decide.mjs --feedback=<feedback.json> ...`): split into two layers and write `decision.json` + `plan.json`. Units with translator input are **held**: a WRONG fix there is posted as a comment, never applied, and AWKWARD suggestions on them are dropped because the thread already exists. If `feedback.json` is missing (fetch failed) *every* overwrite is downgraded to a comment — the gate never writes blind.
    - **Layer 1 — hard blockers (non-overridable, no judgment):** out-of-scope file (anything outside `src/locales/*.json`), malformed JSON, placeholder mismatch in a gated lang, or GitHub `CONFLICTING`. These can crash/break the app or are unsafe to auto-merge, so any one of them => `mechanical_verdict: HOLD` and the decision is final. The model cannot wave these through. Structural checks run on **every** changed locale; in a genuinely unwired one they are recorded as non-blocking `structuralWarnings` (plus a Weblate comment) so they get fixed before that locale is ever wired.
    - **Layer 2 — semantic findings (adjudicable):** `WRONG` (wired) and `AWKWARD` findings. These never auto-decide. With no hard blockers, `mechanical_verdict: ADJUDICATE`.
    - Unwired-language issues are recorded (`ignoredUnwired`) but never gate — they don't ship in-app.
 5. **Adjudicate** (main session, only when `ADJUDICATE`): the session reads **all** `WRONG` + `AWKWARD` findings together (key, en, current, proposed fix, rationale, lang) and makes one reasoned `MERGE` or `HOLD` call — "are these wrongs terrible enough to keep off prod, or tolerable to fix next round?" This judgment lives with the main model, not a per-language subagent or a count threshold.
-6. **Act** (`apply-decision.sh`, **dry-run by default; `--execute` to write**). Applies **Weblate writes only** (overwrites + suggestions + comments, state=10) in all cases, and **records a MERGE/HOLD recommendation** — it does **not** merge or comment on GitHub. Pass `--decision=MERGE|HOLD --reason=...` (ignored if Layer 1 forced HOLD). A maintainer reads the recommendation, and merges PR manually once it looks clean (the `main` ruleset needs one approving review).
-7. **Fill phase (opt-in: `--auto --fill-missing`).** After the merge decision, top up missing strings for wired languages, **uncapped**, per **Fill mode** above: find-missing → model sanity-judge each language's delta (fill new strings; flag-and-skip anything that looks like an `en.json` restructure) → translate contextually in a less-formal register → model quality pass → write at state=10. Fills never change the *current* PR's decision (missing keys aren't in its diff) — they ride the next regenerated PR. Report what was filled and anything skipped.
+6. **Act** (`apply-decision.sh`, **dry-run by default; `--execute` to write**). Applies **Weblate writes only** (overwrites + suggestions + comments, state=10, plus `feedback-plan.json` when present: replies to translators and adopted wording at state=20) in all cases, and **records a MERGE/HOLD recommendation** — it does **not** merge or comment on GitHub. Pass `--decision=MERGE|HOLD --reason=...` (ignored if Layer 1 forced HOLD). A maintainer reads the recommendation, and merges PR manually once it looks clean (the `main` ruleset needs one approving review).
+7. **Fill phase (opt-in: `--auto --fill-missing`).** After the merge decision, top up missing strings for wired languages, **uncapped**, per **Fill mode** above: find-missing → model sanity-judge each language's delta (fill new strings; flag-and-skip anything that looks like an `en.json` restructure) → translate contextually in a less-formal register → model quality pass → write at state=10 (`build-fill-plan.mjs --feedback=<feedback.json>` skips any key a translator is already on). Fills never change the *current* PR's decision (missing keys aren't in its diff) — they ride the next regenerated PR. Report what was filled and anything skipped.
+
+Report the feedback pass too: how many open threads were found, answered (per action), adopted, and left open.
 
 Why this shape: structural breakage (placeholders/JSON) is a fact, not an opinion — it stays mechanical. Everything that needs taste — the merge recommendation, "does this backfill make sense," and translation quality — goes to the model, which sees the whole picture at once rather than a single subagent's local call or a numeric threshold.
+
+### Translator feedback — humans outrank the machine
+
+Weblate has people on the other end. A translator who comments on a unit or leaves a
+suggestion has done exactly what the project asks of them, and a run that then
+overwrites that unit, or re-posts the same suggestion, or never answers, teaches them
+to stop. So every run reads the human side before it writes anything.
+
+**What is read.** `fetch-feedback.mjs` pulls every unit with a comment or a pending
+suggestion (`GET /api/units/<id>/comments/` and `/suggestions/` both work on
+hosted.weblate.org; only *creating* suggestions is missing). Each comment is classed
+as `bot` (starts with `[review-l10n]`, or the older "Translation review suggestion:" /
+"posted by review-l10n" forms), `maintainer` (the token owner, unmarked), or
+`translator` (anyone else). A unit is **held** when a translator has commented or a
+suggestion is pending; it is **open** when the latest translator word has no bot or
+maintainer reply after it. Maintainer comments are context, not a hold: before
+2026-09-04 the skill posted its overwrite notes unmarked under the maintainer's account.
+
+**Rules.**
+- A held unit is never overwritten by the gate or the fill. A WRONG fix on it becomes a
+  flag comment; an AWKWARD suggestion on it is dropped.
+- The translator's judgment wins by default. The feedback reviewer disagrees only for
+  an app-context reason (the string is a chip and must stay short; a term is used
+  consistently under another key) and even then it *proposes* and leaves the decision
+  with them.
+- Asked for a source you cannot cite? Withdraw. Never invent a norm.
+- Every reply is short, specific, in English, addressed `@username`, and marked
+  `[review-l10n <tag>]` — `build-feedback-plan.mjs` adds the mention and the marker.
+- When the translator's wording should replace the current target, `adopt` writes it
+  at **state=20** (they authored it; needs-editing would ask them to approve their
+  own words) and says so in the reply.
+
+**Reviewer output** (`feedback/replies-<lang>.json`, strict JSON):
+`[{lang, key, action: adopt|withdraw|stand|ask|reply|none, reply, new?}]`. One item per
+open unit; `none` with an empty reply for threads that need no answer (an anonymous
+whitespace suggestion, say).
+
+**Reviewer prompt must carry:** the app context (mobile, RN, local LLMs; Chat / Models /
+Pals / Settings / Benchmark / Voice & Speech / HTML preview / onboarding), the path to
+`feedback-<lang>.md`, read-only access to `en.json` and `<lang>.json` for terminology
+(absolute paths, never `cd` into the submodule), permission to WebFetch a real
+reference (CLDR, a dictionary), the rules above, and the output path. Language
+reviewers stay blind to each other, as in Stage 4.
+
+**Marker discipline.** `apply-plan.mjs` prefixes every comment it posts with
+`[review-l10n]`; that is how the next run tells its own voice from a translator's.
+Do not post Weblate comments through any other path.
 
 ### The wired list is derived, never written down
 
@@ -91,7 +141,7 @@ Flow:
 2. **Sanity-judge the delta — model judgment, NOT a numeric cap.** Look at what is missing per language and decide whether filling makes sense. A normal delta is a few newly-added `en` keys → fill. A *large or structural* delta is a signal, not a workload: it usually means an `en.json` rename/restructure, where a "missing" key still has a good **human** translation under the old key name — machine-filling it would replace human work with a draft. If the delta looks like a restructure (e.g. a whole key prefix newly missing while the locale holds orphaned old keys), **don't auto-fill that language — flag and report it** so a human migrates the old translations instead. Reasoning about "does this fill make sense" is the model's job; that is the whole reason we use a model rather than a threshold.
 3. Split each language's missing list into batches; spawn one translation subagent per batch (parallel). Each gets its batch + the existing `<lang>.json` as a style/terminology anchor. Requirements: **preserve `{{placeholders}}` byte-identical**; keep brand/engine/model names in English; **translate contextually** — use the key path, the screen/feature it belongs to, and neighbouring strings to get terminology and meaning right; and use a **natural, less-formal register** — a friendly consumer-app tone, not stiff or over-formal. Write `[{lang,key,en,new,note?}]` to an output file.
 4. **Quality pass — model judgment.** Before writing, review the drafts for real problems (wrong sense, leaked English, over-formal/awkward phrasing, inconsistent terminology) and fix or re-generate. Only placeholder/JSON correctness is mechanical (next step); quality is judged by the model, same principle as the merge gate.
-5. `build-fill-plan.mjs --missing-dir=<d> --out-dir=<d> --langs=...` → validates (placeholders byte-identical, coverage, dupes; skips whitespace-only `en` icon labels) and assembles `fill-plan.json` (overwrites only, state=10).
+5. `build-fill-plan.mjs --missing-dir=<d> --out-dir=<d> --langs=... --feedback=<feedback.json>` → validates (placeholders byte-identical, coverage, dupes; skips whitespace-only `en` icon labels; skips keys a translator has commented on or suggested for) and assembles `fill-plan.json` (overwrites only, state=10).
 6. `apply-plan.mjs fill-plan.json [--dry-run]` → applies. ~2 req/unit at 1 req/sec, so large backfills take minutes — run in the background. No per-unit comments (avoids flooding Weblate with hundreds).
 
 Scope: the initial backfill brought all wired languages to ~0 untranslated; ongoing,
@@ -270,9 +320,9 @@ node skills/review-l10n/scripts/apply-plan.mjs "${SCRATCH}/plan.json" [--dry-run
 The script:
 - Loads `WLT_TOKEN` from `<repo-root>/.env` (falls back to env var if already set). Fails fast with a clear message if absent.
 - Resolves each `{lang, key}` to a Weblate unit via the units API (`?q=context:<key>`).
-- For overwrites: `PATCH /api/units/<id>/ {target, state: default_state}`.
-- For suggestions: `POST /api/units/<id>/suggestions/ {target}`.
-- For comments: `POST /api/units/<id>/comments/ {comment}`.
+- For overwrites: `PATCH /api/units/<id>/ {target, state: item.state ?? default_state}`.
+- For suggestions: a `[review-l10n]` comment carrying the proposal (hosted.weblate.org has no suggestion-create API); the target is untouched.
+- For comments and replies: `POST /api/units/<id>/comments/ {comment, scope: "translation"}`, always prefixed `[review-l10n]`.
 - Throttles to ≤ 1 req/sec to be polite to hosted.weblate.org.
 - Reports per-line success/fail with the Weblate unit URL.
 
@@ -293,6 +343,8 @@ End with a short summary:
 - Don't commit `.env` or echo `$WLT_TOKEN` to stdout. Never paste tokens into the conversation.
 - Don't ask the user to paste the token in chat. Direct them to `.env` instead.
 - Don't merge or close the original auto-merge PR as part of this skill — that's a separate decision.
+- Don't overwrite, re-suggest on, or machine-fill a unit a translator has commented on or suggested for. Answer the thread instead (`build-feedback-plan.mjs`).
+- Don't post a Weblate comment without the `[review-l10n]` marker — the next run would read it as a human's.
 
 ## See also
 
@@ -300,7 +352,10 @@ End with a short summary:
 - `scripts/coverage.mjs` — coverage logic.
 - `scripts/find-placeholder-issues.mjs` — placeholder mismatch scanner.
 - `scripts/diff-entries.mjs` — per-language diff producer.
-- `scripts/apply-plan.mjs` — Weblate API executor.
+- `scripts/weblate-client.mjs` — shared Weblate client: token, throttle/429 retry, lang remap, the `[review-l10n]` marker, unit lookup, comment/suggestion reads.
+- `scripts/apply-plan.mjs` — Weblate API executor (overwrites, suggestions-as-comments, comments, replies).
+- `scripts/fetch-feedback.mjs` — pull translator comments + pending suggestions → `feedback.json` and per-language `feedback-<lang>.md`.
+- `scripts/build-feedback-plan.mjs` — validate the feedback reviewers' resolutions → `feedback-plan.json` (replies + adopted wording).
 - `scripts/find-missing.mjs` — `--fill`: list en keys missing/empty in a locale.
 - `scripts/build-fill-plan.mjs` — `--fill`: validate subagent translations → fill plan (overwrites, state=10).
 - `scripts/auto-review.sh` — `--auto` pre-review: discover PR, fetch, machine checks, per-lang diff split.
@@ -314,4 +369,6 @@ End with a short summary:
 - **Language code remap.** PocketPal repo uses `zh` for the Simplified Chinese file, but hosted.weblate.org's translation slug is `zh_Hans`. `apply-plan.mjs` remaps automatically via `LANG_REMAP`; if you add a new language and the unit lookup 404s, check what hosted.weblate.org calls it (e.g. `GET /api/translations/pocketpal-ai/translations/<code>/`) and update the map. Other PocketPal codes (`fa`, `he`, `id`, `ja`, `ko`, `ms`, `ru`, `uk`, `zh_Hant`) match Weblate 1:1.
 - **No public suggestion API.** Neither `POST /api/units/<id>/suggestions/` nor `POST /api/suggestions/` exist on hosted.weblate.org (both return 404). Suggestions in the Weblate sense — proposed target visible alongside the current translation — are only creatable through the web UI. `apply-plan.mjs` falls back to posting the proposal + rationale as a comment, leaving the target untouched. Pass `--no-suggestion-fallback` if you'd rather fail loudly.
 - **Comments endpoint.** `POST /api/units/<id>/comments/` with `{comment, scope}` works. Use `scope: "translation"` so the comment is scoped to the language, not the source string.
+- **Reads that work (verified 2026-09-04).** `GET /api/units/<id>/comments/` → `{results:[{comment, timestamp, user}]}`; `GET /api/units/<id>/suggestions/` → `{results:[{target, user, timestamp, votes}]}`; unit search `?q=has:comment OR has:suggestion`; `GET /api/users/?page_size=1` returns the token's own account (used to tell maintainer comments from translators'). `GET /api/units/<id>/changes/` is 404.
+- **Comments post under the token owner's name.** There is no bot identity; the `[review-l10n]` marker is the only thing that distinguishes the skill's comments from the maintainer's own.
 - **Unit lookup.** `GET /api/translations/<project>/<component>/<lang>/units/?q=context:<key>` returns results matched by Weblate's substring search; always re-filter client-side on exact `context` equality (the skill does this).

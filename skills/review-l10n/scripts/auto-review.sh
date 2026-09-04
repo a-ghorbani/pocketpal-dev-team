@@ -6,7 +6,8 @@
 #
 # Usage: auto-review.sh [<pr-number>] [<repo>]
 # Emits: ${SCRATCH} path on the last line (SCRATCH=...), plus pr.json, coverage.txt,
-#        placeholders.txt, diff-report.txt, and per-language diff-<lang>.txt files.
+#        placeholders.txt, diff-report.txt, per-language diff-<lang>.txt files, and
+#        feedback.json + feedback/feedback-<lang>.md (translator comments/suggestions).
 set -euo pipefail
 
 REPO="${2:-a-ghorbani/pocketpal-ai}"
@@ -63,6 +64,17 @@ if [[ -s "${SCRATCH}/diff-report.txt" ]]; then
     /^## [A-Za-z_]+:/ { f=scratch "/diff-" $2 ".txt"; sub(":","",f) }
     f { print > f }
   ' "${SCRATCH}/diff-report.txt"
+fi
+
+# Translator feedback on Weblate: comments and pending suggestions, every language.
+# decide.mjs holds those units (no overwrite) and the feedback reviewers answer the
+# open threads. Failure here is loud: without feedback.json nothing is overwritten.
+if node "${HERE}/fetch-feedback.mjs" --out="${SCRATCH}/feedback.json" --md-dir="${SCRATCH}/feedback" \
+     > "${SCRATCH}/feedback.txt" 2> "${SCRATCH}/feedback.err"; then
+  cat "${SCRATCH}/feedback.txt"
+else
+  echo "!! fetch-feedback.mjs FAILED (see ${SCRATCH}/feedback.err) — decide.mjs will downgrade every overwrite to a comment"
+  rm -f "${SCRATCH}/feedback.json"
 fi
 
 echo ">> changed locale files:"
