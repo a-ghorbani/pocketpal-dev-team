@@ -69,7 +69,7 @@ export function usernameFromUrl(url) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// api(method, url, body): JSON in/out, throttled, retries on 429.
+// api(method, url, body): JSON in/out, throttled, retries on 429 and 5xx (hosted.weblate.org throws transient 502s).
 // In dryRun mode writes are echoed instead of sent; reads still go out.
 export function makeClient({token, dryRun = false, throttleMs = 1000, baseUrl = DEFAULTS.baseUrl,
                             project = DEFAULTS.project, component = DEFAULTS.component} = {}) {
@@ -87,8 +87,9 @@ export function makeClient({token, dryRun = false, throttleMs = 1000, baseUrl = 
     if (!url.startsWith('http')) url = baseUrl + url;
     for (let attempt = 0; attempt < 5; attempt++) {
       const res = await fetch(url, {method, headers, body: body ? JSON.stringify(body) : undefined});
-      if (res.status === 429) {
-        const wait = Number(res.headers.get('retry-after') || 5);
+      if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
+        const wait = res.status === 429 ? Number(res.headers.get('retry-after') || 5) : 5 * (attempt + 1);
+        await res.text().catch(() => {});
         await sleep(wait * 1000);
         continue;
       }
@@ -103,7 +104,7 @@ export function makeClient({token, dryRun = false, throttleMs = 1000, baseUrl = 
       await sleep(throttleMs);
       return json;
     }
-    throw new Error(`rate-limited 5 times: ${url}`);
+    throw new Error(`gave up after 5 attempts (429/5xx): ${url}`);
   }
 
   async function* paginate(url) {
