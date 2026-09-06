@@ -632,5 +632,5 @@ nested inside; tabbed General | Generation form, the latter via
 `src/components/PalsSheets/GenerationSettings.tsx`),
 `src/screens/PalsScreen/PalsScreen.tsx` (local-only My Pals surface).
 
-When this doc and the code disagree, the code wins; the same PR that lands
+When this doc and the code disagree, the code wins; the same round that lands
 the change updates this file.

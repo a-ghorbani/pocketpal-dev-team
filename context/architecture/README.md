@@ -40,7 +40,7 @@ workflows/stories/<TASK-ID>/         context/architecture/<flow>.md
                                                 │
               architect updates the architecture
               file with the approved delta in
-              the SAME PR that lands the code
+              the same round that lands the code
 ```
 
 The story-scoped `what.md` is born **as a delta** on the architecture file and dies **merged into it** when the work ships.
@@ -81,10 +81,17 @@ Use `templates/what-template.md` as a starting point.
 
 Architecture docs and code drift unless the pipeline enforces alignment:
 
-- **PR-time check** — every PR's diff review verifies: "does this PR change any behaviour described in `context/architecture/*.md`? If yes, the same PR must update the doc."
+- **PR-time check** — every PR's diff review verifies: "does this PR change any behaviour described in `context/architecture/*.md`?" If yes, the doc is updated in the same round.
 - **Story-time check** — the architect reads the relevant architecture doc at the start of every story. If the doc no longer matches code, the architect produces a small fix-up commit BEFORE drafting the story's `what.md`. The story doesn't get to add a delta on top of stale truth.
 
-Architecture drift is the failure mode that brings back the ping-pong this library was created to prevent.
+Drift runs in **both** directions and the checks above only catch one. Code moving ahead of the doc
+is the familiar case; a doc ahead of the code — behaviour designed, agreed and never implemented —
+reads exactly like description, and no diff check will ever fire on it. So the story-time check asks
+both questions: are recent changes reflected, and does code exist for each behaviour this doc
+asserts?
+
+Architecture drift is the failure mode that brings back the ping-pong this library was created to
+prevent.
 
 ---
 

@@ -503,4 +503,4 @@ The install guard throws "not installed"; `play()` early-returns/logs. After re-
 - Not a record of past TTS behaviour changes (those live in commits).
 - Not exhaustive coverage of every TTS contract — only the availability gate.
 
-When this doc and the code disagree, the code wins; the same PR that lands the change must update `context/architecture/tts.md`.
+When this doc and the code disagree, the code wins; the same round that lands the change must update `context/architecture/tts.md`.

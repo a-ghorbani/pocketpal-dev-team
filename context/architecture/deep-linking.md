@@ -129,12 +129,14 @@ There is no `downloading` host state — per-file download/progress is owned by 
 
 - **I1 — No silent download.** This route never auto-downloads. A download starts only when the user taps a file in `DetailsView`, and it starts a real download because every sibling from `resolveHFRepo` carries a non-empty `/resolve/` `url` (via `createSiblingsFromFileDetails`).
 - **I2 — Single download entry point.** Downloads go through `ModelStore.downloadHFModel(hfModel, modelFile, {enableVision:true})` — the existing `ModelFileCard.handleDownload`. No new download path; `DetailsView`/`ModelFileCard` are not modified.
-- **I3 — Host scoping.** The Android prod intent-filter declares `scheme="pocketpal"` AND `host="hub"`; no bare-scheme prod handler.
+- **I3 — Host scoping.** Every Android prod intent-filter declares both a scheme and a host — `pocketpal`/`hub`, `pocketpal`/`checkout`, `llama`/`add-server`; no bare-scheme prod handler. iOS cannot scope a registered scheme by host, so on that platform the per-parser scheme gate (I10) is what carries the equivalent guarantee.
 - **I4 — UA on every model download.** The attribution UA is set on all HF API calls and on all model downloads on both platforms (HF is the only current download source). Authorization header behavior unchanged.
 - **I5 — Pending link consumed once.** `pendingHubRun` is cleared on host dismiss; the host does not re-open after clear.
 - **I6 — Validation precedes side effects.** A link whose `repo_id` is missing/malformed produces zero store writes and zero navigation. (`filename` absence is NOT a failure — D13.)
 - **I7 — Single parse point.** Exactly one helper (`parseHubRunURL`) parses/validates a hub/run URL; both iOS and Android prod delivery call it.
 - **I8 — Reuse, don't fork.** The host presents the existing `DetailsView` (and its `ModelFileCard` rows) with no edits; no bespoke per-file download UI for this route.
+- **I9 — One helper per route, for both delivery paths.** A pairing payload is parsed and validated by exactly one helper (`parsePairingURL`), called by the scanner, the iOS native-emitter path and the raw `Linking` path alike. `DeepLinkService.parseURL` is not extended; `parseHubRunURL` is not widened to a second scheme.
+- **I10 — The dispatcher is scheme-scoped, and each route parser is additionally scheme-gated (amends I3).** `handleDeepLink` rejects any scheme it does not route *before* reaching a route branch — which is what covers the `chat` route, selected by host alone with no parser of its own. Independently, `isHubLink` / `parseHubRunURL` / `parsePairingURL` each reject a url whose scheme is not their own. The per-parser half is **must-not-remove, not defence in depth**: the raw `Linking` path never enters the dispatcher, and on an iOS **cold** launch no native code filters the url at all, so once a second scheme is registered a `llama://hub/run` payload would otherwise reach the download flow through a gate that tests hostname and path only.
 
 ### 4c. Component renders
 
@@ -236,6 +238,13 @@ valid URL → fetchModelInfo / fetchModelFilesDetails throws (network/404/privat
 | D14 | Keep `filename` optional in `HubRunRequest`, unused by UI | Preserve for future attribution without re-parsing |
 | D15 | Reuse `DetailsView`/`ModelFileCard` unchanged for the list | Existing card already does vision/progress/download correctly |
 | D16 | Split `resolveHFRepo` strict core; keep `resolveHFModelForDownload` for PalStore | PalStore needs file-match + per-fetch tolerance + fallback; don't regress it |
+| D17 | `llama://add-server?url=…` is our pairing route; the QR itself carries http(s) | The scheme is ours to define; the producer emits a plain url. |
+| D18 | Registration stays host-scoped on Android; parsing accepts four forms | Every form still ends at the same explicit user confirm. |
+| D19 | Port 9931 defaults **only** for the `llama://` authority form | An `http://host` payload must keep URL semantics (port 80). |
+| D20 | Scheme-gate the dispatcher, and every route parser as well | Android and the iOS cold launch bypass the dispatcher; `chat` has no parser. |
+| D21 | A schemeless bare authority requires an explicit port | Portless dotted text would surface a pairing sheet for any QR. |
+| D22 | `AppDelegate`'s URL-scheme allow-list is exact-match (`pocketpal`, `llama`), never a wildcard | A catch-all diverts Google Sign-In callbacks out of the `return false` path its SDK relies on. |
+| D23 | The pairing route **navigates** to `ROUTES.MODELS` as it parks, where `hub/run` parks for a global host | The pairing sheet is screen-hosted because pairing continues into the remote-model picker on that screen; parking alone leaves the sheet unreachable until the user walks there. `hub/run`'s flow ends inside its own sheet, so it needs no screen. Rationale in `remote-servers.md` §10a (D-QR16). |
 
 ---
 
@@ -251,5 +260,8 @@ valid URL → fetchModelInfo / fetchModelFilesDetails throws (network/404/privat
 | 9f | Warm-launch on Android (singleTask) | `onNewIntent` forwards intent → `Linking` 'url' fires → host opens (D9) |
 | 9g | Two rapid links | later `setPendingHubRun` overwrites the parked request (I5) |
 | 9h | Private/gated repo metadata | `resolveHFRepo` uses HF token; failure → error state (G) |
-| 9i | iOS scheme registration | `CFBundleURLTypes` already present; no iOS native change |
+| 9i | iOS scheme registration | Three sites, not one: `CFBundleURLTypes` (the app's own `com.pocketpalai.deeplink` dict, not the Google Sign-In dict, which carries no `CFBundleURLName` at all) **and** `AppDelegate`'s scheme allow-list, which carries the **warm** path — a cold launch is forwarded unfiltered, so the plist alone is enough there but not warm. Exact-match only (D22). |
 | 9j | Vision repo | `DetailsView` already renders the vision tag + LLM-file filtering (C) — unchanged |
+| 9k | `llama://` link delivered on iOS | Delivered **twice** — once through the native emitter, once through the always-on `Linking` effect — and on a cold launch possibly three times, since the OS also invokes `open:options:` after `didFinishLaunching`. All deliveries are idempotent: an equal request parks over the parked one (D12, 9g). Stated so a reviewer counting emissions is not surprised. |
+| 9l | `llama://<authority>` opened on Android | Never delivered: the intent-filter is `host="add-server"`, so `llama://192.168.1.5:9931` has host `192.168.1.5` and no activity matches. Deliverable on iOS, where a scheme cannot be host-scoped; I10's per-parser gate is what makes that safe. |
+| 9m | An unrecognised `llama://` url | Ignored silently, with no alert (D5) — the pairing route parks nothing, navigates nowhere and writes nothing. |

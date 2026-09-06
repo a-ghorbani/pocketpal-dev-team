@@ -475,5 +475,5 @@ listener either way.
   `applyEventToStore` (`useChatSession.ts:228-265`). The runner itself has no
   TTS knowledge.
 
-When this doc and the code disagree, the code wins; the same PR that lands the
-change updates this file.
+When this doc and the code disagree, the code wins; the same round that lands
+the change updates this file.

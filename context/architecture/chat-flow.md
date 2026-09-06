@@ -17,9 +17,11 @@ Convention used in this doc:
 Load-bearing rules. If a change breaks one of these, the reviewer should
 ask "is this an architecture change?" before approving.
 
-- **Single global n_ctx, two named views.** The banner resolver and the
-  pal-load hint read `modelStore.activeContextSettings?.n_ctx` — the
-  n_ctx the running `LlamaContext` was actually initialised with.
+- **Single global n_ctx, two named views.** The pal-load hint reads
+  `modelStore.activeContextSettings?.n_ctx` — the n_ctx the running
+  `LlamaContext` was actually initialised with — while the banner resolver
+  reads `modelStore.activeModelCaps.effectiveContextLength`, which resolves to
+  that same value for a local model and to the probed window for a remote one.
   `modelStore.contextInitParams.n_ctx` is the *next-init intent*
   (writable from the Settings n_ctx input via `setNContext` and from the
   banner "Increase context" CTA, which also calls `setNContext`). Both
@@ -77,15 +79,24 @@ Session
         metadata                            // turn-level chrome + run flags
             timings?         : { predicted_per_second, predicted_per_token_ms,
                                  time_to_first_token_ms, ... }   // llama.rn shape
+                                            //   on a remote turn it carries the
+                                            //   llama.cpp server shape instead,
+                                            //   prompt_per_second and cache_n
+                                            //   included (b9976, read from the
+                                            //   streamed /v1/chat/completions
+                                            //   finish chunk)
             completionResult?: CompletionResultSnapshot           // turn snapshot
                                             //   { content?, reasoning_content?,
-                                            //     used, contextFull, tokensPredicted?,
+                                            //     used?, contextFull, tokensPredicted?,
                                             //     finishReason?, isRemote }
-                                            //   used = tokens_evaluated + tokens_predicted
-                                            //   (tokens_cached unavailable at the boundary)
-                                            //   remote llama.cpp: both counts sourced from
-                                            //   server timings.prompt_n / predicted_n
-                                            //   (openai.ts), so used reflects prompt+predicted
+                                            //   used = tokens_evaluated + tokens_predicted,
+                                            //   and OPTIONAL: absent when the turn reported
+                                            //   no tokens_evaluated, which means unknown and
+                                            //   never renders as 0 (see 9n)
+                                            //   remote llama.cpp: tokens_evaluated is
+                                            //   timings.prompt_n + timings.cache_n, mapped in
+                                            //   openai.ts (tokens_cached is unavailable at
+                                            //   the boundary on either path)
             copyable?        : boolean      // turn has user-visible content worth copying
             interrupted?     : boolean      // run failed/aborted with partial content
             truncationLikely?: true         // set ONLY when the tool-args JSON
@@ -427,8 +438,8 @@ bubble (a UX regression we don't want).
 ### 4c. Hard invariants
 
 - **I1**: exactly one footer per turn, rendered when at least one
-  footer-eligible field is present in `metadata` (`timings` or `copyable`).
-  Independent of `status`. See D1.
+  footer-eligible field is present in `metadata` (`timings`, `copyable` or
+  `interrupted`). Independent of `status`. See D1.
 - **I2**: within a step, blocks are ordered reasoning → content → per-call
   blocks in `step.toolCalls` array order. Multi-tool turns render N per-call
   blocks (D6).
@@ -566,7 +577,7 @@ screens.
 | `step.partial`                           | `pushAgentStep` (true), `finalizeActiveStep` (false; `ChatSessionStore.ts`) |
 | New step                                 | `pushAgentStep` (`ChatSessionStore.ts`)             |
 | `metadata.timings`                       | `updateMessage` at `run_finished` (`useChatSession.ts`) |
-| `metadata.completionResult` (`CompletionResultSnapshot`) | `updateMessage` at `run_finished` AND the catch path on abort with partial content (`useChatSession.ts`, via `deriveSnapshotFromResult`). The same site then calls `chatSessionStore.recordCompletionSnapshot`, which seeds `lastCompletionResult` and `consecutiveFullFailures` in one action. |
+| `metadata.completionResult` (`CompletionResultSnapshot`) | `updateMessage` at `run_finished` (via `deriveSnapshotFromResult`) AND the catch path on abort with partial content, which builds its own snapshot and pins `used` to the context window only where it treats the turn as full, leaving it absent otherwise (`useChatSession.ts`). The same site then calls `chatSessionStore.recordCompletionSnapshot`, which seeds `lastCompletionResult` and `consecutiveFullFailures` in one action. |
 | `metadata.copyable`                      | `updateMessage` from EITHER `run_finished` OR the catch path on abort (`useChatSession.ts`). Sequential, not racing. |
 | `metadata.interrupted`                   | `updateMessage` from the catch path (abort with partial content) |
 | `metadata.truncationLikely`              | `updateMessage` from the catch path, only when the tool-args JSON parse error fires |
@@ -589,11 +600,12 @@ screens.
 
 Reading is unrestricted.
 
-**n_ctx resolution.** There is no override layer. Banner-side readers
-(`BannerRow` / `resolveBannerVariant`, `usePalLoadHint`) read
-`modelStore.activeContextSettings?.n_ctx` for "what is actually loaded"
-and `modelStore.contextInitParams.n_ctx` for "what the next reload would
-use". `ChatSessionStore` does NOT read `ModelStore` — `BannerRow` and
+**n_ctx resolution.** There is no override layer. `BannerRow` /
+`resolveBannerVariant` read `modelStore.activeModelCaps.effectiveContextLength`
+for "what this session actually has", `usePalLoadHint` reads
+`modelStore.activeContextSettings?.n_ctx` for "what is actually loaded", and
+`modelStore.contextInitParams.n_ctx` is "what the next reload would use".
+`ChatSessionStore` does NOT read `ModelStore` — `BannerRow` and
 `usePalLoadHint` perform the cross-store reads, so there is no cycle.
 
 **Cleanup-LANDED (id reconciliation, was cleanup #1)**: `step.toolCalls` is
@@ -942,8 +954,15 @@ rename when Cleanup-DEFERRED lands.
 
 - **D1**: Footer renders whatever footer-eligible fields are present in
   `metadata`. Each field is independent — no all-or-nothing gating:
-  - `metadata.timings` present → render the timing line.
+  - `metadata.timings` present → render the timing line. Each part of that line
+    is itself field-presence-gated: ms/token, tok/s, prompt speed
+    (`timings.prompt_per_second`) and cached tokens (`timings.cache_n`) before
+    TTFT. Prompt speed is origin-agnostic — llama.rn reports the same key — while
+    `cache_n` is server-only, so local turns show no cached part. Presence means
+    presence, `0` included: a build that does not report prompt-cache reuse omits
+    the key, while a cold prompt on a build that does reports `0`.
   - `metadata.copyable` true → render the copy button.
+  - `metadata.interrupted` true → render the interrupted/cut-off status.
 
   The rule is "show what we have." The outcome of the run (done, interrupted,
   failed) does not gate the footer; only field presence does. If llama.rn
@@ -1171,7 +1190,20 @@ Step₀ has two tool calls. The first succeeds, the second fails.
 The chat input has ONE banner slot (the existing soft-cap shell). Its
 content is computed by a pure resolver from a single
 `CompletionResultSnapshot` written at every turn boundary. The resolver
-returns exactly one of five variants in this precedence order:
+returns exactly one of six variants in this precedence order:
+
+0. `remote-waking` — a caller-computed boolean: the session is remote,
+   `inferencing && !isStreaming`, and the bound server's presence reads
+   `asleep` (`remote-servers.md` §10b). It precedes every snapshot branch
+   and **bypasses the dismissed set**. Two reasons, and both matter: it is
+   the only variant about the **in-flight** request rather than the last
+   finished turn, so there is nothing durable to dismiss; and the case it
+   exists for is the first message to a sleeping server, where there may be
+   **no snapshot at all yet** — nesting it under the snapshot guard would
+   make it unreachable in exactly that case. The wake **is** the completion
+   (`remote-servers.md` I-PR6), so the banner is a label for the window
+   between sending and the first chunk, not a separate request with a
+   separate timeout.
 
 1. `context-full` — `snap.contextFull === true`. Per-draft dismiss
    (reappears next turn if still full); also exits via auto-clear when
@@ -1204,7 +1236,13 @@ returns exactly one of five variants in this precedence order:
 
 Hard invariants:
 
-- ONE banner visible at any time (resolver short-circuits).
+- ONE banner visible at any time (resolver short-circuits). `remote-waking`
+  is no exception: it resolves **inside** `resolveBannerVariant` like every
+  other variant, and `BannerRow` must not short-circuit ahead of the
+  resolver. A second decision site is how a one-banner rule breaks.
+- The resolver stays **pure**: it reads no live session state, so
+  `remoteWaking` arrives as one caller-computed boolean on
+  `BannerResolverInput` rather than as a store read.
 - `snap.contextFull === true` iff the most recent turn matches the OR
   predicate (`result.context_full` / `result.truncated` /
   `metadata.truncationLikely` / remote `finish_reason==='length'` /
@@ -1271,6 +1309,14 @@ meter whose width is the resolver's `used / effectiveNCtx` ratio (clamped
 See `pals-and-talents.md` §5a I8 for the `recommendedContextTokens`
 declarative hint that powers (a) the pal-load snackbar trigger and
 (b) the heavy-talent sub-copy on the `context-full` banner.
+
+Decisions (the `D-PR` series is shared with `remote-servers.md` §10b, which
+owns presence; these two continue it rather than starting a second one):
+
+| ID | Decision | Rationale |
+| --- | --- | --- |
+| D-PR12 | A sixth `BannerVariant` `remote-waking`, resolver branch 0, bypassing `dismissed`, not dismissible | It is the only variant about the in-flight request, and its first-message case has no snapshot to guard on. |
+| D-PR13 | `BannerResolverInput` gains one caller-computed boolean `remoteWaking` | Keeps the resolver pure; it reads no live session state. |
 
 ---
 
@@ -1388,6 +1434,80 @@ cycle stays consistent — `effortValues` stays typed `string[]`, but values
 outside that set are no longer user-enterable. Saving sets
 `source`/`effortSource` to `'user'` (top of precedence) and routes through
 `modelStore.setReasoningOverride` (remote → `ServerStore`, local → `Model`).
+
+---
+
+## 9n. Remote context accounting
+
+How many tokens a remote turn actually occupies, and how the banner reads a
+number it did not compute.
+
+**The repair.** `deriveSnapshotFromResult` builds `used` as
+`tokens_evaluated + tokens_predicted`, and for a remote turn `tokens_evaluated`
+is lifted from the finish chunk's `timings`. A llama.cpp server evaluates only
+the part of the prompt it did not already hold in its KV cache, so `prompt_n`
+alone under-counts a cache-reusing turn by the reused prefix — measured on a
+live server as `prompt_n = 1` against a true prompt of 18. The prompt term is
+therefore `timings.prompt_n + timings.cache_n` (remote-servers §8), each key
+guarded on its own, and the occupancy a finished turn reports is
+`prompt_n + cache_n + predicted_n`.
+
+The prompt term is also the gate: `used` is built only when
+`tokens_evaluated` is present, on either path. A finish chunk can carry a
+`timings` object of rate fields with no token counts at all, so the presence of
+that object says nothing about whether a count arrived — keying on it yields a
+predicted-only tally, which is not an occupancy number.
+
+**`undefined` is not `0`, and this is the rule the surface rests on.**
+`CompletionResultSnapshot.used` is `number | undefined`: absent means "we
+cannot say", and unknown must never render as zero. A build too old to report
+prompt-cache reuse omits `cache_n` entirely and degrades to the prior value,
+never below it, while a cold prompt on a build that does report reuse sends a
+real `0`. JSON distinguishes the two and the code does too.
+
+**Where the window comes from.** `BannerRow` / `resolveBannerVariant` read
+`modelStore.activeModelCaps.effectiveContextLength`, which is the local
+`activeContextSettings?.n_ctx` for a local model and the probed `/props` window
+for a remote one, and is absent rather than `0` when unknown. Four sites write
+`used`. The three catch paths in `useChatSession` pin it to the window and read
+that window through this one selector, so the banner cannot be fed a window
+from one source and a count from another. `deriveSnapshotFromResult` reads no
+window at all — it sums the turn's own token counts and takes no window
+parameter — so on the finished-turn path the window enters only where the
+banner resolves it.
+
+**Never infer that a server can count from anything else.** `/props`, `/slots`
+and the completion endpoint all long predate llama-server's prompt-token count
+endpoint, so a capability record populated from an older capability is no
+evidence about a newer one. This flow legitimately reads that record for
+`n_ctx`; extending it one field further would be a correct read used as a wrong
+signal. The same holds for a reachable server, a successful `/v1/models` fetch
+(not even auth-gated) and `/tokenize` (which skips the chat template).
+
+**The states the surface must keep apart.** They already exist in the variant
+vocabulary; none of them may render as a count of zero.
+
+| state | condition | renders |
+| --- | --- | --- |
+| server-counted | window known and `used` known | meter + `NN%` on `context-warning` / `context-full`, per §9f precedence |
+| no number | window known, `used` absent | no n_ctx branch; a remote turn that looks truncated still reaches `context-remote-hedged` |
+| no window | window absent — every non-llama.cpp server, and llama.cpp with no valid probe entry | no n_ctx branch; `context-remote-hedged` unchanged |
+| genuinely zero | `used === 0` | a real number: `0 %`, meter empty |
+| window-pinned | a catch path treated the turn as full and assigned the window itself as `used` | `100%`, meter full — a synthetic count, not a server-reported one |
+
+"Server-counted" is not the same claim as "exact": the number is exact only
+where the finish chunk carries `cache_n`. On an older build `used` is still
+server-sourced but under-counts by the reused prefix, which is the behaviour
+that already shipped.
+
+**Single writer.** `CompletionResult.tokens_evaluated` for a remote turn is
+written by `streamChatCompletion`'s final-result mapping and nowhere else;
+`CompletionResultSnapshot.used` by `deriveSnapshotFromResult` and the three
+catch paths. The gauge is llama.cpp-only by construction rather than by a gate —
+`effectiveContextLength` reads the probe tier alone and the probe is gated on
+`serverType === 'llama.cpp'` — so a non-llama.cpp server has no window and
+never renders a fraction. That is what "keep the local estimator as the
+fallback" amounts to: the pre-existing hedged behaviour, unchanged.
 
 ---
 

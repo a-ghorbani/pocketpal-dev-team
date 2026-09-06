@@ -411,5 +411,5 @@ reclaim before disk preflight. (I-DISK-TRUTH)
 - Not exhaustive coverage of every future ASR capability — language picker,
   Silero VAD, realtime partials, and the CoreML sidecar are deferred (§5).
 
-When this doc and the code disagree, the code wins; the same PR that lands the
-change must update this doc.
+When this doc and the code disagree, the code wins; the same round that lands
+the change must update this doc.

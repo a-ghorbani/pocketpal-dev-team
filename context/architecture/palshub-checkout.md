@@ -679,5 +679,5 @@ token-bound post-`owned` report), `src/components/PalsHub/PalDetailSheet/PalDeta
 `MainActivity.kt`/`MainApplication.kt` wiring, and the `host=checkout` manifest
 filter).
 
-When this doc and the code disagree, the code wins; the same PR that lands the
-change updates this file.
+When this doc and the code disagree, the code wins; the same round that lands
+the change updates this file.

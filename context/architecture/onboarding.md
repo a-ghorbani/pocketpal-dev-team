@@ -694,7 +694,7 @@ Stepper is exported from the DS barrel. Tree-shaking should remove it from the b
 
 **Cleanup reminders**:
 
-1. The new flow doc `context/architecture/onboarding.md` is promoted from this delta on the same PR that lands the code.
+1. The new flow doc `context/architecture/onboarding.md` is promoted from this delta in the same round that lands the code.
 2. Token paired-edits: `spacing.xxl = 40` (satisfied in dev-team commit `a448d3f`) and `colors.accent.peach` (Round-3 absorb). The I_UI8 cross-cite handshake applies: app PR cites the dev-team commit SHAs in its description; the dev-team commits cite the app PR URL.
 3. Once FOU-117 lands the real Homepage, this doc references it instead of "out of scope here".
 4. The `Stepper` DS component is subject to the same snapshot freeze contract (I_UI5) as every other DS component starting next slice.
