@@ -58,16 +58,22 @@ manual_cmd="gh image ${repo_args[*]} ${images[*]}   # then paste the markdown in
 
 # Honest degrade: verify a token works before uploading, so a tokenless headless
 # run reports a pending manual post rather than a half-finished comment.
-if ! gh image check-token ${repo_args[@]+"${repo_args[@]}"} >/dev/null 2>&1; then
+#
+# check-token takes NO --repo: passing one makes it exit non-zero with "--repo
+# cannot be combined with check-token", which this gate used to read as "no
+# token" and report as MANUAL_POST_REQUIRED on a perfectly valid session. The
+# stderr it printed said exactly that, and this line discarded it.
+probe_err="$(gh image check-token 2>&1 >/dev/null)" || {
   {
     echo "MANUAL_POST_REQUIRED: no valid GitHub session token for image upload."
+    echo "  gh image check-token said: ${probe_err:-(no output)}"
     echo "  Captures (local, NOT yet on PR #$pr):"
     printf '    - %s\n' "${images[@]}"
     echo "  Post manually once a token is available (GH_SESSION_TOKEN or a logged-in browser):"
     echo "    $manual_cmd"
   } >&2
   exit 3
-fi
+}
 
 refs="$(gh image ${repo_args[@]+"${repo_args[@]}"} "${images[@]}")" || {
   echo "MANUAL_POST_REQUIRED: gh image upload failed. Retry: $manual_cmd" >&2
