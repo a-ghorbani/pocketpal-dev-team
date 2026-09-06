@@ -33,7 +33,7 @@ If critical context is missing, state it explicitly.
 ## Review Principles
 
 1. Follow the risk first.
-2. Read beyond the diff — callers, callees, surrounding patterns.
+2. Read beyond the diff — callers, callees, surrounding patterns. In an observable-store architecture a store-only diff can move every screen that reads the store, so assign reviewers by the behaviour a change moves, not by the files it touches.
 3. Cite proof — code, contracts, tests, concrete failure modes.
 4. Skip minor style churn unless it affects safety, readability, or consistency.
 5. Separate confirmed defects from unproven verification.
@@ -104,6 +104,12 @@ The `local-invariants` role reviews changed lines for small contract breaks defi
 - **MobX patterns**: `observer`, `makeAutoObservable`, `runInAction` for async updates, computed getters, existing singleton/export conventions.
 - **Components**: preserve folder structure, TypeScript props, theming, and `testID` patterns for interactive elements.
 - **Commits**: commitlint allows `feat`, `fix`, `docs`, `chore` with `type(scope): subject`.
+- **Remote-server (llama-server) claims**: it returns `200` for unknown body keys, so a forwarded
+  parameter can ship and silently do nothing — verify against what the server reports it applied,
+  not against the request succeeding. Only a `404` is a fact about the build (`401` is credentials,
+  `400` this request, `500` this moment); none of the others may be cached as a capability. Every
+  wire fact carries the upstream build it was measured on. Wire fixtures are verbatim captures,
+  redacted for host-identifying paths but never reordered — some fields are positional.
 
 ## Severity
 
@@ -140,6 +146,9 @@ A finding that cannot survive a genuine refutation attempt must not ship as a `B
 2. Quote a small relevant snippet when it helps.
 3. Missing-test findings must cite the production code that lacks coverage.
 4. Mark inferences as inferences. Mark unrun checks as unrun.
+5. Name the revision reviewed. A review is a claim about a specific tree, and a record without one
+   does not look incomplete — it looks like a review.
+6. For fixture-backed findings, check the fixture's provenance, not just its presence.
 
 ## Verdict
 
