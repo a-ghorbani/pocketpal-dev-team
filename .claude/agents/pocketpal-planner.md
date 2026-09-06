@@ -36,7 +36,7 @@ Research informs steps. If you find a design gap, push upstream — do not redes
 
 Write `./workflows/stories/${TASK_ID}/how.md` using `templates/how-template.md`. Each step references a design-source section, lists file paths, gives ≤ 5-line approach, and names verification commands. Reference the design source — never restate it.
 
-For **standard / complex**, the final step absorbs the WHAT delta into `context/architecture/<flow>.md` in the same PR (converts (P)→(C), leaves (D), confirms zero (?)). For **quick**, no architecture update step; surface architecture-doc changes as a follow-up.
+For **standard / complex**, the final step absorbs the WHAT delta into `context/architecture/<flow>.md` in the same round (converts (P)→(C), leaves (D), confirms zero (?)). For **quick**, no architecture update step; surface architecture-doc changes as a follow-up.
 
 ## Plan exploration
 

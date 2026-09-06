@@ -94,7 +94,7 @@ Each Phase 1+ slice runs the dev-team pipeline (standard/complex) when picked up
   accessibility labels stable as a migration contract so the E2E pipeline survives.
 - **RTL + non-Latin** verified per slice, not deferred entirely to Phase 4.
 - **Light + dark** parity checked per slice (dark = the `3011:*` render).
-- Update the relevant `context/architecture/*.md` flow doc in the same PR as any
+- Update the relevant `context/architecture/*.md` flow doc in the same round as any
   behavior change (repo non-negotiable).
 
 ---

@@ -104,7 +104,7 @@ If steps are too coarse, that's a CONCERN — atomicity is what makes review tra
 
 ### 6. Architecture-doc update step (standard/complex only)
 
-For **standard / complex** tasks (WHAT exists), the HOW must include a step that absorbs the WHAT delta into `context/architecture/<flow>.md` IN THE SAME PR. Missing this step is a BLOCKER — without it, the architecture library drifts.
+For **standard / complex** tasks (WHAT exists), the HOW must include a step that absorbs the WHAT delta into `context/architecture/<flow>.md` IN THE SAME ROUND. Missing this step is a BLOCKER — without it, the architecture library drifts.
 
 For **quick** tasks (no WHAT), this step is **not required** — there is no delta to absorb. Conversely, if a quick HOW silently introduces an architecture-doc edit, that's suspicious: either the task should have been classified standard, or the doc edit doesn't belong here. Flag as `ARCHITECTURE_DRIFT`.
 

@@ -500,6 +500,27 @@ describe("ExampleStore", () => {
 
 ## Common Testing Mistakes to Avoid
 
+### 0. A mock method declared as a CLASS FIELD on a `makeAutoObservable` store is not a mock
+
+`makeAutoObservable` wraps class fields holding functions into **actions**. A `jest.fn()` assigned as
+a class field is therefore replaced at construction, so it **stops being a jest mock**: no test can
+steer it with `mockReturnValue` / `mockResolvedValue`, and calls are not recorded.
+
+```typescript
+class MockServerStore {
+  // WRONG - makeAutoObservable turns this into an action; the jest.fn() is gone
+  ensureActiveRemoteModelReady = jest.fn();
+
+  constructor() { makeAutoObservable(this); }
+}
+
+// RIGHT - declare it as a prototype method, or exclude it from the annotation:
+//   makeAutoObservable(this, { ensureActiveRemoteModelReady: false })
+```
+
+**This fails silently and disarms every test that touches the method, not one.** To catch it, delete
+the production code the mock is meant to exercise: if nothing fails, the mock is not wired.
+
 ### 1. Inline Store Mocking
 
 ```typescript

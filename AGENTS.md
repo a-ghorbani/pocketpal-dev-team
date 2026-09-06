@@ -14,7 +14,7 @@ These are the always-on invariants every agent must obey, regardless of role. Th
 - Never implement without the artefacts the complexity level requires (see Story gate).
 - Keep the four-stage pipeline intact: **Intent → WHAT → HOW → Implementation** — implementation and independent review must never collapse into the same role. The orchestrator runs the pipeline autonomously (no interactive prompt between stages); the exact stop conditions are in `docs/workflows/pipeline.md`.
 - `NATIVE_CHANGES=YES` requires `pod install` + iOS build + Android build before the work can be called ready.
-- Every PR that changes behaviour described in `context/architecture/*.md` must update the relevant doc **in the same PR**. Drift is forbidden.
+- Every PR that changes behaviour described in `context/architecture/*.md` must update the relevant doc **in the same round**. Drift is forbidden.
 - Every PR that changes visible UI must carry durable visual evidence posted to the PR. The trigger, ownership, and posting mechanism are in **[`docs/workflows/visual-capture.md`](docs/workflows/visual-capture.md)**.
 - **Issue tracking & routing:** see `context/issue-tracking.md` for how a work reference resolves to its tracker, and the internal-ID hygiene rule.
 - **Public artifacts hygiene.** In GitHub artifacts (PR title/body/comment, issue, commit message) and in `repos/pocketpal-ai/` source/tests/configs, reference only public things — public GitHub issues/PRs, file paths, library names. No internal tracker IDs (see `context/issue-tracking.md`), no `linear.app`, no internal task IDs, no story-doc anchors (`I_DSn`, `Dn`, `§4x`, `Scenario X`, `WHAT/HOW`, `round N`). Source comments stay terse — current state, not the story.
@@ -47,7 +47,7 @@ Implementation requires the artefacts the complexity level mandates. Trivial: `i
 `context/architecture/` holds the cumulative architecture truth, one file per flow. See `context/architecture/README.md` for the lifecycle.
 
 - Standard / complex stories produce `what.md` as a **delta** on the relevant flow doc.
-- The implementer absorbs the approved delta into the flow doc in the **same PR** that lands the code (a step in `how.md`).
+- The implementer absorbs the approved delta into the flow doc in the same round that lands the code (a step in `how.md`).
 - Drift is treated as a bug. The architect runs a drift check at the start of every standard / complex story.
 
 ### Native verification
@@ -75,6 +75,14 @@ Two consequences worth stating explicitly, because they are where this usually g
 - **Nothing about the task belongs in source.** No "we hit X", no round numbers, no story anchors. Source describes the current state; the reasoning lives in the story and the architecture docs. (This overlaps Public artifacts hygiene above — same rule, different failure mode.)
 
 Reviewers: flag over-commenting as a finding, and say **which of the four** it is. "Too many comments" is not actionable; "this is case 2, the function needs splitting" is.
+
+### Concurrent lanes share one control plane
+
+This repo is a **single checkout on `main`** — `worktrees/` are of the *app* repo — so lanes running in parallel share one copy of every file under `context/architecture/`. The failure mode is a lost update, not a merge conflict: last writer wins silently and the diff looks clean. Check `git status --porcelain -- context/architecture/` before editing (a foreign modification means stop), then commit the absorption immediately and path-scoped (`git commit -- <file>`, never `add -A`).
+
+`workflows/stories/*` and `workflows/reviews/*` are gitignored, so a story doc, capture directory or wire-verification file exists only on the machine that wrote it. A PR body citing such a path cites something the reviewer cannot open — put the content inline instead.
+
+An agent can only arm a mechanism that outlives it. Reporting *"I will do X when the build finishes"* and then exiting arms nothing, and the failure is silent: no artefact, no error, no log line.
 
 ### Secrets, config, cleanup
 

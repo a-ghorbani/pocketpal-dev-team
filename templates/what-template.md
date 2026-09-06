@@ -1,6 +1,6 @@
 # <Flow name> — WHAT
 
-Story-scoped delta on `context/architecture/<flow>.md`. On promotion, the delta absorbs into that doc in the same PR.
+Story-scoped delta on `context/architecture/<flow>.md`. On promotion, the delta absorbs into that doc in the same round.
 
 **Conventions**: `(C)` current (verified from code), `(P)` proposal, `(?)` open question (zero allowed at LGTM), `(D)` decision with ≤ 12-word rationale.
 
@@ -72,6 +72,10 @@ Wire format / API and how it maps to ours.
 | State | User-visible feedback |
 | --- | --- |
 | `<state>` | <one line> |
+
+Enumerate states from the dependency's **actual** surface — its type, enum or docs — not from your
+own list of what they probably are, and check whether what you are treating as one axis is really
+two. Several states collapsing to one outcome is a decision; a state with no row is a hole.
 
 ---
 
