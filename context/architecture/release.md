@@ -40,8 +40,7 @@ AssetRequirement
 
 SymbolRule
   lib: string
-  mustExport: string[]                  // exact .dynsym names — the correctness rule
-  expectedMatchCount: {pattern, count}  // drift tripwire, not the correctness rule
+  mustExport: string[]            // exact .dynsym names — the whole of the rule
 ```
 
 Persisted: the manifest, in the app repo. Derived: the variant allowlist (§4b). (C)
@@ -189,19 +188,16 @@ named above (§4f).
 Required exported symbols, `arm64-v8a` / `librnllama_v8_2_dotprod_i8mm_hexagon_opencl.so`:
 
 - `lm_ggml_backend_hexagon_reg` and `lm_ggml_backend_is_hexagon` **must** be defined in `.dynsym`.
-  These are the correctness rule.
-- The count of `.dynsym` entries matching `hexagon` is declared as `16` **at llama.rn 0.13.0-rc.1**
-  and is a **drift tripwire**: a change fails the gate and must be consciously re-declared in the same
-  PR that causes it. The count is a **version-scoped baseline**, not an invariant — the symbol surface
-  tracks llama.cpp, so a routine sync may legitimately move it, and only the two named symbols above
-  assert behaviour. A count that changes to some other non-zero N with both names still defined is a
-  re-baseline event, resolved by editing `expectedMatchCount` to N in the same PR (§6 E); a count of
-  zero, or a missing name, is an I2 breach and is never re-declared.
+  These are the whole of the rule. `mustExport` requires the names to be **defined**
+  (`st_shndx != SHN_UNDEF`); an undefined import proves only that something references the symbol.
 
-**Matching convention, pinned in the manifest.** `expectedMatchCount` counts every `.dynsym` entry
-containing the pattern, case-insensitively, undefined imports included — the convention of
-`llvm-nm -D | grep -ci`, which is how the number was measured. `mustExport` instead requires the names
-to be **defined** (`st_shndx != SHN_UNDEF`); an undefined import would prove nothing.
+**No count is declared, and none is checked (D7).** A `hexagon`-matching `.dynsym` count was declared
+until 0.13.0-rc.3 as a drift tripwire. It asserted no capability: against the regression it was built
+for, `mustExport` fails on its own — both names were absent in the no-SDK run — and every other layer
+(SDK digests, build mode, allowlist, libraries, assets) is independent of it. What it detected was
+*change*, whose only available remedy was re-declaring the number, so an upgrade that legitimately grew
+the surface was indistinguishable from one that shrank it, and both were resolved by editing the
+number. It was removed rather than re-baselined at rc.3.
 
 **The allowlist is the manifest.** `ORG_GRADLE_PROJECT_rnllamaVariants` is derived at build time by
 `verify-android-payload.js --print-variants`: required libraries, wrappers dropped, `lib`/`.so` stripped,
@@ -266,7 +262,7 @@ exactly why its absence is silent and needs an artifact-level assertion.
    | `abis` | non-empty |
    | `requiredLibs` | non-empty, per ABI |
    | `requiredSymbols` | at least one rule overall; and for any ABI declaring a `_hexagon` library, at least one rule **whose `lib` is that accelerator library itself** — not merely a rule, and not its JNI wrapper, whose name also contains `_hexagon` but which is a shim exporting stable `Java_*` entry points and none of the backend symbols |
-   | each symbol rule | `mustExport` non-empty, **or** an `expectedMatchCount` with a non-empty `pattern` and `count > 0` |
+   | each symbol rule | `mustExport` present, a list, and non-empty — the only way a rule can demand anything |
    | `nativeLibsMappedInPlace` | must be exactly `true`. It records that the platform maps libraries out of the APK, which is what makes both the offset rule and the stored requirement apply; `false` would retire them both in one word |
    | `assets` | the block must exist |
    | `abis[].requiredAssets` / `requiredAssetElfMachine` | **refused.** Nothing reads them since the assets moved to the top-level block, and a key nothing reads is worse than a missing one: an editor working from the old shape declares assets, is never told they are ignored, and gets a green gate. The base version's shape guard went away with the key it guarded, so even `requiredAssets: "not even a list"` passed |
@@ -289,8 +285,8 @@ exactly why its absence is silent and needs an artifact-level assertion.
    **Ground truth for why the symbol rule carries so much weight:** the APK that shipped the
    regression contains **all 12 declared libraries and all 4 DSP assets**. Every other rule in the
    manifest passes on it. The symbol rule is the only load-bearing assertion, which is why each way of
-   quietly disarming it — asserting nothing, demanding a count of zero, or pointing the rule at a
-   different library — mattered more than it looked. The report prints the `assets:` row once per
+   quietly disarming it — emptying `mustExport`, or pointing the rule at a different library —
+   mattered more than it looked. The report prints the `assets:` row once per
    artifact, and a per-ABI usability row beside it — the summary line claims assets were checked, so
    what was checked has to be visible in the evidence rather than inferred from a pass.
 
@@ -904,7 +900,7 @@ Past pain: the regression itself — three independent silent-degrade paths and 
 ubuntu-latest, mode=from-source, SDK provisioned, allowlist = manifest set
 ─────
 artifact holds 12 arm64 + 4 x86_64 rnllama libraries + 4 DSP assets;
-hexagon variant defines both named symbols, 16 hexagon .dynsym matches (llama.rn 0.13.0-rc.1);
+hexagon variant defines both named symbols;
 gate passes; upload proceeds
 ```
 
@@ -912,7 +908,7 @@ gate passes; upload proceeds
 ```
 mode=from-source, HEXAGON_SDK_ROOT unset
 ─────
-build succeeds with a CMake warning; hexagon .dynsym matches = 0
+build succeeds with a CMake warning; neither named symbol is defined
 gate fails on I2; nothing is uploaded
 ```
 
@@ -933,10 +929,10 @@ gate passes on I1/I2; extra variants reported, not failed
 
 ### E. llama.rn upgrade changes the symbol surface
 ```
-new llama.rn version, hexagon .dynsym matches = 18
+new llama.rn version, hexagon symbol surface grows or shrinks
 ─────
-named symbols still present; count tripwire fails
-manifest re-declared to 18 in the same PR, with the diff visible in review
+named symbols still defined; gate passes, manifest untouched
+the surface is upstream's to change; only the two names are ours
 ```
 
 **What an upgrade actually has to re-derive.** Three things move independently and must not be conflated
@@ -946,9 +942,9 @@ version it was taken on, or re-taken. A number measured from a llama.rn build al
 Version-independent constants — `EM_QDSP6` = 164, the 16384 alignment floor, ABI names, exit codes, the
 seven-variant ladder — are declarations, not measurements, and carry no version.
 
-The `.dynsym` count is legitimate only from a from-source build with the Hexagon SDK provisioned. A host
-without it lands in scenario B and reads 0 matches; that zero is compile health, never a re-baseline
-source, and it is never written into the manifest.
+A `.dynsym` reading is legitimate only from a from-source build with the Hexagon SDK provisioned. A host
+without it lands in scenario B and finds neither name defined; that absence is compile health, and no
+reading taken on such a host may be written into the manifest.
 
 **The qualifying condition is the SDK, not the runner — a macOS host is not excluded.** Measured at this
 bump: with the SDK extracted to `~/.hexagon-sdk/6.4.0.2` (llama.rn's own default probe path), a local
@@ -1111,7 +1107,7 @@ R2 fails on each; a skipped, suppressed or piped gate would keep R1a green
 | D4 | Drop `rnllama_v8_2_i8mm` only, as a named bet | No shipping SoC reports i8mm without dotprod |
 | D5 | `rnllama` is mandatory in every ABI's list | `System.loadLibrary("rnllama")` runs unconditionally |
 | D6 | Requirement lives in a committed manifest with one gate | One declaration, every workflow, runnable locally |
-| D7 | Named `.dynsym` symbols are the rule; the count is a tripwire | Names prove behaviour; count catches silent upgrade drift |
+| D7 | Named `.dynsym` symbols are the whole rule; no count is declared | Names prove behaviour. The count asserted no capability — `mustExport` catches the regression alone — and detected only change, with re-declaring the number as its sole remedy (superseded D27) |
 | D8 | iOS is out of scope | Its from-source path excludes hexagon/opencl outright (`llama-rn.podspec:37`) |
 | D9 | Commit-pinning a llama.rn git ref deferred to its own story | Git installs lack DSP, OpenCL, jniLibs and `lib/` artifacts |
 | D10 | Declare the build mode; delete the root `gradle.properties` knob | Measured inert; detection is inference where declaration is available |
@@ -1131,7 +1127,7 @@ R2 fails on each; a skipped, suppressed or piped gate would keep R1a green
 | D24 | Ordering is checked as order **and** path identity | An ordered gate that examined other bytes proves nothing |
 | D25 | Both exemption surfaces need a reason plus a checked assertion | An asserted exemption is the hole the payload work kept finding |
 | D26 | The x86_64 asset exclusion is refused, not deferred silently | Measured impossible; the alternatives cost more than the 1.2% at stake |
-| D27 | `expectedMatchCount` is a version-scoped baseline, not an invariant | Symbol surface tracks llama.cpp; only the named symbols prove behaviour |
+| D27 | ~~`expectedMatchCount` is a version-scoped baseline, not an invariant~~ **Superseded at 0.13.0-rc.3 by D7:** removed, not re-baselined | A measurement that proved one incident is not an invariant upstream owes us. It was frozen from a diagnostic on the strength of reading 16 twice, and rc.3 was the first sync to move it |
 | D28 | The baseline is measured only on a from-source build with the SDK provisioned | The SDK is the condition, not the runner (§1b); CI is the guaranteed such host |
 | D29 | Provenance is a printed report line, not an asserted manifest stamp | A re-typed version proves nothing and would red every correct bump |
 
@@ -1209,7 +1205,7 @@ second, larger build pipeline. That is a scope boundary, not a preference.
 | 9b | SDK present, QAIC `htp/v73` artifacts missing | CMake `FATAL_ERROR`; build fails loudly (relevant only under D9) |
 | 9c | `node_modules` restored from cache without llama.rn's postinstall | Hits the **escape hatch**, not from-source. Missing `jniLibs` makes `android/src/main/CMakeLists.txt:52-58` log "Skipping … no prebuilt" and drop variants silently — caught by I1. From-source is immune, and the DSP assets are safe either way: `bin/` is tarball content |
 | 9d | Emergency lever in use | I1 satisfied as a superset, I2 holds; extras reported |
-| 9e | Hexagon symbol count changes on upgrade | Tripwire fails; re-declared in the same PR (scenario E) |
+| 9e | Hexagon symbol surface changes on upgrade | Nothing fails; the named symbols are what is asserted (scenario E) |
 | 9f | Translation-only PR | `build-android` is skipped, so no artifact and no gate; the release workflow's gate is the backstop |
 | 9g | Gate cannot read the artifact | Fails on I4 — never passes by absence |
 | 9h | Upstream later flips `rnllamaBuildFromSource` to `false` | Our declaration wins, so nothing changes silently; switching becomes a deliberate one-line edit |
