@@ -107,6 +107,16 @@ rendering it would be net-new behaviour plus a new persisted field. (D)
 
 ---
 
+## Android device selection
+
+The existing device control uses `getDeviceOptions()` and keeps its labels, experimental Hexagon status, GPU-layer control and flash constraints. Its Android Hexagon option contains one exact name: the first usable discovered HTP device in runtime enumeration order, excluding wildcard names, with matching `deviceInfo`. Discovery returning no usable HTP device, or rejecting, omits Hexagon while preserving CPU. CPU/OpenCL/iOS options retain their prior semantics. (C)
+
+Saved wildcard and exact names beginning with `HTP` continue to classify as the same Hexagon option; there is no session picker. Selecting that option writes its single discovered name through `ModelStore.setDevices`. Runtime fallback does not rewrite or relabel persisted intent: `model-loading.md` owns read-only effective resolution and explicit CPU/zero-layer fallback on each HTP-requesting load. Flash settings remain governed by the existing selection handler, and load resolution does not change them. (C)
+
+This behavior belongs to the device control wherever that branch places it. The PR #901 baseline retains the monolithic `SettingsScreen`; the cumulative launcher/Preferences placement described here remains independent of device selection. (D)
+
+---
+
 ## 2. Navigation contract
 
 - Two pushed routes are siblings of the existing pushed routes on the root
