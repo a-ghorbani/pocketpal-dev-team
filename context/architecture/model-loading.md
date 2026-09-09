@@ -66,6 +66,16 @@ Remote model cards are expandable too, and their expanded block is **server-sour
 
 **Crash-loop guard (do not regress).** A failed load sets `modelLoadError` exactly once and **rethrows without auto-retrying**. There is **no** auto-reload on failure and **no** snackbar Retry. Retry is **user-initiated only**: re-tap the card primary `load-button`, or Chat `ModelNotLoadedMessage` Load (both route back through `selectModel` → `initContext`). Metadata/details fetches keep swallowing failures and returning. No UI path may auto-call `selectModel`/`initContext` on failure. (Regression-gated by a `ModelStore` unit test asserting the failure path sets the error once and calls `initLlama` once.)
 
+## Android Hexagon device resolution
+
+`getEffectiveContextInitParams` resolves any Android selection containing an `HTP` prefix before the existing single `initLlama` call. `utils/deviceSelection.ts` shares the canonical choice with Settings and the benchmark: the first discovered nonempty HTP runtime name without wildcard characters, preserving native enumeration order and the exact name. Legacy `['HTP*']`, stale exact names, multiple sessions, and mixed-backend selections all resolve to that one device. A runtime exposing only `HTP3` selects `HTP3`; no session number is constructed. (C)
+
+The effective parameter object owns a copied device list and its matching GPU-layer value before asynchronous discovery. A Settings edit during discovery cannot combine an old device choice with new GPU layers. Successful resolution preserves the effective layer count, including zero, and unrelated flash/cache/speculative settings. Missing or rejected discovery emits explicit `devices: ['CPU']` and `n_gpu_layers: 0`; undefined would permit automatic offload. CPU/OpenCL and all iOS selections bypass this additional discovery. (C)
+
+Resolution never writes persisted preferences or performs a migration. A temporary CPU fallback retains HTP intent and the original GPU-layer preference, so the next user-initiated load can recover. Discovery failure does not itself fail the load; a native initialization failure retains the existing error lifecycle and never triggers automatic retry. (C)
+
+Single-session selection avoids requesting the multi-session HTP pipeline whose compute buffers can amplify memory demand. It adds no pipeline flags, native patches, or flash-policy changes. Native device-registry discovery alone does not establish which sessions actually execute a model; native initialization arguments and model/compute allocation logs provide that evidence. (D)
+
 ## Speculative decoding / draft model (MTP)
 
 Speculative decoding is a global, opt-in extension of the model-load contract. It runs through the **same** `initContext` → `proceedWithInitialization` → `initLlama` path; it adds no new native-load entry point. (Consumes the published **llama.rn@0.13.0-rc.1** — 0.12.5 first shipped the b9769 / PR #355 MTP support; 0.12.7 added the speculative-correct blocking-path timings the gen-rate display relies on, and 0.13.0-rc.1 carries them forward unchanged — as a normal prebuilt registry dependency; see the build note below.)
