@@ -242,6 +242,10 @@ composeCellParams({filePath, base: benchBase, overrides, devices, n_gpu_layers})
 
 Pure: object-spread `overrides` over `benchBase`, add `{model: filePath, devices, n_gpu_layers}`. `benchBase` is `DEFAULT_BENCH_BASE_PARAMS` with `n_threads` resolved once at run start from `getRecommendedThreadCount()`. `use_mmap: 'smart'` resolves to a platform-default boolean inside this helper, so `init_settings` and the fingerprint reflect the resolved value. There is no `restoreSettingsSnapshot`: the runner never writes to `contextInitParams`.
 
+Hexagon discovery runs through the same canonical selector as Settings and normal loading, once at matrix start via `getDeviceOptions()`. It neither reads nor writes persisted device preferences. Missing or rejected discovery omits the Hexagon option, so a requested Hexagon cell fails before initialization and the matrix continues; it must never silently measure CPU. Normal chat's explicit CPU fallback is a separate load-boundary policy. (C)
+
+Flash-ON benchmark axes and effective-backend validation remain independent of the Settings control's flash policy. `effective_init_params` records the full native device/layer arguments, while `init_settings` retains only fingerprint knobs. Multiple registered HTP sessions do not prove multi-session model execution; compare full arguments and actual model/compute allocation logs. No report-schema change is needed. (C)
+
 ### 4d. Settings fingerprint contract
 
 Derived from the **composed cell params snapshot** (post-`composeCellParams`, pre-`initLlama`). Captured before `initLlama` so a post-init throw still produces a standard (non-`req:`) fingerprint. The composed dict is the only source of truth for what the cell ran.
@@ -329,7 +333,7 @@ The bench bypasses `modelStore.setX` setters entirely; `composeCellParams` does 
 
 **C. Hexagon on a non-Hexagon device (Klee).** `cpu` cells run normally. `hexagon` cells fail at the pre-check with `status:'failed'`, `error:'Hexagon device not available'`, `effective_backend:'unknown'`, `settings_fingerprint:'app-default'` (per I2/D7 when no axes set). Matrix completes; the per-row pass gate surfaces the failures.
 
-**D. Hexagon on a POCO-class device (Adreno + HTP).** `getDeviceOptions()` returns `HTP*` devices. Native log capture observes `hexagon_init=true`; `deriveEffectiveBackend` returns `'hexagon'` or `'cpu+hexagon-partial'` based on the offloaded-layer count.
+**D. Hexagon on a POCO-class device (Adreno + HTP).** `getDeviceOptions()` selects the first discovered exact HTP name in native enumeration order, excluding wildcard names. Six sessions `HTP0`…`HTP5` select only `HTP0`; a device exposing only `HTP3` selects `HTP3`. The cell passes that single name and `n_gpu_layers: 99` to native initialization. Native log capture observes `hexagon_init=true`; `deriveEffectiveBackend` returns `'hexagon'` or `'cpu+hexagon-partial'` based on the offloaded-layer count.
 
 **E. Pre-compose failure (download timeout).** `postInitSnapshot` is null. The catch path builds the fingerprint from `preRunSnapshot ⊕ requestedOverrides` and prefixes `req:` (per 9c). `init_settings` is `{}`; `settings_overrides` carries the requested map.
 
