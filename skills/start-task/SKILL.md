@@ -5,104 +5,49 @@ user-invocable: true
 argument-hint: "[work reference or description]"
 ---
 
-# Start Task Workflow
+# Start Task
 
-You are the top-level delivery controller for a new PocketPal AI task. This skill owns the orchestration and invokes stage agents directly from the current session.
+You are the top-level delivery controller for one PocketPal task. You dispatch every stage role yourself and route between them. Read [`docs/workflows/pipeline.md`](../../docs/workflows/pipeline.md) first; it holds the dispatch mechanics, the handoff block, the routing table, the stop conditions, and the critic-loop rules.
 
-**Read [`docs/workflows/pipeline.md`](../../docs/workflows/pipeline.md) before orchestrating** — the full runbook: autonomous-run stop conditions, pipeline shape per complexity level, stage handoffs, critic-loop semantics, exploration policy, and the independent-review loop. The summary below is a quick index, not a substitute.
+Task: $ARGUMENTS (if that placeholder is not substituted, the task is the argument the user gave with the invocation).
 
-## Input
+## 1. Resolve the reference
 
-Task: $ARGUMENTS
+Resolve the reference by its shape, per [`context/issue-tracking.md`](../../context/issue-tracking.md):
 
-## Determine input type — resolve the reference
+- **GitHub issue** (`#123`): `gh issue view <n> --repo a-ghorbani/pocketpal-ai --json title,body,labels`.
+- **Plane** (`POC-123`, …): `./tools/plane show <ref>`.
+- **Linear** (`FOU-123`, legacy): `./tools/linear.sh issues`, then match the identifier.
+- **Anything else**: a free-form description.
 
-Resolve the reference per **[`context/issue-tracking.md`](../../context/issue-tracking.md)**, which lists each reference shape, its tracker, and how to fetch it. Then hand off to `pocketpal-intake` with a `Source:` + `Tracker ID:` tag. Internal tracker IDs must never appear in public GitHub artifacts.
+## 2. Dispatch intake with a self-contained brief
 
-## For GitHub Issue (e.g., #123)
-
-First, fetch the issue details:
-
-```bash
-gh issue view [number] --repo pocketpal-ai/pocketpal-ai --json title,body,labels,assignees
-```
-
-Then invoke `pocketpal-intake` with a self-contained brief built from the issue context:
-
-```
-Use pocketpal-intake: [title from gh]
+```text
+Use pocketpal-intake: <title>
 
 Request:
-[paste the issue body verbatim so the brief stands alone]
+<the issue / work-item body verbatim, or the description>
 
 Metadata:
-- Source: github
-- GitHub issue: #[number]
-- Labels: [labels from gh]
+- Source: github | plane | linear | description
+- GitHub issue: #<n>             # github only
+- Tracker ID: <identifier>       # internal: keep out of every public GitHub artifact
+- Labels / Priority / Status: <from the tracker, when present>
 
 Repository: ./repos/pocketpal-ai
 ```
 
-## For an internal-tracker reference
+## 3. Run the pipeline
 
-Fetch the work item with its tracker's tool:
+From here on, route on each stage's `VERDICT` using the routing table in `pipeline.md`. Pass the latest handoff block verbatim to each role. Critics get paths only, never the producer's reasoning.
 
-- Plane: `./tools/plane show <ref>`
-- Linear (legacy): `./tools/linear.sh issues`, then match the identifier
+Once the pipeline-reviewer returns `APPROVED` with a `PR`:
 
-Extract the title, priority, status, description, and identifier from the output. Then invoke `pocketpal-intake` with a self-contained brief — mirror the GitHub handoff structure so the brief stands alone:
+1. Run the independent review: the `review-pr` skill on that PR. Read `workflows/reviews/PR-<n>/round-<R>/final.md`.
+2. If the verdict is `REQUEST_CHANGES`:
+   - write `<STORY_DIR>/review-feedback-round-<R>.md` from `templates/review-feedback-template.md`, where only BLOCKER and CONCERN findings are fix scope;
+   - dispatch intake with that artifact and `PR #<n>` for the PR-fix loop;
+   - run the pipeline again, then the review again.
+3. Allow at most 2 review/fix rounds, then escalate.
 
-```
-Use pocketpal-intake: [title from tracker]
-
-Request:
-[paste the work-item description verbatim so the brief stands alone]
-
-Metadata:
-- Source: plane          # or: linear
-- Tracker ID: [identifier]   # internal ID — keep out of public GitHub artifacts (PR title/body/comments, commits)
-- Priority: [priority from tracker]
-- Status: [status from tracker]
-
-Repository: ./repos/pocketpal-ai
-```
-
-## For Description
-
-Invoke `pocketpal-intake` directly:
-
-```
-Use pocketpal-intake: $ARGUMENTS
-
-Repository: ./repos/pocketpal-ai
-```
-
-## What Happens Next
-
-As the top-level session, continue the workflow after each stage returns:
-
-1. Invoke `pocketpal-intake`.
-2. Let the implementation pipeline run through the selected path:
-   - trivial: Intent → Implementer
-   - quick: Intent → Planner → Plan-Critic → Implementer
-   - standard / complex: Intent → optional design exploration → WHAT → Architect-Critic → optional plan exploration → HOW → Plan-Critic → Implementer
-3. Run tester and `pocketpal-pipeline-reviewer`.
-4. Open or locate the draft PR when the pipeline approves.
-5. Invoke the independent review pipeline with `/review-pr <PR>`.
-6. Read `workflows/reviews/PR-<N>/round-<R>/final.md`.
-7. If review returns `REQUEST_CHANGES`, create `workflows/stories/<TASK-ID>/review-feedback-round-<R>.md` from `templates/review-feedback-template.md`.
-8. Route mandatory `BLOCKER` and `CONCERN` findings through the PR-fix pipeline by invoking `pocketpal-intake` with the feedback artifact.
-9. Repeat independent review after fixes, max 2 external review/fix rounds.
-
-Human involvement is required when `NEEDS_INPUT`, `ESCALATE`, incomplete required review artifacts, failed mandatory verification, or persistent blockers/concerns after the allowed rounds occur.
-
-## Workflow
-
-```
-/start-task
-  → implementation pipeline
-  → draft PR
-  → independent review pipeline
-  → feedback intake + PR-fix loop if needed
-  → APPROVE / ESCALATE
-```
+Stop only on the conditions listed under "Autonomous-run contract" in `pipeline.md`. Otherwise finish with `APPROVE`, and the human reviews and merges.
