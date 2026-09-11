@@ -1,5 +1,7 @@
 # Agent roles
 
-One file per role: `agents/<name>.md`, frontmatter `name` + `description`, body = the role's instructions. These are the only files to edit.
+One file per role: `agents/<name>.md`. It is the only copy, so edit it directly.
 
-`tools/sync-harness.py` generates the per-harness copies (`.claude/agents/`, `.codex/agents/*.toml`, `.opencode/agents/`). Keep harness-specific keys (tools, models, permissions) out of these sources; the generator adds them.
+Its frontmatter carries every harness's keys: `name`, `description`, `disallowedTools` (Claude Code), and `mode` / `permission` (opencode). Each harness ignores the others' keys. `.claude/agents/` and `.opencode/agents/` are symlinks to these files. Codex reads only TOML, so `.codex/agents/<name>.toml` is a stub that tells Codex to read this file.
+
+Run `tools/sync-harness.py` after adding, renaming, or removing a role, or after changing its description.

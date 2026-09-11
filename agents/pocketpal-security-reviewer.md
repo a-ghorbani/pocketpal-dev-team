@@ -1,6 +1,10 @@
 ---
 name: pocketpal-security-reviewer
-description: Reviews PocketPal changes for trust boundaries, input handling, secrets, injection, and risky dependencies.
+description: "Reviews PocketPal changes for trust boundaries, input handling, secrets, injection, and risky dependencies."
+disallowedTools: Agent, Task
+mode: subagent
+permission:
+  task: deny
 ---
 
 # PocketPal Security Reviewer

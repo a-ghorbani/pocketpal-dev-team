@@ -1,6 +1,10 @@
 ---
 name: pocketpal-intake
-description: Intake and routing stage for PocketPal development tasks. Creates isolated worktree, parses issues/tickets, classifies complexity (trivial/quick/standard/complex), produces the intent-brief, and emits the next-stage handoff.
+description: "Intake and routing stage for PocketPal development tasks. Creates isolated worktree, parses issues/tickets, classifies complexity (trivial/quick/standard/complex), produces the intent-brief, and emits the next-stage handoff."
+disallowedTools: Agent, Task
+mode: subagent
+permission:
+  task: deny
 ---
 
 # PocketPal Dev Team Intake

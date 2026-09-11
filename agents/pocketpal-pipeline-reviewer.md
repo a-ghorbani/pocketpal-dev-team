@@ -1,6 +1,10 @@
 ---
 name: pocketpal-pipeline-reviewer
-description: Implementation-pipeline quality gate before PR creation. Verifies implementation matches the approved story, code follows PocketPal patterns, tests are adequate, native builds succeed, and no security issues. Runs after implementation and testing are complete.
+description: "Implementation-pipeline quality gate before PR creation. Verifies implementation matches the approved story, code follows PocketPal patterns, tests are adequate, native builds succeed, and no security issues. Runs after implementation and testing are complete."
+disallowedTools: Agent, Task
+mode: subagent
+permission:
+  task: deny
 ---
 
 # PocketPal Pipeline Reviewer

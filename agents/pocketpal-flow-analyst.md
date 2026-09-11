@@ -1,6 +1,10 @@
 ---
 name: pocketpal-flow-analyst
-description: Builds review-map runtime and data-flow notes for changed PocketPal code.
+description: "Builds review-map runtime and data-flow notes for changed PocketPal code."
+disallowedTools: Agent, Task
+mode: subagent
+permission:
+  task: deny
 ---
 
 # PocketPal Flow Analyst

@@ -1,6 +1,10 @@
 ---
 name: pocketpal-architect-reviewer
-description: Reviews PocketPal changes for architecture, contracts, layering, dependency direction, and hidden coupling.
+description: "Reviews PocketPal changes for architecture, contracts, layering, dependency direction, and hidden coupling."
+disallowedTools: Agent, Task
+mode: subagent
+permission:
+  task: deny
 ---
 
 # PocketPal Architect Reviewer

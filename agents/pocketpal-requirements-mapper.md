@@ -1,6 +1,10 @@
 ---
 name: pocketpal-requirements-mapper
-description: Maps story, PR, and acceptance criteria requirements to changed files and verification needs.
+description: "Maps story, PR, and acceptance criteria requirements to changed files and verification needs."
+disallowedTools: Agent, Task
+mode: subagent
+permission:
+  task: deny
 ---
 
 # PocketPal Requirements Mapper

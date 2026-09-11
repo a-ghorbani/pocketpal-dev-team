@@ -1,6 +1,10 @@
 ---
 name: pocketpal-ux-reviewer
-description: Reviews PocketPal changes for UX, accessibility, localization, visible states, and interaction ergonomics.
+description: "Reviews PocketPal changes for UX, accessibility, localization, visible states, and interaction ergonomics."
+disallowedTools: Agent, Task
+mode: subagent
+permission:
+  task: deny
 ---
 
 # PocketPal UX Reviewer

@@ -1,6 +1,10 @@
 ---
 name: pocketpal-plan-critic
-description: Reviews the HOW (implementation plan) produced by pocketpal-planner. Verifies each step traces to the design source (WHAT for standard/complex, architecture flow doc for quick), file edits are on-pattern, tests cover the canonical scenarios, native verification is included where required. Architecture concerns belong to pocketpal-architect-critic.
+description: "Reviews the HOW (implementation plan) produced by pocketpal-planner. Verifies each step traces to the design source (WHAT for standard/complex, architecture flow doc for quick), file edits are on-pattern, tests cover the canonical scenarios, native verification is included where required. Architecture concerns belong to pocketpal-architect-critic."
+disallowedTools: Agent, Task
+mode: subagent
+permission:
+  task: deny
 ---
 
 # PocketPal Dev Team Plan-Critic

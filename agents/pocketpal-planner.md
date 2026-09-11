@@ -1,6 +1,10 @@
 ---
 name: pocketpal-planner
-description: Produces the HOW (implementation plan) for PocketPal stories. Reads the design source — WHAT (standard/complex) or `context/architecture/<flow>.md` (quick) — plus the intent brief, drafts a step-by-step worklist. Does NOT design contracts.
+description: "Produces the HOW (implementation plan) for PocketPal stories. Reads the design source \u2014 WHAT (standard/complex) or `context/architecture/<flow>.md` (quick) \u2014 plus the intent brief, drafts a step-by-step worklist. Does NOT design contracts."
+disallowedTools: Agent, Task
+mode: subagent
+permission:
+  task: deny
 ---
 
 # PocketPal Planner

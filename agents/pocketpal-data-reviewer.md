@@ -1,6 +1,10 @@
 ---
 name: pocketpal-data-reviewer
-description: Reviews PocketPal changes for persistence, schema migrations, clearing semantics, and backward compatibility.
+description: "Reviews PocketPal changes for persistence, schema migrations, clearing semantics, and backward compatibility."
+disallowedTools: Agent, Task
+mode: subagent
+permission:
+  task: deny
 ---
 
 # PocketPal Data Reviewer

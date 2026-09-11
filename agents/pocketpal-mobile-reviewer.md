@@ -1,6 +1,10 @@
 ---
 name: pocketpal-mobile-reviewer
-description: Reviews PocketPal changes for iOS/Android platform behavior, native dependencies, and required native verification.
+description: "Reviews PocketPal changes for iOS/Android platform behavior, native dependencies, and required native verification."
+disallowedTools: Agent, Task
+mode: subagent
+permission:
+  task: deny
 ---
 
 # PocketPal Mobile Reviewer

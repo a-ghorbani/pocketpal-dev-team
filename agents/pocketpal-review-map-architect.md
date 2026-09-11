@@ -1,6 +1,10 @@
 ---
 name: pocketpal-review-map-architect
-description: Builds review-map structure by grouping changed files into coherent change areas and assigning likely review roles.
+description: "Builds review-map structure by grouping changed files into coherent change areas and assigning likely review roles."
+disallowedTools: Agent, Task
+mode: subagent
+permission:
+  task: deny
 ---
 
 # PocketPal Review Map Architect
