@@ -21,7 +21,7 @@ if [[ "$FILE_PATH" == *"/repos/pocketpal-ai/"* ]] || [[ "$FILE_PATH" == *"/repos
     echo "Multiple agents depend on it being untouched."
     echo ""
     echo "Work in a worktree instead: ./worktrees/TASK-YYYYMMDD-HHMM"
-    echo "Use pocketpal-orchestrator to create one automatically."
+    echo "Create one with: ./tools/create-worktree.sh TASK-YYYYMMDD-HHMM"
     exit 2
 fi
 

@@ -144,6 +144,10 @@ Rules that make this work, all from the tests above:
 - Claude hot-reloaded all 8 skills through the symlinks.
 - The Codex TOML agents parse and all 8 skills appear in the prompt. A live `spawn_agent` check is blocked by the account's usage limit until 2026-09-17.
 
+Agents became single files (Claude/opencode symlinks + Codex stubs). Codex permissions now match: a sandbox profile with writable `.git` and caches, `git reset`/`git rebase` prompt, and the curl/wget ban is gone.
+
+**T1 + T7 landed:** flow index in `context/architecture/README.md` and intake reads only matching flows. `orchestrator/README.md` is deleted, guard messages point at `tools/create-worktree.sh`, the research doc is marked historical, and the README is rewritten (2,000 → ~900 words, with a harness table).
+
 1. **P1: portability plumbing (mechanical, low risk).** Canonical `agents/` + `.agents/skills`, generator + `--check`, symlink, hook dispatcher + opencode plugin, MCP/permission parity, `tools/plane`, signature fix. Verify with `codex` (`spawn_agent` lists roles; hooks block an edit under `repos/pocketpal-ai`) and `opencode debug agent` / a blocked edit.
 2. **T1 + T7:** intake index-based loading, stale docs out. Biggest token win, no behaviour change.
 3. **T2–T6:** rewrite the stage agents in the new format, one at a time, using `writing-for-agents` as the rubric. Diff each against the old file to confirm every gate/verdict/artifact survives.

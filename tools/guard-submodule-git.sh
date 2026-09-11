@@ -25,7 +25,7 @@ if [[ -z "$COMMAND" ]]; then
 fi
 
 # --- Allowlist: always permit these git subcommands in repos/pocketpal-ai ---
-# git worktree (orchestrator MUST run this from repos/pocketpal-ai)
+# git worktree (tools/create-worktree.sh runs it against repos/pocketpal-ai)
 # git log, diff, status, show, remote, fetch, rev-parse, describe, tag, blame, shortlog
 # git branch (without -d/-D/-m/-M — listing is fine)
 # git config --get/--list
@@ -46,7 +46,7 @@ block_with_message() {
     echo "Multiple agents depend on it being untouched."
     echo ""
     echo "Work in a worktree instead: ./worktrees/TASK-YYYYMMDD-HHMM"
-    echo "Use pocketpal-orchestrator to create one automatically."
+    echo "Create one with: ./tools/create-worktree.sh TASK-YYYYMMDD-HHMM"
     echo ""
     echo "Blocked command: $1"
     exit 2

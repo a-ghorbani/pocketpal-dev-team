@@ -1,5 +1,7 @@
 # Comprehensive Analysis: AI Dev Team for PocketPal
 
+> **Historical (January 2026).** The design research behind the original setup. The current pipeline is in `docs/workflows/pipeline.md`; nothing here is operative.
+
 ## Executive Summary
 
 This document synthesizes research on AI agent development workflows to design an autonomous development team for PocketPal AI. The goal: take a GitHub issue/Linear ticket and deliver a complete implementation with tests, minimal human intervention, and the ability to scale to 10-20 parallel agents.
