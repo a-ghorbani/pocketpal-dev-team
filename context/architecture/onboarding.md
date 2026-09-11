@@ -1,727 +1,85 @@
-# Onboarding Flow — Architecture & Flow Board
+# Onboarding
 
-Promoted from `workflows/stories/TASK-20260526-1731/what.md` on merge of FOU-116 (Phase 3a of the FOU-112 redesign rollout). This is the cumulative truth for the first-launch onboarding flow. The Round-3 Figma-faithful pass (PR #747 retrofit) is absorbed in-place; see "Round-3 corrections absorbed" at the end.
+## Purpose
 
-**This is the first FOU-112 slice that produces real screens against the FOU-114 token + FOU-115 DS layer.** It is a greenfield flow: the app has no onboarding today.
+The first-launch flow: brand splash, four intro screens, a topic pick, and a pal + model pick, plus the persisted completion gate that switches `App.tsx` from the onboarding stack to the main navigator (`app-shell.md`). Tokens and DS components, `Stepper` included: `theming.md`. What a Pal is: `pals-and-talents.md`. How a registered HF model downloads: `model-loading.md`.
 
-Consumer references only:
-- `context/architecture/theming.md` — token + DS surface (FOU-114 / FOU-115). Two paired line edits required in §1a: Spacing axis gains `xxl` (D11 / satisfied), Color axis gains `accent.peach` (D15 / FOU-116 Round-3).
-- `context/architecture/chat-flow.md` — destination Chat session model after onboarding completes.
-- `context/architecture/pals-and-talents.md` — `Pal` data model used by the seeded recommended pal.
+Design source: Figma file `RZxDJea4t6jnBZrV4YBacF`, Onboarding section `884:28223` (light) / `3011:25220` (dark).
 
-Canonical inputs (LOCKED, per `context/redesign/FOU-112-rollout.md` §1):
-- Figma file `RZxDJea4t6jnBZrV4YBacF`, page `0:1` "App design".
-- Light frames: `884:28223` (Onboarding section, 6 screens + Splash + Homepage-first-time).
-- Dark frames: `3011:25220` (Onboarding 7–12 = light 1–6 dark renders).
-- Variable defs read for the section (verified 2026-05-26 via Figma MCP `get_variable_defs`; Round-3 re-confirmed 2026-05-27): every value used below resolves to a token name already present in `theme.colors.*`, `theme.typography.*`, `theme.spacing.*`, `theme.radius.*`, `theme.stroke.*` plus the FOU-116 additions `spacing.xxl` (D11, satisfied) and `colors.accent.peach` (D15, FOU-116 Round-3).
+## Code map
 
----
-
-## Conventions
-
-- **(C)** = current behaviour, documented from code (or absorbed at promotion).
-- **(D)** = decision (resolved trade-off, with one-line rationale).
-
-(Story-scoped WHATs may carry **(P)** for proposals; this doc resolves
-them to **(C)** at promotion time. No **(P)** or **(?)** entries should
-remain here.)
-
----
-
-## 0. Scope & non-scope
-
-In scope (C):
-
-- Onboarding flow as a **new top-level navigator branch** rendered as an alternative to the existing Drawer **inside** `<App/>` (below all providers — see §4a), gated on a single persisted `uiStore.hasCompletedOnboarding` flag. On first launch the user sees Onboarding; on every subsequent launch the user sees the Drawer (today's app, unchanged).
-- 6 onboarding screens implemented from canonical frames `884:28223` (light) / `3011:25220` (dark), parity verified per slice.
-- Splash screen `884:28349` — the **post-hydration brand splash** that runs from `<PaperProvider>` mount until the Onboarding-1 transition. Distinct from the FOU-114 hydration hold (which is pre-`<PaperProvider>` and stays neutral; theming.md §4c #4 / I10).
-- "First-time Homepage" `888:34414` is the **destination state** at end of onboarding: a Homepage shell with `Pip` selected, an empty "previous chats" list, and the Chat-with-your-pals tile strip. Functional Homepage proper is FOU-117; this slice ships only the empty-state surface plus its first-time copy. Any home-page behaviour beyond initial empty render (search, chat resume, model load triggers) is explicitly NOT in this slice.
-- A new seeded system pal "Pip" (the "perfect pal" the recommended-pal screen names — Figma `887:30011`). Seeded by the same mechanism as `Lookie` (`PalStore.initialize`); ships with a small default model reference (no auto-download — see §9d).
-- One new DS component: `Stepper` (the 4-dot progress indicator used on screens 1–4 — Figma `896:29130`-band). Promoted into the DS layer in this slice because it has zero non-onboarding consumers but is bounded, presentational, and meets the §4g rules of `context/architecture/theming.md`.
-- E2E `onboarding` spec covering the happy path + skip + back + topic-chip selection + recommended-pal model picker.
-- testID surface frozen here (§4l).
-- RTL (`he`, `fa`) layout + non-Latin/CJK typography fallback verified on at least one screen with non-trivial content alignment (screen 5 chip grid, screen 6 radio-section list).
-- Light + dark parity verified per screen.
-- New l10n keys (English only — Weblate picks up translations later) under `onboarding.*`.
-
-Explicitly NOT in scope:
-
-- Functional Homepage (search, recent chats, model loader, FAB) → FOU-117.
-- Functional Chat screen swap → FOU-117.
-- Migration of users who already have the app — there is no migration; on first install of the build with this slice, the user sees onboarding. On second-and-later launches the persisted `hasCompletedOnboarding === true` skips the flow.
-- Server-side user accounts, sign-in, Palshub auth — never present in onboarding (Figma confirms; no auth surface anywhere in screens 1–6).
-- Model download UI / progress UI inside onboarding. Screen 6 selects a model for `Pip` and **enqueues** the download via the existing `modelStore.checkSpaceAndDownload(modelId)` API; the actual download surface is the existing Models flow.
-- Tokens / typography / DS-component changes beyond: (a) the new `Stepper` DS component, (b) the `spacing.xxl=40` and `colors.accent.peach` token additions (D11 / D15), and (c) one screen-internal primitive added by Round 3 (`HighlightText`, plus the screen-only wrappers `OnboardingAudioButton` / `DeviceInfoChip` / `ComparisonCards` / `ItalicAccentTitle` / `OnboardingBackButton` / `OnboardingSkipButton` / `OnboardingArrowGlyph`). The slice MUST consume the existing `theme.*` surface (theming.md §1a–§1d).
-- Architecture-doc updates to `chat-flow.md`, `pals-and-talents.md`. `theming.md` §1a receives two paired line edits — `spacing.xxl` (D11, satisfied) and `colors.accent.peach` (D15, Round-3). This flow doc absorbs the Round-3 contract changes in-place.
-
----
-
-## 1. Data model
-
-### 1a. UIStore additions
-
-```
-UIStore (additions to (C) src/store/UIStore.ts)
-  hasCompletedOnboarding : boolean    // (C) persisted; default false on fresh install
-  onboardingState : OnboardingState   // (C) NOT persisted; in-memory only; reset on completion
-```
-
-`OnboardingState` is per-session, in-memory, and lives **inside** `UIStore` rather than its own store because (a) it is intrinsically tied to the same lifetime as `hasCompletedOnboarding`, (b) it never persists across launches, and (c) it has no cross-store dependencies — keeping it co-located with the persisted flag puts the single-writer rule in one file.
-
-```
-OnboardingState (C)
-  currentStep   : 1 | 2 | 3 | 4 | 5 | 6
-  selectedTopic : TopicKey | null     // screen 5 single-select chip grid; tap = auto-advance to screen 6
-  selectedModelId: string | null      // screen 6 radio selection (must resolve in ModelStore default catalogue)
-```
-
-```
-TopicKey =
-  | 'smartchat'        // speech-bubble icon — general everyday chat
-  | 'coding'           // angle-bracket `<>` icon
-  | 'education'        // books icon
-  | 'roleplay'         // theater-masks icon
-  | 'creative_writing' // feather icon
-  | 'else'             // escape-hatch "Looking for something else?" — outlined chip, no icon, no preference recorded
-  // (C) Closed union — verbatim from Figma frames 884:28282 (light) / 3011 dark band.
-  // The 'else' chip writes `selectedTopic = null` but still triggers the
-  // auto-advance to screen 6.
-```
-
-`selectedTopic` is captured but **not used to alter the recommended pal in this slice** — the recommended pal is always seeded `Pip` (see §4d). The pick persists into `uiStore.onboardingTopicsSnapshot` on completion so the post-onboarding Homepage (FOU-117) can use it later as a future-pal-suggestion signal. The snapshot is written exactly once at completion and never edited after; the persisted shape stays a `TopicKey[]` array (FOU-117 multi-tag headroom), derived from the scalar as `topic === null ? [] : [topic]`.
-
-```
-UIStore (C, persisted)
-  hasCompletedOnboarding   : boolean
-  onboardingTopicsSnapshot : TopicKey[]   // (C) frozen at completion; length 0 or 1 in this slice;
-                                          //     kept as an array to leave headroom for FOU-117 multi-tag work
-```
-
-### 1b. PalStore additions
-
-Five onboarding pals are exposed via `ONBOARDING_PALS` (Pip / Codie / Sage / Echo / Muse) in `src/store/onboarding/onboardingPals.ts`, mapped to `TopicKey` via `TOPIC_TO_PAL` and resolved on screen 6 by `resolvePalForTopic`. Pip is auto-seeded by `PalStore.initializePipPal()` (idempotent, mirrors `initializeLookiePal` at `src/store/PalStore.ts:739`); Codie / Sage / Echo / Muse are materialised on Finish via `palStore.createPal` only when the user picks a model on screen 6.
-
-```
-OnboardingPal (C)
-  type        : 'local'
-  name        : 'Pip' | 'Codie' | 'Sage' | 'Echo' | 'Muse'
-  description : <baked in onboardingPals.ts>
-  systemPrompt: <baked in onboardingPals.ts>
-  defaultModel: <Model — sourced per entry.origin>
-  capabilities: {}
-  color       : [string, string]
-  source      : 'local'
-```
-
-`Pal.defaultModel` is sourced from the entry the user picked on screen 6:
-
-- `entry.origin === 'preset'` (Pip tier triple + Codie quick): resolved via `defaultModels.find(m => m.id === entry.id)`.
-- `entry.origin === 'hf'` (curated POC-24 picks for Codie balanced/best, Sage, Echo, Muse): the `Model` is returned by `ModelStore.registerOnboardingPalModel(entry)`, which synthesizes the minimal `{hfModel, modelFile}` pair and delegates to `addHFModel` for idempotent insertion.
-
-### 1c. Glossary
-
-- **Hydration hold** — pre-`<PaperProvider>` neutral `View` rendered while `mobx-persist-store` is loading `UIStore` from AsyncStorage (theming.md §4c #4 / I10). NOT a splash screen. Stays neutral; reads from `Appearance.getColorScheme()`. Out of scope here; mentioned only to delineate.
-- **Brand splash** (this slice) — the **post-hydration** branded screen at Figma `884:28349`. Rendered as the initial route of the Onboarding stack when `hasCompletedOnboarding === false`. Transitions to Onboarding-1 after a fixed minimum dwell (D6).
-- **Stepper** — the 4-dot progress indicator on screens 1–4 (Figma `896:29130`-band). Note: screens 5 and 6 do NOT show a stepper in the Figma frames (screen 5 has a fullwidth header; screen 6 has the recommended-pal header). The stepper is therefore visually 1-of-4, 2-of-4, 3-of-4, 4-of-4 across screens 1–4 only.
-- **Topic** — a category the user picks on screen 5. Closed union of 6 keys (`TopicKey`), single-select. Tapping a chip auto-advances to screen 6; there is no Continue button on screen 5.
-- **Recommended tier** — the Balanced row in the resolved pal's tier triple; the entry carries `recommended: true` per `onboardingPals.ts` data. Renders with a peach-tinted background (`theme.colors.accent.peach`) and a "Recommended" pill badge per Figma.
-- **Audio button** — a 40×40 IconButton (speaker / headphones glyph) in the top-right of screens 5 and 6 (in the same slot that screens 1–4 use for Skip). On tap, the screen's title + body text is announced via `AccessibilityInfo.announceForAccessibility(text)`. Side-effect only; no app state.
-- **HighlightText** — a Text primitive that renders one or more inline phrases against a peach pill background. Used inline within screen 2 / 3 / 4 body copy.
-- **Recommended pal** — the pal resolved from the topic chosen on screen 5 via `resolvePalForTopic`. Pip is the fallback for `topic === 'smartchat' | 'else' | null`; `coding` → Codie, `education` → Sage, `roleplay` → Echo, `creative_writing` → Muse.
-
----
-
-## 1d. External shape
-
-No wire format. The flow is purely client-side; no Palshub call, no telemetry, no auth.
-
----
-
-## 2. Event flow
-
-```
-AppWithMigrationWrapper (C; unchanged: gates hydration via HydrationHold)
-  hydrated → renders <AppWithMigration><App/></AppWithMigration>     (C)
-
-<App/> (extended) constructs its full provider tree
-  GestureHandlerRootView → SafeAreaProvider → KeyboardProvider →
-  PaperProvider → L10nContext → MarkdownProvider → NavigationContainer →
-  BottomSheetModalProvider → <SwitchPoint>                            (C)
-
-<SwitchPoint> reads uiStore.hasCompletedOnboarding (MobX observer)
-  → uiStore.hasCompletedOnboarding === false?
-       yes → render <OnboardingStack initialRoute='Splash'>           (C)
-              ─Splash dwell→ navigate('Onboarding1')                  (C)
-              ─Next→ navigate('Onboarding2')                          (C)
-              ─Next→ navigate('Onboarding3')                          (C)
-              ─Next→ navigate('Onboarding4')                          (C)
-              ─Next→ navigate('Onboarding5')                          (C)
-                 [Skip button on every step except 1 → completeOnboarding({topics, modelId: null})]
-                 [Back button on every step except 1 + Splash → navigation.goBack()]
-              ─Next→ navigate('Onboarding6')                          (C)
-              ─Finish→ uiStore.completeOnboarding({topics, modelId})  (P; modelId: string | null)
-                       palStore.initializePipPal()                    (P; idempotent; also called from PalStore.initialize)
-                       if (modelId) modelStore.checkSpaceAndDownload(modelId)  (C)
-                       (MobX reactivity in <SwitchPoint> swaps to Drawer.Navigator;
-                        ChatScreen displays the FOU-117 first-time empty state —
-                        for this slice the ChatScreen is unchanged from (C))
-       no  → render <Drawer.Navigator …> (existing tree, unchanged)   (C)
-```
-
-The onboarding branch and the Drawer are sibling children of the **same** provider tree inside `<App/>`. The switch is a navigator-choice (Drawer vs OnboardingStack), not a Drawer screen — onboarding never appears as a drawer entry and the Drawer never mounts while onboarding is active. MobX reactivity on `hasCompletedOnboarding` (read inside the observed switch component) re-renders only the navigator subtree on completion; providers above the switch do not remount.
-
----
-
-## 3. State machine
-
-```
-OnboardingState.currentStep
-  1 ─Next→ 2 ─Next→ 3 ─Next→ 4 ─Next→ 5 ─Next→ 6 ─Finish→ (completed; OnboardingStack unmounts)
-       ↑                ↑                ↑                ↑
-       └─Back←──────────┴─Back←──────────┴─Back←──────────┘
-  Skip (any of 2–6) → (completed; OnboardingStack unmounts)
-```
-
-| State                          | User-visible feedback                                                                         |
-| ------------------------------ | --------------------------------------------------------------------------------------------- |
-| `pre-stack` (hasCompletedOnboarding=false, hydrated) | Brand splash visible for at least `SPLASH_MIN_DWELL_MS`.                                       |
-| `Onboarding1`                  | Welcome screen; Stepper 1/4; primary action "Get started" (no Back, no Skip — per Figma).      |
-| `Onboarding2`                  | "The idea" screen; Stepper 2/4; Back + Continue.                                              |
-| `Onboarding3`                  | "Smaller, but yours" screen; Stepper 3/4; Back + Continue.                                    |
-| `Onboarding4`                  | "Privacy promised" screen; Stepper 4/4; Back + Continue.                                      |
-| `Onboarding5`                  | Topic chip grid (6 options); no Stepper; Back + Continue; Continue enabled only when ≥1 chip selected (D7). |
-| `Onboarding6`                  | Recommended pal "Pip" + 3 model radio sections; no Stepper; Back + Finish; Finish enabled only when a radio is selected (D8). |
-| `completed`                    | OnboardingStack unmounts; Drawer.Navigator mounts in the same provider tree; Chat screen visible (FOU-117 first-time empty state — out of scope here, `ChatScreen` unchanged in this slice). |
-
-Skip is allowed on steps 2–6 (Figma "Skip" lives in the top-right `Buttons` instance on every Body header except Onboarding-1, which has no Skip — verified from the structure dump). On Skip, `selectedTopics` and `selectedModelId` are persisted as empty: the user can pick later.
-
----
-
-## 4. Contract
-
-### 4a. Where onboarding lives in the navigation tree
-
-1. (C) The switch lives **inside** `<App/>` (`App.tsx`), below the entire provider tree (`GestureHandlerRootView` → `SafeAreaProvider` → `KeyboardProvider` → `PaperProvider` → `L10nContext.Provider` → `MarkdownProvider` → `NavigationContainer` → `BottomSheetModalProvider`). At the position currently occupied by `<Drawer.Navigator …>` (App.tsx:90), an observed component branches: if `uiStore.hasCompletedOnboarding === false`, render `<OnboardingStack/>`; otherwise render `<Drawer.Navigator …>` as today. `AppWithMigrationWrapper` is **unchanged** — it still gates on `isHydrated(uiStore)` and renders `<AppWithMigration><App/></AppWithMigration>` once hydrated.
-2. (C) The branch shares the **single** provider tree above with the Drawer; no second `PaperProvider` / `NavigationContainer` / `L10nContext.Provider` / `BottomSheetModalProvider` is constructed. `<OnboardingStack/>` is a `createNativeStackNavigator()` (or `createStackNavigator()` — whichever library is already a dependency; engineering picks the one whose API is simplest for "no header, no gesture-back on Splash"). Because the onboarding stack is a sibling of `Drawer.Navigator` under the same `<NavigationContainer>`, no second navigation container is created.
-3. (C) The stack's `screenOptions` set `headerShown: false` for every route (each screen draws its own header per Figma). The stack has 7 routes: `Splash`, `Onboarding1`…`Onboarding6`.
-4. (C) Drawer mounting is gated by the same `<SwitchPoint>`: while `hasCompletedOnboarding === false`, `Drawer.Navigator` is **not** rendered and therefore does not mount its screens. This is what gives I_OB6 — the Drawer subtree (and every Drawer screen) is invisible during onboarding, so no Drawer screen can read `OnboardingState`.
-
-### 4b. Per-screen layout contract (from Figma metadata)
-
-Every onboarding screen is a 393×852pt canvas with three vertical zones (verified from `884:28223` metadata):
-
-```
-Body  (y=54, height=709 for screens 1–4; 798 for screens 5–6)
-  Stepper        (only screens 1–4, at y=30)            — Figma 896:29130
-  Skip button    (only screens 2–6, at x=331,y=16)      — Figma "Buttons" 46×28 instance
-  Visual         (the illustration; per-screen geometry)
-  Content        (title + description, vertical-aligned)
-Bottom (y=763, height=89 for screens 1–4 and 5/6 except 5 hides it)
-  Buttons row    (Back IconButton 48×48 + primary Button 305×48)   — Figma 888:33xxx
-  Home Indicator (presentational, system)
-```
-
-Screen-specific deltas:
-
-| Screen | Visual node | Content node | Bottom bar |
-| --- | --- | --- | --- |
-| 1 | `884:29310` 112×112 illustration | "Welcome to Pocket Pal" / "Meet your pals." / 1-line body | full-width primary Button only (no Back, no Skip) |
-| 2 | `884:32584` 85×142 illustration | "The idea" / "Anytime, Anywhere." / body + accent rectangle | Back 48 + primary 305 |
-| 3 | `885:29436` 369×217 cards stack | "A heads-up" / "Smaller, but yours." / body + accent rectangle | Back 48 + primary 305 |
-| 4 | `885:29601` 85×142 illustration + shield group | "Privacy promised" / "Nothing leaves your phone." / body + accent rectangle | Back 48 + primary 305 |
-| 5 | header text 369×80 + 6× Chip 177×160 in a 2-col grid | "What's your pal for?" / "Pick what you'd like to discuss…" | hidden (Figma marks `hidden="true"` on `884:28302`) — user advances via a fixed FAB-style continue or chip-tap-continue (D9) |
-| 6 | header 361×196 (Pip icon + "Pip" + tagline) + device-chip 226×42 | "Pip thinks using a small AI model on your phone — pick one that fits." + 3 RadioSection 335×84 each | Back 48 + primary 305 |
-
-(C) Screen 5's bottom bar (Figma flagged `hidden`) is interpreted as **continue is enabled only when ≥1 chip is selected, and is rendered as the same Back+primary bottom bar as other screens but starts disabled**. The Figma hidden flag is read as "designer hasn't decided whether to show the row before any selection"; engineering picks "always show, disable when no selection" because it preserves screen reachability invariants and matches FOU-98's brief. (D9)
-
-### 4c. Stepper (NEW DS component)
-
-(C) `src/components/ui/Stepper/Stepper.tsx`.
-
-```ts
-type StepperProps = CommonDSProps & {
-  total: number;                  // 1..n
-  current: number;                // 1..total
-  // Visuals fixed per Figma 896:29130:
-  //   inactive dot:  20×4 width, Radius/XS
-  //   active   dot:  48×4 width (wider), Radius/XS
-  //   gap:           Spacing/XS (=4)
-  //   inactive color: theme.colors.outlineVariant
-  //   active   color: theme.colors.primary
-};
-```
-
-Rules:
-
-1. (C) Pure presentational, no state. Reads tokens through `useTheme()` only.
-2. (C) `current` clamped to `[1, total]`; out-of-range is logged via `warnIfNoA11yLabel`-style dev-only warning AND clamped to the nearest valid index.
-3. (C) `accessibilityRole='progressbar'`; `accessibilityValue={{min: 1, max: total, now: current}}`. Default `accessibilityLabel` is computed (`Step ${current} of ${total}`); consumers may override.
-4. (C) Default `testID='ui-stepper'`. Each dot's testID is `ui-stepper-dot-<index>` for E2E discoverability.
-5. (C) Lives under `src/components/ui/Stepper/`, follows the §4g.7 folder shape (`Stepper.tsx` + `styles.ts` + `index.ts` + `__tests__/Stepper.test.tsx` + snapshots). Promoted in `src/components/ui/index.ts`.
-
-This component is the only DS-layer addition. Per theming.md §4g, it MUST:
-- Be tokens-only (I_UI1).
-- Be observation-free (I_UI2).
-- Not import `src/components/*` legacy.
-- Be subject to the visual-parity snapshot strategy (§4k.2): `variant × size × {default, disabled} × {light, dark}` reduces to `{2-step, 3-step, 4-step, 5-step} × 1 × {default} × {light, dark}` because there is no variant or disabled state; emit 8 snapshots.
-
-### 4d. Pal materialisation on Finish
-
-(C) `PalStore.initializePipPal()` is a private method, called from `PalStore.initialize()` after `initializeLookiePal()`. Idempotent: looks up `{ name: 'Pip', source: 'local' }`; if present, returns; if absent, creates with the data shape in §1b. Codie / Sage / Echo / Muse are NOT seeded at boot; they are materialised on Finish via `palStore.createPal` only when the user picks a model on screen 6 and the resolved topic maps to them.
-
-(C) Screen 6 renders the resolved pal's three tier rows (Quick / Balanced / Best) from `OnboardingPalDef.models`. Each entry is self-describing: `repo`, `filename`, `displayName`, `sizeBytes`, `params`, and `origin: 'preset' | 'hf'`. The Recommended badge tracks `entry.recommended` (always the Balanced row today). The picker reads display fields directly from the entry (I4), so all three rows render identically pre- and post-registration. Per-pal picks come from `src/store/onboarding/onboardingPals.ts` (transcribed from `onboarding-pals.v1.json`); the per-pal table is the curated POC-24 set:
-
-| Pal   | quick                              | balanced (recommended)              | best                                |
-| ----- | ---------------------------------- | ----------------------------------- | ----------------------------------- |
-| Pip   | Llama-3.2-1B (Q2_K) — preset       | Llama-3.2-1B (Q4_K_M) — preset      | Llama-3.2-3B (Q6_K) — preset        |
-| Codie | Qwen2.5 Coder 0.5B (Q8_0) — preset | Qwen3.5 2B (Q4_K_M) — hf            | Qwen3.5 4B (Q4_K_M) — hf            |
-| Sage  | LFM2.5 1.2B (Q4_K_M) — hf          | Gemma 3 1B (Q8_0) — hf              | Gemma 3 4B (Q4_K_M) — hf            |
-| Echo  | Gemma 3 1B (Q4_K_M) — hf           | Gemma 3 1B (Q8_0) — hf              | Gemma 3 4B (Q4_K_M) — hf            |
-| Muse  | LFM2.5 1.2B (Q4_K_M) — hf          | Qwen3.5 2B (Q4_K_M) — hf            | Qwen3.5 4B (Q4_K_M) — hf            |
-
-(C) Once the user taps Finish, `useOnboardingHandlers.finish` resolves the picked entry from `palDef.models` and splits on `entry.origin`:
-
-- `'preset'` (Pip tier triple + Codie quick): `picked = defaultModels.find(m => m.id === entry.id)` — unchanged from the pre-curated path.
-- `'hf'` (curated POC-24 picks): `picked = await modelStore.registerOnboardingPalModel(entry)`, which synthesizes the minimal `{hfModel, modelFile}` per §0c of `model-loading.md` and delegates to `ModelStore.addHFModel`. The synthesized `hfModel.siblings` is `undefined` so `isVisionRepo` short-circuits to `false` and no projection model materialises (text-only by design — POC-28 explicitly defers vision).
-
-The resolved `Model` is then bound to `Pal.defaultModel` via `palStore.createPal` (first-time topic-resolved pal) or `palStore.updatePal` (replay / already-existing Pip). The user-picked download is enqueued via `modelStore.checkSpaceAndDownload(picked.id)` (existing public API; signature confirmed against `src/store/ModelStore.ts:990` and call sites `ModelCard.tsx:415`, `ChatPalModelPickerSheet.tsx:62`, `ProjectionModelSelector.tsx:108`, `ModelNotAvailable.tsx:52`). It accepts the model `id` string and resolves space/auth/destination internally. Onboarding does NOT block on the download completing; the user lands on Homepage with the download in-flight (visible via the existing Models screen).
-
-(C) If the user picks no model (Skip path on any of screens 2–6), Pip remains seeded with `defaultModel=undefined`; the topic-resolved pal (Codie / Sage / Echo / Muse) is NOT materialised. The user must pick a model later via the Models screen. Screen 6 has no Skip per Round-3; the only no-model completion paths are the Skip buttons on screens 2–5.
-
-### 4e. Onboarding-skipped invariants
-
-(C) Skipping at any step:
-- Always flips `hasCompletedOnboarding = true` via `completeOnboarding({topics, modelId: null})` (where `topics` is whatever the user has accumulated in `OnboardingState.selectedTopics` — empty array if screen 5 not reached).
-- Captures the partial state in `uiStore.onboardingTopicsSnapshot` (empty array if screen 5 not reached or no chip tapped).
-- Does NOT seed Pip differently; Pip is seeded by `PalStore.initialize()` regardless of onboarding outcome.
-- Does NOT enqueue any model download (no `checkSpaceAndDownload` call).
-
-### 4f. Hard invariants
-
-- **I_OB1 (single-shot flow)**: Onboarding mounts only when `uiStore.hasCompletedOnboarding === false` AND `mobx-persist-store` has hydrated `UIStore`. Once `hasCompletedOnboarding` flips to `true`, the `<SwitchPoint>` re-renders and the OnboardingStack subtree unmounts; it never re-mounts in this app lifetime.
-- **I_OB2 (no Drawer overlap)**: While the OnboardingStack is mounted, `Drawer.Navigator` is NOT rendered by `<SwitchPoint>` and therefore does not mount its screens. The two are mutually exclusive children of the switch.
-- **I_OB3 (token consumption only)**: Every onboarding screen consumes `theme.colors.*`, `theme.typography.*`, `theme.spacing.*`, `theme.radius.*`, `theme.stroke.*` from `useTheme()`. No raw hex, no raw px in `styles.ts` (lint-enforced by the existing `no-restricted-syntax` rule once the new files are inside `src/components/ui/**/styles.ts`; for screen-level `styles.ts` outside the DS namespace the lint rule does not apply, but tokens-only is still a soft contract enforced at code review).
-- **I_OB4 (DS-only components)**: Onboarding screens consume only DS components (`Button`, `IconButton`, `Chip`, `RadioSection`, `Header`, `Stepper`, plus `Text` from RN Paper per the locked thin set). No legacy `src/components/*` import except where there is no DS equivalent (none expected in this slice). This is the first slice to put I_UI6 (testID freeze) into play at screen level.
-- **I_OB5 (testID freeze)**: Every interactive element exposes a stable `testID` per §4l. Phase 4 / FOU-123 may extend but MUST NOT rename.
-- **I_OB6 (no Drawer screens read OnboardingState)**: Because `Drawer.Navigator` is not rendered while onboarding is active (I_OB2), no Drawer screen can read `OnboardingState`. Conversely, once onboarding completes and the Drawer mounts, the only post-completion surfaces a Drawer screen reads are the two persisted UIStore fields (`hasCompletedOnboarding`, `onboardingTopicsSnapshot`); `OnboardingState` is the empty / reset shape by then.
-- **I_OB7 (Pip seeding is idempotent and order-independent)**: `initializePipPal` MUST be safe to call multiple times in any order relative to `initializeLookiePal`; both must converge on the same `pals[]` regardless of arrival order.
-- **I_OB8 (light + dark parity)**: Every screen renders against light tokens AND dark tokens with no visual regression vs the canonical Figma frame. Verified per screen in HOW.
-- **I_OB9 (RTL + non-Latin verified per slice)**: On `language ∈ {he, fa}`, screen layout mirrors (RN `I18nManager` already enabled — verified by FOU-114) AND headlines fall back to Inter per theming.md §4d.2.
-- **I_OB10 (no telemetry / no auth)**: No network call originates from any onboarding screen.
-- **I_OB11 (`spacing.xxl = 40` cross-cite handshake)**: Figma uses `Spacing/XXL=40` for onboarding screens. The token addition in `src/theme/tokens/spacing.ts` and the architecture-doc amendment to `context/architecture/theming.md` §1a live in **different repos** (linked by submodule), so literal same-PR atomicity is structurally impossible. Instead, per the I_UI8 analogue established by FOU-115 (theming.md §4 I_UI8): the app PR cites the dev-team-repo commit SHA that amends theming.md §1a in its description; the dev-team-repo commit cites the app PR URL. Splitting them across review cycles is forbidden. The pipeline-reviewer enforces both citations before approving the draft PR.
-- **I_OB15 (lazy onboarding-pal HF registration)**: `ModelStore.registerOnboardingPalModel` is the single writer that inserts onboarding-pal HF-origin `Model`s into `modelStore.models`, and it is only invoked from `useOnboardingHandlers.finish` — never from a boot path. Skip / no-pick / cancel paths do not register. Consequence: a user who installs the app, sees Onboarding6, and never finishes never has an HF-origin onboarding-pal entry in their Models tab.
-
-### 4g. What each component / module renders
-
-| Component / module | Renders / produces | Does NOT render / produce |
-| --- | --- | --- |
-| `AppWithMigrationWrapper` (unchanged from (C)) | (C) The hydration hold while `!isHydrated(uiStore)`; `<AppWithMigration><App/></AppWithMigration>` once hydrated. | (C) The onboarding switch — that moves down to `<App/>`. |
-| `App` (extended) | (C) The provider tree (unchanged from (C)) followed by a single observed `<SwitchPoint>` child of `<BottomSheetModalProvider>`. `<SwitchPoint>` reads `uiStore.hasCompletedOnboarding` and renders either `<OnboardingStack/>` or `<Drawer.Navigator …>` (with the existing screens). | Theme construction (still in `useTheme()`); the hydration hold (lives one level up, unchanged from (C)). |
-| `OnboardingStack` | (C) `createNativeStackNavigator()` with `headerShown: false` and 7 routes: `Splash`, `Onboarding1`…`Onboarding6`. Shares the `<NavigationContainer>` provided by `<App/>`. | A separate `<NavigationContainer>` / `<PaperProvider>` / `<BottomSheetModalProvider>` (it shares the App-level instances). Per-screen state (lives in `uiStore.onboardingState`); side effects (caller does that on Finish). |
-| `SplashScreen` (C) | The brand mark at canvas centre per Figma `884:28349`. Triggers `navigate('Onboarding1')` after `SPLASH_MIN_DWELL_MS` (D6). | A neutral background hold (that's the FOU-114 hydration hold, pre-`<PaperProvider>`). |
-| `Onboarding{N}Screen` (P, N=1..6) | The per-screen layout in §4b: header (Stepper for 1–4 + Skip for 2–6), Visual, Content, Bottom bar. Consumes DS components only. | Navigation logic beyond `navigation.navigate(prev|next)` and `uiStore.completeOnboarding`. |
-| `Stepper` (P, new DS) | A row of dot markers per `current/total`. Token-bound. | State (purely presentational). |
-| `uiStore` (extended) | `hasCompletedOnboarding`, `onboardingTopicsSnapshot` (both persisted); `onboardingState` (in-memory). Single-writer methods: `setOnboardingStep`, `setOnboardingTopics` / `toggleOnboardingTopic`, `setOnboardingModelId`, `completeOnboarding({topics, modelId})`, `resetOnboarding` (test-only). | Any read of `palStore` / `modelStore`. The onboarding completion fans out via direct calls from the screens; UIStore is not a router. |
-| `PalStore` (extended) | `initializePipPal()` invoked from `initialize()` (mirrors `initializeLookiePal`). | Onboarding state. |
-| `ModelStore` | No additions — existing `checkSpaceAndDownload(modelId)` is the public API screen 6 calls. | Onboarding state. |
-
-### 4h. The token-to-Figma mapping (verified)
-
-Per the `get_variable_defs` dump on `884:28223`, every visual property in onboarding screens 1–6 resolves to an existing token already in `theme.*`, with the single exception flagged by I_OB11:
-
-| Figma binding | Resolves to (theme.*) |
+| Path | Role |
 | --- | --- |
-| `Color/Foreground/Primary` (#181715) | `colors.text` / `colors.onBackground` |
-| `Color/Foreground/Secondary` (#474747) | `colors.textSecondary` |
-| `Color/Foreground/Tertiary` (#81807e) | `colors.onSurfaceVariant` (used for the device-chip text on screen 6) |
-| `Color/Foreground/Subtle` (#c4c2c0) | `colors.outline` / `colors.placeholder` |
-| `Color/Background/Card` (#ffffff) | `colors.surface` |
-| `Color/Background/Muted` (#fafafa) | `colors.surfaceVariant` |
-| `Color/Background/Top layer` (#ffffff) | `colors.background` |
-| `Color/Primary/Default` (#0e0d0c) | `colors.primary` |
-| `Color/Primary/Foreground` (#fafafa) | `colors.onPrimary` |
-| `Color/Border/Light Grey` / `Color/Border/Subtle` / `Color/Border/Strong` | `colors.outlineVariant`, `colors.border`, `colors.outline` (existing surface) |
-| `Color/Yellow/*` (subtle/strong/accent) | `colors.bgStatus*` family (existing) |
-| `Headline/H1` (Fraunces 36 / 1.4 mult) | `typography.headlineH1` (absolute lineHeight 50 — theming.md §4a #4) |
-| `Title/sm` (Inter Medium 16/22) | `typography.titleS` (closest existing) — engineering verifies the size match in HOW |
-| `Body/md` (Inter Regular 15/28) | `typography.bodyM` |
-| `Body/sm` (Inter Regular 13/20) | `typography.bodyS` |
-| `Caption/xs` (Inter 10/18) | `typography.captionS` |
-| `Caption/sm` (Inter Medium 11/18) | `typography.captionM` |
-| `Spacing/{None,XXS,XS,S,SM,M,ML,L,XL,XXL}` (0..40) | `spacing.{none,xxs,xs,s,sm,m,ml,l,xl,xxl}` — note `xxl=40` is **new**, see I_OB11 |
-| `Radius/{XS,S,M,ML,L,XL,XXL}` (4..40) | `radius.{xs,s,m,ml,l,xl,xxl}` (per theming.md §1a Radius rename) |
-| `Stroke/{xs,sm,md,lg}` | `stroke.{xs,sm,md,lg}` |
-
-I_OB11 — paired-edit handshake (see §4f for the invariant text). The app PR adds `spacing.xxl = 40` to `src/theme/tokens/spacing.ts`; a dev-team-repo commit amends `context/architecture/theming.md` §1a to list `xxl` in the Spacing axis. PR description cites dev-team-repo commit SHA; dev-team-repo commit message cites the app PR URL. This is a discrete paired-edit task the planner MUST surface as a step in HOW; the pipeline-reviewer enforces both citations.
-
-### 4i. testID surface (frozen here)
-
-Per `context/redesign/FOU-112-rollout.md` §5 testID-freeze contract. This is what E2E observes; Phase 4 may extend at the leaves but MUST NOT rename.
-
-| Surface | `testID` |
-| --- | --- |
-| Splash screen root | `onboarding-splash` |
-| Onboarding screen root (N=1..6) | `onboarding-screen-<N>` |
-| Stepper root (screens 1–4) | `ui-stepper` (DS default) |
-| Stepper dot (i=1..total) | `ui-stepper-dot-<i>` |
-| Skip button (screens 2–6) | `onboarding-skip` |
-| Back button (screens 2–6) | `onboarding-back` |
-| Primary button (screens 1–6) | `onboarding-primary` |
-| Topic chip (screen 5, key=TopicKey) | `onboarding-topic-<key>` |
-| Recommended-pal model radio (screen 6, modelId) | `onboarding-pip-model-<modelId>` |
-| Device-info chip (screen 6, presentational) | `onboarding-device-chip` |
-| First-time homepage destination marker | (none — the homepage proper is FOU-117 scope and freezes its own testIDs there) |
-
-`accessibilityLabel` defaults: every interactive element above gets an l10n-keyed label (see §4j). For the Stepper, see §4c #3.
-
-### 4j. l10n contract
-
-(C) New keys under `onboarding.*` in `src/locales/en.json` (English only — translators pick up via Weblate per the project's locale workflow).
-
-```
-onboarding.splash.title                  // optional brand subtitle (engineering may omit if Figma has no text node)
-onboarding.screen1.title                 // "Meet your pals."
-onboarding.screen1.body                  // "Smart little friends that live inside your phone…"
-onboarding.screen1.eyebrow               // "Welcome to Pocket Pal"
-onboarding.screen1.cta                   // "Get started"
-onboarding.screen2.eyebrow / .title / .body / .cta
-onboarding.screen3.eyebrow / .title / .body / .cta
-onboarding.screen4.eyebrow / .title / .body / .cta
-onboarding.screen5.title                 // "What's your pal for?"
-onboarding.screen5.body                  // "Pick what you'd like to discuss…"
-onboarding.screen5.cta                   // "Continue"
-onboarding.screen5.topic.<key>           // 6 entries (one per TopicKey)
-onboarding.screen6.eyebrow               // "Pip"
-onboarding.screen6.title                 // "We found a perfect pal for you…"
-onboarding.screen6.cta                   // "Finish"
-onboarding.screen6.pal.<key>.body        // 5 entries (one per OnboardingPalKey: pip/codie/sage/echo/muse)
-onboarding.screen6.modelTier.{quick,balanced,best}  // 3 tier labels rendered as the radio title
-onboarding.back                          // accessibility label for the back IconButton
-onboarding.skip                          // visible label + accessibility label for Skip
-```
-
-(C) **Designer-owned copy** for every screen body / title is captured in the Figma frames; engineering ports the strings verbatim in HOW. Empty `onboarding.*.body` keys are forbidden — if a Figma string is missing at HOW time, the architect-critic flags it as a designer ask, not a placeholder.
-
-### 4k. RTL + non-Latin contract
-
-(C) Per `FOU-112-rollout.md` §5 + theming.md §4d:
-
-1. RTL (`he`, `fa`): Layout mirrors via RN's `I18nManager.isRTL` flag, which the FOU-114 wiring already toggles per `uiStore.language`. Screens use `start`/`end` semantics (RN built-in), not `left`/`right`, on every container that has directional padding/margin. The Stepper itself reads LTR → RTL by reversing its dot order via `flexDirection: 'row-reverse'` when `I18nManager.isRTL`. Per-screen sanity check: screens 5 and 6 (the two most layout-sensitive) MUST be verified manually in `he` (or `fa`) in HOW.
-2. Fraunces-fallback locales: Headlines using `theme.typography.headlineH1` (Fraunces elsewhere) automatically fall back to Inter for `language ∈ {fa, he, ja, ko, pl, ru, uk, zh, zh_Hant}` per theming.md §4d.2. No per-screen handling required — onboarding inherits the token-level swap. Membership is by glyph coverage, not script: `pl` is on the list despite being Latin script because the bundled Fraunces subset lacks Latin Extended-A. Onboarding is the app's main Fraunces headline surface, so it is where such a gap shows up first — the Polish screen-4 title (`Żadne dane nie opuszczają Twojego telefonu.`) is the canonical check.
-
-### 4l. Visual-parity snapshot strategy for onboarding (additive)
-
-(C) Onboarding screens are **screen-level** (not DS-component-level). Per theming.md §4k, the visual-parity snapshot strategy is a DS-component contract — screens do not ship snapshots in the same matrix shape.
-
-However, this slice introduces the first screens designed against the new tokens. The HOW MUST produce **light + dark visual references per screen**, captured as iOS-simulator and Android-emulator screenshots stored alongside the story directory (`workflows/stories/TASK-20260526-1731/screenshots/`). These are diffed by hand against the canonical Figma frames at the architect-critic / pipeline-reviewer stage. This procedure is the same one used by FOU-114 (`workflows/stories/TASK-20260519-2110/visual-diff-procedure.md`) and is referenced in HOW, not duplicated here.
-
-The new `Stepper` DS component DOES ship the standard variant×size×state×mode matrix per theming.md §4k.2.
-
----
-
-## 5. Layer ownership (single-writer rule)
-
-| Field | Single writer |
-| --- | --- |
-| `uiStore.hasCompletedOnboarding` | `uiStore.completeOnboarding({topics, modelId})` (P; sets to `true`); `uiStore.resetOnboarding()` (P; **test-only**, dev/E2E flag-gated). |
-| `uiStore.onboardingTopicsSnapshot` | `uiStore.completeOnboarding({topics, modelId})` — `topics` is written once, never edited after. `modelId` is forwarded to the screen-side `checkSpaceAndDownload` call, not persisted on UIStore. |
-| `uiStore.onboardingState.currentStep` | `uiStore.setOnboardingStep(n)`, called by the relevant screen's mount effect. |
-| `uiStore.onboardingState.selectedTopics` | `uiStore.toggleOnboardingTopic(key)` (C) — single mutation entry. |
-| `uiStore.onboardingState.selectedModelId` | `uiStore.setOnboardingModelId(modelId)` (C). |
-| `palStore.pals` (Pip entry) | `PalStore.initializePipPal()` (C) — idempotent create. Pip is otherwise edited like any user pal via `PalSheet` (existing path; out of scope here). |
-| `modelStore.models` / `modelStore.downloads` | Existing single-writers in `ModelStore`. Onboarding only **calls** `modelStore.checkSpaceAndDownload(modelId)` (existing public API). |
-| `modelStore.models` (onboarding-pal HF entries) | `ModelStore.registerOnboardingPalModel` → delegates to `ModelStore.addHFModel`. Sole entry-point for inserting onboarding-pal HF-origin `Model`s; called only from `useOnboardingHandlers.finish` (I_OB15). |
-
-`completeOnboarding({topics, modelId})` signature (C): `topics: TopicKey[]` (possibly empty), `modelId: string | null`. The screen-side caller is responsible for invoking `palStore.initializePipPal()` (idempotent — already called from `PalStore.initialize`) and, when `modelId !== null`, `modelStore.checkSpaceAndDownload(modelId)`. UIStore writes only its own fields.
-
-Recent bugs / past pain: onboarding is greenfield, so no prior bugs. The single-writer table is *prescriptive* — the resolver pattern from `ChatSessionStore` (chat-flow.md §5) is the model: ephemeral state lives in one place, fanned out via one method on completion, never persisted piecewise.
-
-**Deferred cleanups**:
-
-1. Migrate `OnboardingState` out of `UIStore` into its own store if a second flow ever needs similar transient state. Not now — single-flow, single-shot, in-memory keeps the cost low.
-2. Once FOU-117 lands a real Homepage, `onboardingTopicsSnapshot` becomes a read-source for pal suggestions. Keep `snapshot` immutable; never re-derive at runtime.
-3. Once translators ship `onboarding.*` keys, audit per-locale render manually (screens 5 + 6 are the most layout-sensitive).
-4. When `Stepper` finds a non-onboarding consumer, widen its variant axis only via a delta WHAT against theming.md.
-
----
-
-## 6. Canonical scenarios
-
-Each scenario is manually verifiable in HOW.
-
-### A. Fresh install — full onboarding flow
-
-```
-initial state: hasCompletedOnboarding=undefined, no Pip pal in DB
-
-1. App launches. Hydration hold (neutral View) → hydrated. UIStore.hasCompletedOnboarding === false.
-   AppWithMigrationWrapper renders <AppWithMigration><App/></AppWithMigration>.
-2. <App/> mounts its provider tree. PalStore.initialize() seeds Pip via initializePipPal()
-   (idempotent; no defaultModel yet).
-3. <SwitchPoint> observes hasCompletedOnboarding === false → renders <OnboardingStack initialRoute='Splash'>.
-4. SplashScreen renders for SPLASH_MIN_DWELL_MS, then navigates to Onboarding1.
-5. User taps "Get started". → Onboarding2.
-6. User taps "Continue" → Onboarding3 → Onboarding4 → Onboarding5.
-7. Onboarding5: Continue is disabled.
-8. User taps topic chip 'everyday' (or any). Continue enables.
-9. User taps Continue → Onboarding6.
-10. Onboarding6: Finish is disabled. Pip header + 3 model radios visible.
-11. User picks the smallest model radio. Finish enables.
-12. User taps Finish. Screen handler runs:
-     - uiStore.completeOnboarding({topics: ['everyday'], modelId: <chosenId>})
-        → hasCompletedOnboarding := true (persisted)
-        → onboardingTopicsSnapshot := ['everyday']
-     - palStore.initializePipPal()  (idempotent; if needed, updates Pip.defaultModel.id)
-     - modelStore.checkSpaceAndDownload(<chosenId>)  (existing API; enqueues download)
-13. MobX reactivity in <SwitchPoint> re-renders: OnboardingStack unmounts, Drawer.Navigator
-    mounts inside the same provider tree. Chat screen visible (FOU-117 work; this slice does
-    NOT alter ChatScreen visuals).
-```
-
-### B. Cold restart after onboarding
-
-```
-initial state: hasCompletedOnboarding=true (persisted from prior session)
-
-1. App launches. Hydration hold → hydrated. AppWithMigrationWrapper renders <App/>.
-2. <App/> mounts its provider tree. <SwitchPoint> observes hasCompletedOnboarding=true
-   → renders <Drawer.Navigator …>.
-3. SplashScreen NEVER renders. OnboardingStack NEVER mounts. The post-FOU-114 launch
-   sequence is identical to today.
-```
-
-### C. User skips on screen 3
-
-```
-1. Splash → Onboarding1 → Onboarding2 → Onboarding3.
-2. User taps top-right "Skip".
-3. uiStore.completeOnboarding({topics: [], modelId: null}) runs.
-   - hasCompletedOnboarding := true.
-   - onboardingTopicsSnapshot := [].
-4. palStore.initializePipPal() is a no-op (Pip already seeded by PalStore.initialize on app start) —
-   Pip exists with defaultModel=undefined because the user picked none.
-5. NO modelStore.checkSpaceAndDownload call (modelId is null).
-6. <SwitchPoint> swaps to Drawer.Navigator. ChatScreen empty state visible.
-```
-
-### D. RTL language (Hebrew) — full onboarding mirrored
-
-```
-preconditions: uiStore.language = 'he', I18nManager.isRTL=true (persisted)
-
-For each screen: header alignment, stepper dot order, bottom-bar Back/primary
-ordering all mirror correctly. Headlines render in Inter-Regular (Fraunces
-fallback per theming.md §4d.2). Body text reads right-to-left.
-```
-
-### E. Dark mode — full onboarding parity
-
-```
-preconditions: uiStore.colorScheme = 'dark'
-
-For each screen: light-mode token usage → dark token usage produces the
-canonical Figma dark renders at 3011:25220. Verified by side-by-side
-screenshot in HOW.
-```
-
-### F. App killed mid-onboarding (state loss)
-
-```
-1. User reaches Onboarding4. Process killed (cold restart).
-2. App launches. hasCompletedOnboarding=false (still). Onboarding restarts at Splash → Onboarding1.
-3. The in-memory `onboardingState` from the prior session is gone (by design — D5).
-```
-
-This is a deliberate design call (D5): mid-flow state does not persist. The flow is short; resuming halfway is more friction than restart.
-
-### G. User reaches screen 6, picks model, completes; download proceeds in background
-
-```
-1. User reaches screen 6 with topic='smartchat' (or null/'else'). Resolved pal: Pip.
-   Recommended (Balanced) pre-selected: selectedModelId =
-   'bartowski/Llama-3.2-1B-Instruct-GGUF/Llama-3.2-1B-Instruct-Q4_K_M.gguf'.
-2. User taps Finish. Screen handler resolves the entry from Pip.models;
-   entry.origin === 'preset'. picked = defaultModels.find(m => m.id === entry.id).
-3. uiStore.completeOnboarding({topic: 'smartchat', modelId: picked.id}) flips
-   hasCompletedOnboarding := true and snapshots the topic.
-4. palStore.updatePal(Pip.id, {defaultModel: picked}) rebinds Pip.
-5. modelStore.checkSpaceAndDownload(picked.id) begins (existing API; resolves
-   destination/auth internally).
-6. <SwitchPoint> swaps to Drawer.Navigator; user lands on Chat. Chat shows the
-   existing empty state.
-7. User opens Models drawer item → sees the chosen model in 'downloading' state.
-8. When download completes, Pip is usable in Chat (selected via the existing
-   pal/model selection flows — out of scope here).
-
-For HF-origin entries (e.g. Sage / Balanced = Gemma 3 1B Q8_0), Step 2 instead
-runs picked = await modelStore.registerOnboardingPalModel(entry); the synthesizer
-delegates to addHFModel which inserts the Model into modelStore.models with
-origin: HF and supportsMultimodal: false (siblings: undefined). The rest of the
-flow is identical.
-```
-
-### G'. User skips on screen 6 after seeing the recommended-pal picker (no model picked)
-
-```
-preconditions: user has reached Onboarding6 and may have selected topics on screen 5
-               (e.g. ['everyday']), or may have arrived having picked nothing.
-
-1. User taps top-right "Skip" on Onboarding6 (no model radio selected — or selected
-   one but chose to skip anyway via the Skip button instead of Finish).
-2. Screen handler runs:
-   - uiStore.completeOnboarding({topics: <whatever was picked>, modelId: null})
-      → hasCompletedOnboarding := true.
-      → onboardingTopicsSnapshot := <topics> (possibly empty, possibly e.g. ['everyday']).
-   - palStore.initializePipPal() is a no-op (Pip already seeded by PalStore.initialize
-     on app start) — Pip exists with defaultModel=undefined. This exercises §4d line 253
-     (Skip path → Pip seeded with no defaultModel).
-   - NO modelStore.checkSpaceAndDownload call (modelId is null).
-3. <SwitchPoint> swaps to Drawer.Navigator. ChatScreen empty state visible.
-4. The user can later open the Models screen, download any model, and bind it to Pip
-   via the existing PalSheet — out of scope here.
-```
-
-### H. Stepper renders correctly across screens 1–4
-
-```
-Screen 1: <Stepper total=4 current=1/> → dot 1 wide, dots 2–4 narrow.
-Screen 2: <Stepper total=4 current=2/> → dot 2 wide.
-Screen 3: <Stepper total=4 current=3/> → dot 3 wide.
-Screen 4: <Stepper total=4 current=4/> → dot 4 wide.
-Screens 5 + 6: NO Stepper rendered (per Figma).
-```
-
----
-
-## 7. State signals
-
-| Signal | Set by | Read by | True when |
-| --- | --- | --- | --- |
-| `uiStore.hasCompletedOnboarding` | `completeOnboarding({topics, modelId})` (and `resetOnboarding()` test-only). | `<SwitchPoint>` inside `<App/>` (gates Drawer vs OnboardingStack). | User has finished or skipped onboarding once. |
-| `uiStore.onboardingState.currentStep` | `setOnboardingStep(n)` via screen mount-effect. | Stepper (`current` prop on screens 1–4); E2E for state observation. | The corresponding screen is active. |
-| `uiStore.onboardingState.selectedTopics.length > 0` | `toggleOnboardingTopic` | Screen 5 (enable Continue). | At least one topic chip is selected. |
-| `uiStore.onboardingState.selectedModelId !== null` | `setOnboardingModelId` | Screen 6 (enable Finish). | A model radio has been picked. |
-| `isHydrated(uiStore)` (from `mobx-persist-store`) | `makePersistable` lifecycle. | `AppWithMigrationWrapper` (gates first mount of `<App/>`, which in turn contains `<SwitchPoint>`). | UIStore has finished loading from AsyncStorage (already (C) per theming.md). |
-
----
-
-## 8. Decisions
-
-- **D1 (Onboarding switch is INSIDE `<App/>`, below the providers, branching `OnboardingStack` vs `Drawer.Navigator`)**: Keeps the entire provider tree (`PaperProvider`, `NavigationContainer`, `L10nContext`, `BottomSheetModalProvider`, `MarkdownProvider`, `KeyboardProvider`, `SafeAreaProvider`, `GestureHandlerRootView`) single-instance and shared between onboarding and the rest of the app. Avoids leaking onboarding into `headerLeft` / `SidebarContent` / drawer screen options (the branch is a navigator-choice, not a Drawer screen). Trivially satisfies I_OB6 since `Drawer.Navigator` simply isn't rendered while onboarding is active. Rejected alternative (Interp A — switch at `AppWithMigrationWrapper`): would require either pushing all providers up out of `<App/>` (cross-cutting refactor) or duplicating them on the onboarding side (two `PaperProvider`s, two `NavigationContainer`s — fragile and wrong).
-- **D2 (per-pal tier triple, mixed origin allowed)**: Each of the five onboarding pals (Pip / Codie / Sage / Echo / Muse) carries three self-describing `OnboardingPalModelEntry` rows (`quick` / `balanced` / `best`), hand-edited in `src/store/onboarding/onboardingPals.ts`. Per POC-28, entries are either `origin: 'preset'` (resolved via `defaultModels.find`) or `origin: 'hf'` (lazy-registered at Finish via `ModelStore.registerOnboardingPalModel`); a single pal may mix origins across its tiers (e.g. Codie: quick = preset, balanced = hf, best = hf). Curated picks come from the POC-24 eval (`onboarding-pals.v1.json`). Adding a recommendation or rebalancing the tier triple later is a delta WHAT against `onboarding.md`.
-- **D3 (Pip seeded by `PalStore.initialize`, not by onboarding completion)**: Mirrors the existing Lookie precedent (`initializeLookiePal` at `src/store/PalStore.ts:739`). Pip exists on every install (independent of onboarding) so the post-skip state is sane. The method is named `initializePipPal` (matching the Lookie precedent), not `ensurePipPal` — see Suggestion 1 resolution in Review History.
-- **D4 (Topic selection captured but not used to alter recommendation)**: The recommended pal is always Pip in this slice. Per-topic recommendations are a future FOU work item. Capturing the snapshot now means FOU-117 has the data when it lands. Alternative considered: hide screen 5 entirely until topic-driven recs exist. Rejected because screen 5 is in the canonical Figma frames and is part of the locked "first flow slice".
-- **D5 (Mid-flow state does NOT persist across launches)**: `onboardingState` is in-memory. Rationale: flow is short, partial-progress surfaces are not in Figma, and recovering from kill at exactly the right step is more code than worth.
-- **D6 (`SPLASH_MIN_DWELL_MS = ~600ms`)**: Constant defined in HOW. Rationale: long enough for the brand to read; short enough not to feel like a load screen. The hydration hold (pre-`<PaperProvider>`) is on top — total user-visible "splash" time is `max(hydration_actual_ms, SPLASH_MIN_DWELL_MS)` because we want the brand splash to show for a minimum even when hydration is instant.
-- **D7 (Screen 5 Continue disabled until ≥1 topic selected)**: Without selection, advancing has no purpose; the screen has a clear "pick what you'd like to discuss" call to action. Alternative: allow zero selection to fast-skip. Rejected because Skip already covers fast-exit; this control should mean what it says.
-- **D8 (Screen 6 Finish disabled until a model radio is selected)**: Same logic. Skip is the no-model path (see Scenario G').
-- **D9 (Screen 5 bottom bar shown disabled, not hidden, despite Figma `hidden="true"` on `884:28302`)**: The Figma `hidden` flag is interpreted as "design-time hidden because no selection in the example mock", not "production-time hidden". Always-show-with-disabled state preserves screen-reachability invariants and the testID-freeze surface (`onboarding-primary` exists on every onboarding screen).
-- **D10 (`Stepper` lives in DS layer from this slice)**: Per theming.md §4g rules, a presentational, tokens-only, observation-free component belongs in `src/components/ui/`. Putting it outside the DS layer would breach I_OB4 (DS-only components from screens). It will gain non-onboarding consumers as soon as setup-style flows appear; pre-placing it in the DS namespace prevents a later move.
-- **D11 (`spacing.xxl = 40` added to tokens — theming.md §1a amended via the I_UI8 cross-cite handshake)**: Figma section explicitly defines `Spacing/XXL=40` for use on onboarding screens. Adding it is mechanical + source-of-truth-driven (theming.md I2). Because app code (`src/theme/tokens/spacing.ts`) and architecture docs (`context/architecture/theming.md`) live in **different repos** linked by submodule, literal same-PR atomicity is structurally impossible — same constraint that theming.md I_UI8 already addresses for the FOU-115 rename. Therefore: app PR cites the dev-team-repo commit SHA that amends theming.md §1a in its description; the dev-team-repo commit cites the app PR URL. Splitting them across review cycles is forbidden. The planner MUST emit this paired-edit step explicitly in HOW; the pipeline-reviewer enforces both citations before approving the draft PR. I_OB11 carries the invariant.
-- **D12 (No analytics / no telemetry)**: I_OB10 is non-negotiable; PocketPal has no analytics today and FOU-116 is the wrong slice to introduce them.
-- **D13 (Onboarding state lives inside `UIStore`, not a new `OnboardingStore`)**: Single flow, single-shot, in-memory, shares lifetime with a persisted UIStore flag. A separate store doubles the persistence surface for zero benefit at this stage. Deferred-cleanup item recorded in §5 if a second flow shows up.
-
----
-
-## 9. Edge cases
-
-### 9a. User flips colorScheme during onboarding
-
-`uiStore.setColorScheme('dark')` is reachable only from Settings, which is in the Drawer — and the Drawer is unmounted during onboarding. So the only way to flip colorScheme mid-flow is system-level (OS dark-mode toggle). RN/Paper re-renders correctly via the existing reactive hook; no special handling.
-
-### 9b. User flips language during onboarding
-
-Same as 9a — Language picker is in Settings, in the Drawer, unmounted. System-language change is observable but rare. The theme reactivity covers it.
-
-### 9c. `mobx-persist-store` hydration fails
-
-Per theming.md §9k, `mobx-persist-store` proceeds with in-memory defaults on hydration failure → `hasCompletedOnboarding` reads its initial value `false` → onboarding shows. On next successful boot, the persisted value (if any) is honoured. No new error UI invented.
-
-### 9d. Pip is seeded but no model is available
-
-Pip exists with `defaultModel=undefined`. Selecting Pip later (Pals screen) and trying to use it surfaces the existing "no model loaded" path — out of scope here.
-
-### 9e. The user enqueued model download fails
-
-Onboarding doesn't observe the download. `modelStore.checkSpaceAndDownload` surfaces failure via the existing error path (per `ModelStore.ts:1011`); the Models screen renders the resulting snackbar / failure state. Pip remains seeded with the intended `defaultModel.id`, which will resolve to "not downloaded" until the user retries.
-
-### 9f. User taps Back from Onboarding1
-
-Onboarding1 has NO Back button per Figma. Pressing system back (Android) is intercepted by the stack's `gestureEnabled: false` + a no-op `BackHandler` listener while on the first route. Result: nothing happens; the splash does NOT re-appear.
-
-### 9g. Two `initializePipPal` invocations race
-
-`PalStore.initialize` is called once in the store constructor; idempotency check (`pals.find(p => p.name === 'Pip' && p.source === 'local')`) ensures a re-entry does not double-seed. I_OB7.
-
-### 9h. User reaches screen 6 before any model is loaded into `ModelStore`
-
-Entries are self-describing (`displayName`, `sizeBytes`, `params`, derived `id`) and live in `src/store/onboarding/onboardingPals.ts`, so the three radio rows render synchronously with no dependency on `modelStore.models`. PRESET entries (Pip + Codie quick) resolve via `defaultModels.find` only at Finish; HF entries register at Finish via `ModelStore.registerOnboardingPalModel`. I4.
-
-### 9i. RTL: stepper dot order
-
-`flexDirection: 'row-reverse'` when `I18nManager.isRTL`. The wide "current" dot still represents the same logical step (1..4 in document order), just visually mirrored. Manual verification in `he` is required.
-
-### 9j. `__E2E__` mode bypass
-
-E2E specs run against fresh installs and may want to skip onboarding for non-onboarding tests. Mechanism: an existing AutomationBridge call (`__E2E__` flag) calls `uiStore.completeOnboarding({topics: [], modelId: null})` synchronously before navigation mounts. This is an additive E2E test-utility, NOT a runtime production path. The onboarding spec itself does NOT use this bypass.
-
-### 9k. Existing-app upgrade (user installs the FOU-116 build over an older build)
-
-`UIStore` already has persisted state from a prior install (e.g. `colorScheme = 'dark'`, `language = 'en'`). The new key `hasCompletedOnboarding` is `undefined` after hydration (not in the persisted store) → coerced to `false` → onboarding shows once for upgrade users. (C) This is the **intended** behaviour: existing users see the redesigned brand onboarding the first time after upgrade. Alternative considered: gate onboarding on a separate `hasUsedAppBefore` heuristic (e.g. any pal exists, any model is downloaded). Rejected because it adds complexity and the one-time onboarding for upgraders is the intent per FOU-98 brief.
-
-### 9l. Onboarding screen 5 with all 6 chips deselected after one was selected
-
-Once a chip is selected then deselected, Continue returns to disabled. This is intentional: D7 — selection is a precondition for Continue.
-
-### 9m. Empty Figma string at HOW time
-
-If a copy slot in the Figma frames is empty when HOW reads it, the planner does NOT invent placeholder copy. The architect-critic flags it as a designer ask logged on FOU-116 (analogous to the FOU-114 `designer-asks.md` precedent at `workflows/stories/TASK-20260519-2110/`).
-
-### 9n. The user installs a build that ships `Stepper` but no consumer exists
-
-Stepper is exported from the DS barrel. Tree-shaking should remove it from the bundle when unused; even if not, it's a small presentational component. No runtime cost.
-
----
-
-## 10. What this doc is NOT
-
-- Not an implementation plan — file layout, refactor order, asset wiring live in `how.md`.
-- Not a designer hand-off — Figma is the design source.
-- Not a Homepage / Chat specification — those are FOU-117 scope. This doc references the first-time Homepage only as the destination state.
-- Not a model-catalogue specification — the per-pal tier triple is hand-edited in `src/store/onboarding/onboardingPals.ts` (POC-28; D2). Curated HF picks come from `onboarding-pals.v1.json`.
-- Not a designer-copy spec — onboarding copy is ported verbatim from Figma in HOW. Empty slots are designer asks, not engineering invention (§9m).
-- Not a Phase 4 cleanup plan — Stepper does not need a non-onboarding consumer to exist in DS, and the Paper-import blocklist is not extended by this slice.
-
-**Cleanup reminders**:
-
-1. The new flow doc `context/architecture/onboarding.md` is promoted from this delta in the same round that lands the code.
-2. Token paired-edits: `spacing.xxl = 40` (satisfied in dev-team commit `a448d3f`) and `colors.accent.peach` (Round-3 absorb). The I_UI8 cross-cite handshake applies: app PR cites the dev-team commit SHAs in its description; the dev-team commits cite the app PR URL.
-3. Once FOU-117 lands the real Homepage, this doc references it instead of "out of scope here".
-4. The `Stepper` DS component is subject to the same snapshot freeze contract (I_UI5) as every other DS component starting next slice.
-
----
-
-## Round-3 corrections absorbed (2026-05-27 — PR #747 retrofit)
-
-The Round-1/2 wireframe shipped in PR #747 was a token-faithful skeleton; the user-driven Round-3 visual review against the canonical Figma file produced 14 corrections, all absorbed in-place above. Summary:
-
-| # | Area | Round-3 contract (replaces the wireframe behaviour above) |
-| - | ---- | --------------------------------------------------------- |
-| A | Skip presence | Skip on screens 1–4 ONLY. Screens 5 + 6 replace the slot with an Audio button (`onboarding-audio` testID). |
-| B | Screen-6 Skip | DELETED. Screen 6 has no Skip; the only forward path is pick + download. |
-| C | Topic union + selection | `selectedTopic: TopicKey \| null` (single-select); chip-tap auto-advances to screen 6 (no Continue). Keys: `smartchat / coding / education / roleplay / creative_writing / else`. Setter renamed `setOnboardingTopic`. Persisted snapshot stays `TopicKey[]` (FOU-117 headroom). |
-| D | Per-pal tier triple | Round-3's single-pal three-quant Pip mock was superseded in code by a topic-resolved pal set (Pip / Codie / Sage / Echo / Muse) with a Quick / Balanced / Best triple per pal. POC-28 layers HF-origin lazy registration on top: HF-origin entries are inserted into `modelStore.models` only on Finish, via `ModelStore.registerOnboardingPalModel`. Balanced still carries the Recommended badge + peach-tinted card. Entry shape `OnboardingPalModelEntry` (§1a). |
-| E | Audio button | New 40×40 IconButton on screens 5+6 top-right; `AccessibilityInfo.announceForAccessibility(title + body)` on press. Side-effect only. |
-| F | Italic title accents | Each title has a Fraunces-Italic accent fragment (screen 1 "*pals*", screen 3 "*Smaller,*", screen 4 "*leaves*") or is fully italic (screen 2, screen 6 "*Pip*"). |
-| G | Peach pill highlights | `HighlightText` primitive wraps the per-screen highlighted phrases (screen 2 "No internet, no signal", screen 3 "quick and private", screen 4 "No accounts. No cloud. No tracking.") against `theme.colors.accent.peach`. |
-| H | Body copy | All body / title / CTA copy ported verbatim from Figma. No empty slots. |
-| I | CTA copy + arrows | Per-screen CTAs verbatim: "Show me Around →", "Next →", "Got it →", "Get Started →", screen 6 "Download Pip (\<size\>) ↓" with the runtime-bound size. |
-| J | Back chevron | Bottom-bar left slot on screens 2/3/4/6; top-left header slot on screen 5 (no bottom bar). Both render under the same `onboarding-back` testID. |
-| K | Illustration sources | Seven assets sourced from Figma under `src/assets/onboarding/`. When an asset is unavailable, the screen renders a small text placeholder rather than a broken image. |
-| L | Device-info chip | New `DeviceInfoChip` reads device name + RAM + free disk via `react-native-device-info`. Each field falls back independently (no orphan `·` separators). |
-| M | Screen-6 title hierarchy | Inverted: big italic "Pip" headline (with Pip mascot above); the long description is the body. |
-| N | Designer asks | The pre-Round-3 "body copy pending" entries are removed. The single remaining ask is the Audio-button announcement intent (D14). |
-
-The Round-3 retrofit added the following invariants to the original set: **I_OB12** (`colors.accent.peach` paired-edit handshake — landed via the dev-team commit that absorbs this section); **I_OB13** (screen 5 single forward control: no `onboarding-primary` testID on screen 5); **I_OB14** (no Skip on screen 6).
-
----
+| `App.tsx` (`SwitchPoint`) | Reads `uiStore.hasCompletedOnboarding` and renders `OnboardingStack` or the Drawer |
+| `src/store/UIStore.ts` | Gate + topic snapshot (persisted), `onboardingState` (in memory), `setOnboarding*`, `completeOnboarding`, `replayOnboarding`, `resetOnboarding` |
+| `src/store/onboarding/types.ts` | `TopicKey`, `OnboardingState`, `INITIAL_ONBOARDING_STATE` |
+| `src/store/onboarding/onboardingPals.ts` | The five pals (Pip, Codie, Sage, Echo, Muse), each with a quick / balanced / best tier; `TOPIC_TO_PAL`, `resolvePalForTopic`, `entryId` |
+| `src/screens/OnboardingScreens/OnboardingStack.tsx` | `@react-navigation/stack` navigator (7 routes, names in `ROUTES.ONBOARDING`) with the persistent top chrome overlaid |
+| `src/screens/OnboardingScreens/useOnboardingHandlers.ts` | Per-screen `next` / `goBack` / `selectTopic` / `finish` |
+| `src/screens/OnboardingScreens/components/OnboardingTopChrome/` | Stepper + Skip overlay; step comes from the active route name |
+| `src/screens/OnboardingScreens/SplashScreen/`, `Onboarding{1..6}Screen` | The screens |
+| `src/screens/OnboardingScreens/components/` | Screen-local parts: scaffold, bottom bar, topic chip grid, model radio group, device chip, italic/highlight text |
+| `src/components/ui/Stepper/` | DS stepper |
+| `src/store/ModelStore.ts` (`registerOnboardingPalModel`) | Builds an HF model/file pair from an entry and delegates to `addHFModel` |
+| `src/store/PalStore.ts` (`initializePipPal`) | Seeds Pip at boot |
+| `src/screens/AboutScreen/AboutScreen.tsx` | "Show intro again" calls `uiStore.replayOnboarding()` |
+| `src/__automation__/adapters/OnboardingBypass.tsx`, `babel.config.js` | E2E bypass and its build flag |
+
+## How it works
+
+1. `SwitchPoint`, an observer inside the single provider tree, renders `OnboardingStack` until the flag flips, then the Drawer. Only the navigator subtree remounts.
+2. `SplashScreen` waits `SPLASH_MIN_DWELL_MS` (600 ms), then `navigation.replace(STEP_1)`.
+3. Screens 1–4: the primary button calls `next()` (a fixed step→route map). Every screen calls `useOnboardingHandlers(step)`, which writes `currentStep` on mount.
+4. Screen 5: tapping a `TopicChipGrid` chip calls `selectTopic` (`setOnboardingTopic` + navigate to step 6). No primary button, only a back-only bottom bar.
+5. Screen 6 resolves the pal with `resolvePalForTopic(selectedTopic)` and lists its three tiers, pre-selecting the `recommended` entry when the selection isn't one of this pal's. The CTA reads "Download <pal> (<size>)", or "Use <pal>" when already downloaded.
+6. `finish()`, in order: register the entry to get a `Model`; update the existing local pal of that name, or `createPal` with the def's prompt, colour and greeting; `completeOnboarding({topic, modelId})`; start `modelStore.checkSpaceAndDownload` without awaiting.
+7. Skip lives in the top chrome on steps 1–6 ("Skip for now" on 6): `completeOnboarding({topic: selectedTopic, modelId: null})`, no pal or model.
+8. The gate flips; `SwitchPoint` mounts the Drawer on its first route (Chat).
+
+## Contracts and invariants
+
+- **Gate writers:** `completeOnboarding` (finish, top-chrome Skip, E2E bypass), `replayOnboarding` (About), `resetOnboarding` (dev/E2E only, no production caller). See `UIStore.ts:210-243`.
+- **Persistence:** only `hasCompletedOnboarding` and `onboardingTopicsSnapshot` are persisted (`UIStore.ts:123-124`). `onboardingState` is in memory, so a process kill mid-flow restarts at the splash.
+- **Snapshot shape:** always a `TopicKey[]` of length 0 or 1, derived from the scalar topic. Replay keeps it and the next completion overwrites it. It has no reader yet.
+- **Who writes what:** `completeOnboarding` writes only UIStore; pal and model effects belong to `finish`, ordered model → pal → gate → download. `finish` has `try/finally` but no `catch`, so a throw in registration or pal creation leaves the user on screen 6.
+- **No double finish:** a ref blocks re-entry into `finish`, and `isFinishing` disables the CTA.
+- **Pal identity:** `finish` finds an existing pal by `name === palDef.name && source === 'local'`. `initializePipPal` seeds Pip using the same key. Pip is defined twice, in `PalStore.initializePipPal` and `PAL_PIP`, and the two names must agree.
+- **Model id:** `entryId` = `repo/filename`, which equals the `Model.id` that `addHFModel` produces. The screen-6 selection, the downloaded check and the e2e testID all key on it.
+- **Registration:** every entry, preset repos included, goes through `registerOnboardingPalModel` → `addHFModel` (idempotent by id, so shared entries collapse), only in `finish`; Skip adds none. `siblings: []` means no projection model.
+- **Top chrome step:** comes from the route name (`chromeStepFromRouteName`), not from `onboardingState.currentStep`, which nothing reads.
+- **testIDs** (resolved by `e2e/pages/OnboardingPage.ts`, except `onboarding-device-chip`; extend, never rename):
+
+  | testID | Where |
+  | --- | --- |
+  | `onboarding-splash` | splash |
+  | `onboarding-screen-<N>` | each screen |
+  | `onboarding-primary` | absent on 5 |
+  | `onboarding-back` | 2–6 |
+  | `onboarding-skip` | 1–6 |
+  | `onboarding-topic-<key>` | topic chips |
+  | `onboarding-pip-model-<entryId>` | every pal's tiers (the "pip" in the name is historical) |
+  | `onboarding-device-chip` | device info chip |
+  | `ui-stepper`, `ui-stepper-dot-<i>` | stepper |
+
+## Traps and decisions
+
+- **Upgraders see onboarding once.** The gate defaults to `false`, and an older build's persisted store has no key. Intended.
+- **Back behaviour.** The stack is JS with `gestureEnabled: false`. The splash is *replaced*, so Onboarding1 is the root, and there is no `BackHandler`: Android back on screen 1 falls through to the OS; on 2–6 it pops.
+- **The chrome is one overlay above the navigator,** so the Stepper and Skip stay put while bodies slide. A new route needs a case in `chromeStepFromRouteName`, or the chrome hides on it.
+- **There are two skip paths.** `OnboardingTopChrome.onSkip` is the live one. `useOnboardingHandlers.skip` is returned but no screen uses it. Keep them in sync or delete the dead one.
+- **The `else` chip is display-only** (a `View`, not a `Pressable`). The no-preference path is Skip. `resolvePalForTopic(null)` and `else` both give Pip.
+- **The recommended tier is always Balanced, on every device.** There is no device-aware tier picker yet.
+- **Replay** (About) unmounts the whole Drawer, losing its state. A second finish updates the existing pal, not a duplicate.
+- **Renamed Pip.** `initializePipPal` looks up by the name `Pip`, so a user-renamed Pip is seeded again on the next launch.
+- **Finish neither activates the pal nor loads the model.** The user lands on Chat, download in flight.
+- **Deep links during onboarding** find no route. See `app-shell.md`, Traps and decisions.
+- **Headline fonts.** `NON_LATIN_LOCALES` (`src/theme/tokens/typography.ts`) switch Fraunces to Inter by glyph coverage, not script; `pl` is listed because the bundled Fraunces lacks Latin Extended-A. Onboarding is the main Fraunces surface; its Polish screen-4 title is the canonical check.
+- **Mirroring follows the device locale** (`I18nManager.isRTL`, read by `Stepper`, `OnboardingScaffold` and `OnboardingTopChrome`), not `uiStore.language`: choosing `he` in the app swaps strings and fonts but doesn't mirror.
+- **Mid-flow state is not persisted** on purpose: the flow is short; restarting beats resuming.
+- **E2E bypass.** `babel.config.js` sets `__E2E_SKIP_ONBOARDING__` in every e2e build unless `E2E_SKIP_ONBOARDING=false`; `OnboardingBypass` then completes onboarding after mount. `e2e/scripts/run-e2e.ts` builds a separate binary for `--spec onboarding`, so don't batch it with other specs.
+
+## Verification
+
+- **Unit tests:** `src/store/__tests__/UIStore.test.ts` (onboarding block), `src/store/__tests__/ModelStore.registerOnboardingPalModel.test.ts`, `src/store/onboarding/__tests__/onboardingPals.test.ts`, `src/screens/OnboardingScreens/{__tests__,Onboarding6Screen/__tests__,components/__tests__}/`, `src/__automation__/adapters/__tests__/OnboardingBypass.test.tsx`, `src/components/ui/Stepper/__tests__/`, `__tests__/App.test.tsx`.
+- **E2E:** `e2e/specs/features/onboarding.spec.ts` with `e2e/pages/OnboardingPage.ts`; from `e2e/`, `yarn e2e:android --spec onboarding`. The spec's header comment says screens 5–6 have no Skip; its assertions (correctly) expect Skip.
+- **By hand:** fresh install or About → "Show intro again". Check dark mode, an RTL device locale (mirroring) and `pl` (Inter fallback). Finish with a non-Pip topic and confirm the pal and its download appear.
