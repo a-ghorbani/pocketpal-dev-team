@@ -87,7 +87,7 @@ any ─step_started (initial or follow-up)→ prefill
 
 **Context banner**
 
-- Only one banner shows at a time. `resolveBannerVariant` is pure and returns the first match in this order: full, warning, remote-hedged, html-soft-cap, none (`bannerVariantResolver.ts:47`). The full and warning variants need `effectiveNCtx`.
+- Only one banner shows at a time. `resolveBannerVariant` is pure and returns the first match in this order: full, warning, remote-hedged, html-soft-cap, none (`bannerVariantResolver.ts:47`). The full and warning variants need both `effectiveNCtx` and a known `used`.
 - `effectiveNCtx` is `activeModelCaps.effectiveContextLength` (`BannerRow.tsx:105`): the local `n_ctx`, or the active remote model's `/props` window. It is > 0 or undefined, never 0, because a 0 would read as a false "full".
 - `contextFull` is `context_full || truncated || (remote && stopped_limit)`, or is set by the catch path. Full shows only while `used >= nCtx - AUTOCLEAR_RUNWAY`. That freshness check runs when the banner is read, so raising n_ctx clears the banner without a new turn.
 - A dismissal lasts until the next snapshot, a session switch, reset or delete, or an edit or regenerate.
@@ -117,8 +117,8 @@ any ─step_started (initial or follow-up)→ prefill
 - **String-coupled native errors.** The catch path regex-matches the llama.rn errors "Context is full", "Failed to parse tool call arguments as JSON" and "failed to create MTP draft context"; a reword silently shows the raw error instead. Re-check on every llama.rn upgrade.
 - **A user Stop is not a failure.** Both engines resolve an aborted completion, so the run ends through `run_finished` with clean-finish metadata; `interrupted` and the empty-turn delete happen only when the engine rejects (`useChatSession.ts:774`).
 - **Prompt overflow throws before any token.** The empty turn is deleted, and the full snapshot is kept only in memory, so a session switch loses it.
-- **Catch-path `used` is local-only.** It is pinned to `activeContextSettings?.n_ctx ?? 0`, so on a remote session a catch-path full has `used: 0` and the freshness gate hides the banner.
-- **Remote `used` under-counts on cache reuse.** `tokens_evaluated` comes only from `timings.prompt_n` (`src/api/openai.ts:969`), which excludes the KV-cached prefix. `used` is always a number (`?? 0`), so a missing count reads as zero.
+- **`used` counts the whole prompt, and unknown is not zero.** A llama.cpp server's `timings.prompt_n` excludes the prefix it served from KV cache, so the remote prompt total is `prompt_n + cache_n`, each key guarded on its own (`src/api/openai.ts:966`). An old build omits `cache_n` and falls back to `prompt_n`. llama.rn's local `tokens_evaluated` is already the whole prompt. With no prompt count, `used` is absent (`useChatSession.ts:251`), and the resolver shows no full or warning banner.
+- **Catch-path `used` reads the resolved window.** The abort and context-full sites pin `used` to `activeModelCaps.effectiveContextLength`, not `activeContextSettings.n_ctx`, which is never set for a remote model; a `0` there would fail the freshness gate and hide every remote full. When the window is unknown, `used` is absent.
 - **`include_thinking_in_context: false` strips only inline `<think>` tags from prior `content`.** `stepToApiMessages` still sends `step.reasoningContent` as `reasoning_content`.
 - **Timings and snapshot come from the run's last completion** (`finalResult`), not an aggregate over steps.
 - **Session-list keys are localized labels.** `groupedSessions` keys each group by its label and inserts pinned first. If two labels translate the same, a group vanishes silently. Only `locales.test.ts` guards this.

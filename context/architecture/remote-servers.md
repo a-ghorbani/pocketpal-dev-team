@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keychain API key, the `src/api/openai.ts` request layer (timeouts, the per-`serverType` reasoning wire), llama.cpp capability discovery (the `/props` probe tier and the `/v1/models` list tier), and the binding between a live remote session and its backend. Not covered: the reasoning capability model and pill (`chat-flow.md`, "Contracts and invariants", "Reasoning"), remote token accounting and the context banner (`chat-flow.md`, "Contracts and invariants", "Context banner", and the Traps entry "Remote `used` under-counts on cache reuse"), local-model capabilities (`model-loading.md`).
+Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keychain API key, the `src/api/openai.ts` request layer (timeouts, the per-`serverType` reasoning wire), llama.cpp capability discovery (the `/props` probe tier and the `/v1/models` list tier), and the binding between a live remote session and its backend. Not covered: the reasoning capability model and pill (`chat-flow.md`, "Contracts and invariants", "Reasoning"), remote token accounting and the context banner (`chat-flow.md`, "Contracts and invariants", "Context banner", and the Traps entry "`used` counts the whole prompt, and unknown is not zero"), local-model capabilities (`model-loading.md`).
 
 **Not on `main` yet:** open PRs #895 (sampler forwarding, full `/props` parse), #896 (llama-server router mode), and #897 (QR/link pairing, presence) add behaviour this doc leaves out. The previous version of this doc described it, including measured router wire facts (`git show 1ad6ce1:context/architecture/remote-servers.md`); distill each part back in when its PR lands.
 
