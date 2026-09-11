@@ -260,7 +260,7 @@ Skip permission prompts for faster execution:
 claude --dangerously-skip-permissions "/start-task <task>"
 ```
 
-Safe commands are pre-allowed in `.claude/settings.json`. Dangerous commands (rm -rf, curl, .env access) are blocked.
+Safe commands are pre-allowed in `.claude/settings.json`. Dangerous commands (rm -rf, force-push, pushes to main, secret-file reads) are blocked.
 
 ## Project Structure
 

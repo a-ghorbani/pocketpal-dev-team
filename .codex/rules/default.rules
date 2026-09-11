@@ -13,20 +13,6 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["curl"],
-    decision = "forbidden",
-    justification = "Direct curl usage is blocked for this repo.",
-    match = ["curl https://example.com"],
-)
-
-prefix_rule(
-    pattern = ["wget"],
-    decision = "forbidden",
-    justification = "Direct wget usage is blocked for this repo.",
-    match = ["wget https://example.com/file"],
-)
-
-prefix_rule(
     pattern = ["git", "push", "-f"],
     decision = "forbidden",
     justification = "Force pushes are blocked.",
