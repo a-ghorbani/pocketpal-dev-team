@@ -56,7 +56,7 @@ The orchestrator picks the next role from the returning stage's verdict:
 | planner | `DRAFTED` | plan-critic |
 | plan-critic | `LGTM` | implementer |
 | plan-critic | `HAS_CONCERNS` / `HAS_BLOCKERS` | planner (revision; max 2 rounds) |
-| plan-critic | `ARCHITECTURE_DRIFT` | architect (standard / complex) or intake to re-classify (quick) |
+| planner or plan-critic | `ARCHITECTURE_DRIFT` | architect (standard / complex) or intake to re-classify (quick) |
 | implementer | `COMPLETE` | tester |
 | implementer | `BLOCKED` | planner or architect when the block is a plan/design conflict; otherwise stop |
 | tester | `COMPLETE` | pipeline-reviewer (redesign slices: design-parity-reviewer first) |
