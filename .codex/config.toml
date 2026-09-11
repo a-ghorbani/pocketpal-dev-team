@@ -1,10 +1,28 @@
 approval_policy = "on-request"
-sandbox_mode = "workspace-write"
+default_permissions = "pocketpal"
 
-[sandbox_workspace_write]
-network_access = true
-exclude_slash_tmp = false
-exclude_tmpdir_env_var = false
+# The :workspace profile keeps <root>/.git read-only, and this repo's git data
+# (including every task worktree's, under .git/modules/repos/pocketpal-ai) lives
+# there, so without the override every commit and worktree add asks to escalate.
+[permissions.pocketpal]
+extends = ":workspace"
+
+[permissions.pocketpal.network]
+enabled = true
+
+[permissions.pocketpal.filesystem.":workspace_roots"]
+"." = "write"
+".git" = "write"
+
+# Caches and state written by builds, device tooling, and tools/*.sh.
+[permissions.pocketpal.filesystem]
+"~/.cache" = "write"
+"~/.gradle" = "write"
+"~/.android" = "write"
+"~/.yarn" = "write"
+"~/.npm" = "write"
+"~/.config/pocketpal-dev-team" = "write"
+"~/.local/state/pocketpal-dev-team" = "write"
 
 [features]
 hooks = true

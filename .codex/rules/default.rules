@@ -59,3 +59,17 @@ prefix_rule(
     decision = "allow",
     justification = "Allow fetching PR refs into the read-only source repo metadata so isolated review worktrees can be created.",
 )
+
+prefix_rule(
+    pattern = ["git", "reset"],
+    decision = "prompt",
+    justification = "History-rewriting git commands need confirmation (same as the Claude Code ask rule).",
+    match = ["git reset --hard HEAD~1"],
+)
+
+prefix_rule(
+    pattern = ["git", "rebase"],
+    decision = "prompt",
+    justification = "History-rewriting git commands need confirmation (same as the Claude Code ask rule).",
+    match = ["git rebase main"],
+)
