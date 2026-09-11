@@ -25,7 +25,7 @@ These apply to work that becomes an app PR.
 - **Keep the four stages intact:** Intent → WHAT → HOW → Implementation. Implementation and independent review never collapse into one role. The orchestrator runs stages without interactive prompts; the stop conditions are in `pipeline.md`.
 - **Story gate.** Trivial work needs `intent-brief.md`; quick work adds `how.md`; standard and complex work add `what.md`.
 - **Architecture docs** (`context/architecture/`, one per flow; lifecycle in its README):
-  - a PR that changes behaviour a flow doc describes updates that doc in the same PR;
+  - a change to behaviour a flow doc describes updates that doc in the same round. The doc lives in this repo, so the update is a path-scoped commit here, not part of the app PR;
   - for standard and complex work, WHAT is a delta on the flow doc, and the implementer absorbs it;
   - the architect runs a drift check first, because drift is a bug.
 - **Native changes.** Work touching `package.json`, native modules, `ios/`, `android/`, a Podfile, or `build.gradle` is `NATIVE_CHANGES=YES`. It needs `pod install`, an iOS build, and an Android build before it is ready.

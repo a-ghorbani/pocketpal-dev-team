@@ -17,7 +17,7 @@ Roles are leaves: they do not dispatch further roles. The orchestrating session 
 
 ## Handoff block
 
-Intake creates it. Every stage ends its reply with it, updating `VERDICT` and any key it learned, and the orchestrator passes it verbatim to the next role. Omit keys that don't apply to the task.
+Intake creates it. Every stage ends its reply with it, updating `VERDICT` and any key it learned. The orchestrator passes the returning stage's whole reply (its report plus the block) verbatim to the next role, so the tester sees the implementation report and the pipeline-reviewer sees the test report. Critics are the exception: they get the block alone (paths only, never the producer's reasoning). Omit keys that don't apply to the task.
 
 ```text
 VERDICT: <the stage's verdict — see Routing>
@@ -72,9 +72,10 @@ The orchestrator picks the next role from the returning stage's verdict:
 
 After each stage returns, the calling session immediately invokes the next agent in the chain, with no interactive prompt and no human approval gate between stages. Stop ONLY for:
 
-- `NEEDS_INPUT` from intake (unanswered clarifications in the brief)
+- `NEEDS_INPUT` from any stage (unanswered questions)
+- `ESCALATE` from any stage
+- `BLOCKED` from the implementer that is not a plan or design conflict
 - `HAS_BLOCKERS` persisting after round 2 of either critic loop
-- `ESCALATE` from any review stage
 - incomplete required independent review artifacts
 - failed mandatory verification
 - `BLOCKER` or `CONCERN` findings persisting after round 2 of the independent review/fix loop
@@ -152,7 +153,7 @@ The delivery loop is coordinated by the top-level `/start-task` session. It star
 ## Headless invocation contract
 
 - Every intake invocation must be a self-contained brief. Include the full request text, acceptance criteria, constraints, and any known baseline/version context in the prompt itself.
-- If information is missing, intake must stop with `NEEDS_INPUT:` and list the exact unanswered questions. It must not guess, classify, or route downstream until a new invocation supplies those answers.
+- If information is missing, intake replies `VERDICT: NEEDS_INPUT` with the exact questions, each with the answer it would pick, and does not classify or route. A new invocation supplies the answers.
 
 ## Complexity matrix
 

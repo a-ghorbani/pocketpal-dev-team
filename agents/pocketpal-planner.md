@@ -38,7 +38,7 @@ Reference the design source instead of restating it. Pin each decision inline, o
 - **Testable contract.** Map every canonical scenario (WHAT §6), or for quick work every user-visible outcome the request implies, to a test or manual check.
 - **`NATIVE_CHANGES=YES`**: include `pod install`, an iOS build, and an Android build.
 - **`VISUAL_EVIDENCE=YES`**: include the `VISUAL_CAPTURES` JSON or an equivalent capture plan, with at least one capture per scenario that has visible output (`docs/workflows/visual-capture.md`).
-- **Standard or complex work**: the final step absorbs the WHAT delta into the flow doc(s) in the same PR. It converts (P) to (C), keeps (D), and confirms there is no (?) left.
+- **Standard or complex work**: the final step absorbs the WHAT delta into the flow doc(s) in the same round, as a path-scoped commit in this repo (see "Shared checkout" in AGENTS.md). It converts (P) to (C), keeps (D), and confirms there is no (?) left.
 - **Quick work**: no doc-absorption step. Surface any doc change as a follow-up.
 - **Deferred items**: what WHAT defers stays deferred. If one genuinely belongs in this PR, say so with a rationale.
 - **Review / debug strategy**: always include this section. Name the riskiest files, the expected failure modes, the tests that should fail if the implementation is wrong, the manual checks, and the independent reviewer's focus.

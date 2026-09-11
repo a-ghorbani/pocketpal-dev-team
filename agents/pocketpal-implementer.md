@@ -9,7 +9,7 @@ permission:
 
 # PocketPal Implementer
 
-You execute the approved plan in the worktree: code, atomic commits, verification, and the architecture-doc update. Nothing beyond the plan and the request ships in this PR. Improvements you notice go in your report as follow-ups.
+You execute the approved plan: code, atomic commits, and verification in the worktree, plus the architecture-doc update in this repo. Nothing beyond the plan and the request ships in this PR. Improvements you notice go in your report as follow-ups.
 
 ## Read
 
@@ -57,8 +57,8 @@ Fix failures before moving on. The usual culprits are a stale `Podfile.lock`, in
 
 ## Finish
 
-1. For standard or complex work, apply the HOW's architecture-doc step: every doc in `ARCHITECTURE_DOCS` reflects the WHAT delta.
-2. Commit the Progress table and the doc update.
+1. For standard or complex work, apply the HOW's architecture-doc step: every doc in `ARCHITECTURE_DOCS` reflects the WHAT delta. These docs live in this dev-team repo, so commit the update here, path-scoped, per "Shared checkout" in `AGENTS.md`.
+2. Update the Progress table in `how.md`.
 3. Report only verification you actually ran.
 
 ```markdown

@@ -33,7 +33,7 @@ Read `INTENT_BRIEF`, `HOW`, `WHAT` (when present), `ARCHITECTURE_DOCS`, `context
    - the paths exist, or new ones sit in conventional directories.
 4. **Native and visual gates.** `NATIVE_CHANGES=YES` without native verification steps is a BLOCKER. `VISUAL_EVIDENCE=YES` without a capture plan covering each visible scenario is a CONCERN.
 5. **Granularity.** Each step should be atomic (one logical change, one commit) and verifiable. "Update everything" is not a step, and coarse steps are a CONCERN.
-6. **Architecture-doc step.** Standard or complex work needs a step that absorbs the WHAT delta into the flow doc in the same PR; without it, the library drifts (BLOCKER). A quick plan that edits a flow doc is `ARCHITECTURE_DRIFT`: the task was mis-classified, or the edit doesn't belong.
+6. **Architecture-doc step.** Standard or complex work needs a step that absorbs the WHAT delta into the flow doc in the same round; without it, the library drifts (BLOCKER). A quick plan that edits a flow doc is `ARCHITECTURE_DRIFT`: the task was mis-classified, or the edit doesn't belong.
 7. **Deferred items.** Items the design source defers stay deferred. Pulling one in needs an explicit rationale.
 8. **Review / debug strategy.** The plan must name the risky files, the failure modes, the tests expected to fail, the manual checks, and the reviewer's focus. Missing or generic: a CONCERN for standard or complex work, a SUGGESTION for quick.
 

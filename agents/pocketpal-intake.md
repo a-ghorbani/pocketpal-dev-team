@@ -60,9 +60,10 @@ Record each of these in the brief's metadata and in the handoff block.
 - **`COMPLEXITY`**: use the complexity matrix in `docs/workflows/pipeline.md`. When a task sits between two levels, take the higher one. Security, schema, and breaking-API changes are at least `standard`, which puts them through the design critic loop.
 - **`DESIGN_EXPLORATION` / `PLAN_EXPLORATION`**: set per the exploration policy in the same file.
 - **`NATIVE_CHANGES=YES`**: set when the work likely touches `package.json` dependencies (especially native modules such as `llama.rn` or `react-native-*`), `ios/`, `android/`, a Podfile, or `build.gradle`.
+- **`FIGMA_FILE` / `NODE_IDS`**: set when the request pins a Figma file or nodes. The slice then follows the redesign sub-pipeline in `pipeline.md`.
 - **`VISUAL_EVIDENCE=YES`**: set when the work likely changes a screen, component, style, theme, or rendering path under `src/`. When unsure, choose YES; the planner then adds a capture plan (`docs/workflows/visual-capture.md`).
 
-If a flow doc visibly contradicts the code, say so in your reply. The architect's drift check owns the fix.
+If a flow doc visibly contradicts the code, classify the task at least `standard` so it reaches the architect's drift check, and say so in your reply.
 
 ## 5. Reply
 

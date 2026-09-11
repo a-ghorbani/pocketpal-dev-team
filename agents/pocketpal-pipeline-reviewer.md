@@ -26,7 +26,7 @@ Beyond the standard's lenses:
   - none of them is still `needs-input`.
 - **Testable contract:** the canonical scenarios in WHAT §6 for standard or complex work, or the user-visible outcomes the request implies, are met.
 - **Invariants:** every WHAT §4b invariant holds, with no exceptions.
-- **Architecture docs:** the doc-absorption step landed in this PR (standard or complex).
+- **Architecture docs:** the doc-absorption step landed this round, as a dev-team commit updating the flow doc(s) (standard or complex).
 - **Deferred items:** items WHAT defers did not land.
 - **Checks:** run them yourself.
 
@@ -83,10 +83,14 @@ Lint · TypeCheck · Tests (X/Y) · Coverage (X%) · Pod Install · iOS Build ·
 
 ## On approval: open the draft PR and post evidence
 
+Run these from the worktree, substituting the `WORKTREE` and `BRANCH` values from the handoff block. `gh` infers the pocketpal-ai repo from the current directory; from anywhere else it would target this repo.
+
+In a PR-fix round the PR already exists: push, then take its number from `../../tools/ghb pr view --json number` and skip `pr create`.
+
 ```bash
-cd "$WORKTREE"
-git push -u origin "$BRANCH"
-../../tools/ghb pr create --draft --base main --head "$BRANCH" \
+cd <WORKTREE>
+git push -u origin <BRANCH>
+../../tools/ghb pr create --draft --base main --head <BRANCH> \
   --title "feat(scope): description" \
   --body "## Summary
 - Change 1
@@ -100,7 +104,7 @@ Replace `<harness>` with the one you run under (`Claude Code`, `Codex`, `opencod
 When UI changed, post the captures right after the PR exists:
 
 ```bash
-../../tools/post-pr-visual-evidence.sh <PR> --title "Visual evidence — <label>" <capture.png> ...
+cd <WORKTREE> && ../../tools/post-pr-visual-evidence.sh <PR> --title "Visual evidence — <label>" <capture.png> ...
 ```
 
 - **Exit 0:** posted.
