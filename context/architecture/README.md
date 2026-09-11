@@ -14,24 +14,24 @@ One file per **flow**, bounded by a single user-facing concept. Per-component is
 
 | Flow doc | Scope | Key code |
 | --- | --- | --- |
-| `agent-runner.md` | `runAgent()` turn loop: emitted events, abort / error / follow-up contracts | `src/services/agent/`, `useChatSession` |
-| `chat-flow.md` | chat rendering, streaming, tool-call display, `AssistantTurn` shape, reasoning | chat components, `ToolUsedChip`, `reasoningCapability` |
-| `remote-servers.md` | OpenAI-compatible servers: `ServerConfig`, request layer, timeouts, llama-server router | `src/api/openai.ts`, `ServerStore`, `routerState`, `serverUrl` |
-| `model-loading.md` | preset model list from device rules, GGUF header / caps, native model load | `deviceRules/`, `ModelStore`, `ggufHeader`, `modelCaps` |
-| `pals-and-talents.md` | what a Pal and a Talent are; tool opt-in and execution boundary | `src/services/talents/`, `src/types/pal`, `PalsSheets` |
-| `palshub-checkout.md` | buying a premium PalsHub Pal in-app; ownership confirmation | `CheckoutFlowStore`, `src/services/palshub/`, native auth-session / external-link specs |
-| `explore-tab.md` | Explore tab: PalsHub discovery, `[Pals \| Models]` sub-tabs | `ExploreScreen` |
-| `app-shell.md` | bottom-tab navigation shell and the Home (Chats) screen | `HomeScreen`, root navigator |
-| `settings.md` | Settings root and pushed sub-screens, per-control writers, testID freeze | `SettingsScreen`, `LanguageSelector` |
-| `onboarding.md` | first-launch onboarding screens and completion gate | `src/store/onboarding`, `uiStore.hasCompletedOnboarding` |
-| `theming.md` | design tokens, typography, DS component layer, Paper-import blocklist | `src/theme/tokens`, `src/components/ui/` |
-| `asr.md` | voice input: availability gate, Whisper model wire, push-to-talk FSM, native coexistence | `src/services/asr/` |
-| `tts.md` | text-to-speech: availability gate, Supertonic model wire, re-download sentinel | `src/services/tts/` |
-| `deep-linking.md` | `pocketpal://` links and the Hugging Face User-Agent / attribution wire | `useDeepLinking`, `hfResolve`, `hubRunLink` |
-| `benchmark-matrix.md` | on-device benchmark matrix runner and its CLI / spec / compare toolchain | `BenchmarkRunnerScreen`, `src/__automation__/`, `e2e/benchmark/` |
-| `release.md` | Android native build, llama.rn payload variants (incl. Hexagon), payload gate | `android/`, `android/fastlane/`, `scripts/` |
+| `agent-runner.md` | `runAgent()` turn loop: emitted events, abort / error / follow-up contracts | `src/services/agent/` (`runAgent`, `agentStateReducer`, `triggerMarkers`), `useChatSession` |
+| `chat-flow.md` | sending, streaming, persisting and rendering a turn: tool-call and reasoning display, footer, context banner, session list | `useChatSession`, `ChatSessionStore`, `Message` / `TalentSurface`, `bannerVariantResolver`, `reasoningCapability` |
+| `remote-servers.md` | OpenAI-compatible servers: `ServerConfig`, request layer and timeouts, `/props` and `/v1/models` capability discovery | `src/api/openai.ts`, `ServerStore`, `remoteCaps` / `listCaps` / `modelCaps`, `ModelStore.setRemoteModel`, `RemoteModelSheet` |
+| `model-loading.md` | preset list from device rules, GGUF metadata and caps, speculative drafts, Hexagon device selection, load errors | `src/services/deviceRules/`, `ModelStore`, `store/draftResolution.ts`, `utils/{mtp,ggufHeader,modelCaps,deviceSelection}.ts` |
+| `pals-and-talents.md` | what a Pal and a Talent are; tool opt-in, search grounding, execution boundary | `src/services/talents/`, `src/services/search/`, `ChatSessionStore.resolveCompletionSettings`, `systemPromptResolver`, `TalentSurface` |
+| `palshub-checkout.md` | buying a premium PalsHub Pal in-app; ownership confirmation | `CheckoutFlowStore`, `src/services/palshub/`, `NativeAuthSession` / `NativeExternalContentLink` specs and native modules |
+| `explore-tab.md` | Explore tab: PalsHub discovery and `[Pals \| Models]` sub-tabs (**`redesign/phase-3` only**) | `ExploreScreen`, `ExplorePalsPanel`, `PalDetailSheet` |
+| `app-shell.md` | root providers, onboarding switch, Drawer and sidebar, global hosts | `App.tsx` (`SwitchPoint`, Drawer), `SidebarContent`, `HeaderLeft`, `ROUTES` |
+| `settings.md` | the Settings screen: controls and their writers, testIDs e2e depends on | `SettingsScreen`, `LanguageSelector` / `SearchableSelectSheet`, `SearchProviderStore` |
+| `onboarding.md` | first-launch onboarding screens and the completion gate | `src/screens/OnboardingScreens/`, `src/store/onboarding/`, `uiStore.hasCompletedOnboarding`, `App.tsx` `SwitchPoint` |
+| `theming.md` | design tokens, typography, DS component layer, Paper-import blocklist | `src/theme/tokens/`, `src/utils/theme.ts`, `useTheme`, `src/components/ui/`, `.eslintrc.js` blocklist |
+| `asr.md` | voice input: availability gate, Whisper model wire, push-to-talk (**PR #786 only**) | `ASRStore`, `src/services/asr/`, `usePushToTalk`, `MicButton` |
+| `tts.md` | text-to-speech: availability gate, Supertonic model wire, re-download sentinel | `TTSStore`, `src/services/tts/`, `TTSSetupSheet` |
+| `deep-linking.md` | inbound `pocketpal://` links and the Hugging Face User-Agent attribution wire | `useDeepLinking`, `hubRunLink`, `HubRunSheetHost`, `hfResolve`, `hfUserAgent` |
+| `benchmark-matrix.md` | on-device benchmark matrix runner and its config / merge / compare toolchain | `src/__automation__/`, `e2e/helpers/bench-runner.ts`, `e2e/scripts/` |
+| `release.md` | Android native build, llama.rn payload variants (incl. Hexagon), payload gate | `scripts/verify-android-payload.js`, `scripts/android-payload-manifest.json`, `android/fastlane/`, `.github/actions/setup-hexagon-sdk/` |
 
-A flow file appears here once a story has produced a vetted WHAT for it; the library accrues lazily. Adding a flow doc means adding its row.
+A flow file appears here once a story has produced a vetted WHAT for it; the library accrues lazily. Adding a flow doc means adding its row. Flow docs describe `main`; a doc marked with a branch or PR describes code that hasn't landed yet.
 
 ---
 
