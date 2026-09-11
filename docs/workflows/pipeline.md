@@ -15,9 +15,60 @@ Orchestrator runbook for the top-level `/start-task` session (and the PR-fix loo
 
 Roles are leaves: they do not dispatch further roles. The orchestrating session does all routing.
 
+## Handoff block
+
+Intake creates it. Every stage ends its reply with it, updating `VERDICT` and any key it learned, and the orchestrator passes it verbatim to the next role. Omit keys that don't apply to the task.
+
+```text
+VERDICT: <the stage's verdict — see Routing>
+TASK_ID: TASK-YYYYMMDD-HHMM | PR-<n>-fix
+WORKTREE: ./worktrees/TASK-YYYYMMDD-HHMM | ./worktrees/PR-<n>
+BRANCH: feature/TASK-YYYYMMDD-HHMM | pr-<n>
+STORY_DIR: ./workflows/stories/<TASK_ID>
+COMPLEXITY: trivial | quick | standard | complex
+NATIVE_CHANGES: YES | NO
+VISUAL_EVIDENCE: YES | NO
+DESIGN_EXPLORATION: YES | NO
+PLAN_EXPLORATION: YES | NO
+INTENT_BRIEF: <STORY_DIR>/intent-brief.md
+WHAT: <STORY_DIR>/what.md                      # standard / complex
+HOW: <STORY_DIR>/how.md                        # quick / standard / complex
+ARCHITECTURE_DOCS: ./context/architecture/<flow>.md, ...
+VISUAL_CAPTURE_PATHS: <png> <png> ...          # tester, when captures exist
+PR: #<n>                                       # pipeline-reviewer, once the draft PR exists
+```
+
+Take `WORKTREE`, `BRANCH` and `STORY_DIR` from the block; never rebuild them from `TASK_ID` (a PR fix uses worktree `PR-<n>`, branch `pr-<n>`, story `PR-<n>-fix`).
+
+## Routing
+
+The orchestrator picks the next role from the returning stage's verdict:
+
+| Stage | Verdict | Next |
+| --- | --- | --- |
+| intake | `NEEDS_INPUT` | stop; surface the questions |
+| intake | `READY`, trivial | implementer |
+| intake | `READY`, quick | planner |
+| intake | `READY`, standard / complex | architect |
+| architect | `DRAFTED` | architect-critic |
+| architect-critic | `LGTM` | planner |
+| architect-critic | `HAS_CONCERNS` / `HAS_BLOCKERS` | architect (revision; max 2 rounds) |
+| planner | `DRAFTED` | plan-critic |
+| plan-critic | `LGTM` | implementer |
+| plan-critic | `HAS_CONCERNS` / `HAS_BLOCKERS` | planner (revision; max 2 rounds) |
+| plan-critic | `ARCHITECTURE_DRIFT` | architect (standard / complex) or intake to re-classify (quick) |
+| implementer | `COMPLETE` | tester |
+| implementer | `BLOCKED` | planner or architect when the block is a plan/design conflict; otherwise stop |
+| tester | `COMPLETE` | pipeline-reviewer (redesign slices: design-parity-reviewer first) |
+| tester | `IMPLEMENTATION_BUG` | implementer |
+| design-parity-reviewer | `APPROVED` / `NEEDS_FIXES` | pipeline-reviewer / implementer (max 2 rounds) |
+| pipeline-reviewer | `APPROVED` (with `PR`) | independent review (`review-pr`) |
+| pipeline-reviewer | `REQUEST_CHANGES` | implementer |
+| any stage | `NEEDS_INPUT` / `ESCALATE` | stop |
+
 ## Autonomous-run contract
 
-After each stage returns, the calling session immediately invokes the next agent in the chain. Do NOT use `AskUserQuestion` or any other interactive prompt between stages. There is no human approval gate between stages. Stop ONLY for:
+After each stage returns, the calling session immediately invokes the next agent in the chain, with no interactive prompt and no human approval gate between stages. Stop ONLY for:
 
 - `NEEDS_INPUT` from intake (unanswered clarifications in the brief)
 - `HAS_BLOCKERS` persisting after round 2 of either critic loop
