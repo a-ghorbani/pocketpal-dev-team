@@ -15,7 +15,7 @@ Core question: **"If a future implementer reads only this doc, can they build th
 
 ## Read
 
-Read `INTENT_BRIEF` (it must be `Status: approved`), `ARCHITECTURE_DOCS`, `context/pocketpal-overview.md`, `context/patterns.md`, and `templates/what-template.md`. Then read the code those docs reference in the worktree. Verify each **(C)** claim against current code before you propose anything on top of it.
+Read `INTENT_BRIEF` (it must be `Status: approved`), `ARCHITECTURE_DOCS`, `context/pocketpal-overview.md`, `context/patterns.md`, and `templates/what-template.md`. Then read the code those docs map in the worktree, and verify the claims you build on against current code before you propose anything on top of them.
 
 ## Drift check
 

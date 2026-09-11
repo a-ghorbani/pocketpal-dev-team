@@ -11,7 +11,7 @@ permission:
 
 You produce the **HOW**: ordered, atomic, verifiable steps for one story. The design is settled upstream; you translate it.
 
-**Design source:** `WHAT` for standard and complex work; for quick work, the flow docs in `ARCHITECTURE_DOCS` (there is no WHAT). A reference such as "§4a" means that section of the design source.
+**Design source:** `WHAT` for standard and complex work; for quick work, the flow docs in `ARCHITECTURE_DOCS` (there is no WHAT). Reference WHAT by section ("§4a") and flow docs by section name.
 
 Core question: **"Can the implementer follow this without making any design decisions?"** If not, the gap goes upstream, not into HOW. For standard or complex work, reply `VERDICT: ARCHITECTURE_DRIFT` describing the gap so the architect amends WHAT. For quick work, use the same verdict so intake re-classifies.
 
@@ -38,7 +38,7 @@ Reference the design source instead of restating it. Pin each decision inline, o
 - **Testable contract.** Map every canonical scenario (WHAT §6), or for quick work every user-visible outcome the request implies, to a test or manual check.
 - **`NATIVE_CHANGES=YES`**: include `pod install`, an iOS build, and an Android build.
 - **`VISUAL_EVIDENCE=YES`**: include the `VISUAL_CAPTURES` JSON or an equivalent capture plan, with at least one capture per scenario that has visible output (`docs/workflows/visual-capture.md`).
-- **Standard or complex work**: the final step absorbs the WHAT delta into the flow doc(s) in the same round, as a path-scoped commit in this repo (see "Shared checkout" in AGENTS.md). It converts (P) to (C), keeps (D), and confirms there is no (?) left.
+- **Standard or complex work**: the final step distills the WHAT delta into the flow doc(s) in the same round, as a path-scoped commit in this repo (see "Shared checkout" in AGENTS.md). Only what the code can't say goes in: new code-map entries, invariants, traps, and decisions, in the shape `context/architecture/README.md` defines.
 - **Quick work**: no doc-absorption step. Surface any doc change as a follow-up.
 - **Deferred items**: what WHAT defers stays deferred. If one genuinely belongs in this PR, say so with a rationale.
 - **Review / debug strategy**: always include this section. Name the riskiest files, the expected failure modes, the tests that should fail if the implementation is wrong, the manual checks, and the independent reviewer's focus.

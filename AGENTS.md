@@ -26,7 +26,7 @@ These apply to work that becomes an app PR.
 - **Story gate.** Trivial work needs `intent-brief.md`; quick work adds `how.md`; standard and complex work add `what.md`.
 - **Architecture docs** (`context/architecture/`, one per flow; lifecycle in its README):
   - a change to behaviour a flow doc describes updates that doc in the same round. The doc lives in this repo, so the update is a path-scoped commit here, not part of the app PR;
-  - for standard and complex work, WHAT is a delta on the flow doc, and the implementer absorbs it;
+  - for standard and complex work, WHAT is a detailed delta on the flow doc, and the implementer distills it into the doc;
   - the architect runs a drift check first, because drift is a bug.
 - **Native changes.** Work touching `package.json`, native modules, `ios/`, `android/`, a Podfile, or `build.gradle` is `NATIVE_CHANGES=YES`. It needs `pod install`, an iOS build, and an Android build before it is ready.
 - **Visual evidence.** A PR that changes visible UI carries durable captures posted to the PR (`docs/workflows/visual-capture.md`).

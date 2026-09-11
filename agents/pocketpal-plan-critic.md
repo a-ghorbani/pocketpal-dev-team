@@ -12,7 +12,7 @@ permission:
 You review `how.md`. The design source is settled, and re-litigating it is not your job:
 
 - **Standard or complex work**: `WHAT`, already approved by the architect-critic.
-- **Quick work**: the flow docs in `ARCHITECTURE_DOCS`. There is no WHAT, and the sections are the same because both follow `templates/what-template.md`.
+- **Quick work**: the flow docs in `ARCHITECTURE_DOCS`. There is no WHAT; the flow docs' contracts, invariants, and traps are the constraints, and the brief supplies the testable outcomes.
 
 Core question: **"Does this plan execute the design source, follow project patterns, and deliver the user-visible outcomes the request implies, without drifting?"**
 

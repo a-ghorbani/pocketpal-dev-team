@@ -35,58 +35,24 @@ A flow file appears here once a story has produced a vetted WHAT for it; the lib
 
 ---
 
+## What a flow doc is for
+
+The code is the truth. A flow doc is a **map** of it plus what the code cannot tell you: it gets an agent to the right files quickly, and warns it about what it would otherwise get wrong. If a reader could recover a line by reading the code, the line doesn't belong here.
+
+Every flow doc has this shape, in this order:
+
+1. **Purpose** (2–4 lines): what the flow covers, what it deliberately doesn't, and which neighbouring flow docs own the rest.
+2. **Code map**: a table of the key files, modules and entry points, one line each on their role. Every path must exist.
+3. **How it works** (≤ 20 lines): the main path through the code, named by function or component so the reader can jump to it. Include a state machine or lifecycle only when the flow has one.
+4. **Contracts and invariants**: the load-bearing rules a change must not break, one line each with a code pointer. This covers single-writer ownership, ordering, wire formats, and cross-file agreements.
+5. **Traps and decisions**: non-obvious behaviour, external constraints, and choices a reader would otherwise undo, each with its reason. Include a decision only when it is hard to reverse, surprising without context, and the result of a real trade-off.
+6. **Verification**: where the tests and e2e specs for the flow live, and how to check a change by hand.
+
+**Budget:** about 1,200 words, 2,000 for the largest flows. Going over usually means field lists, enumerations, step-by-step logic, or history, all of which the code or git already hold. A flow doc has no story IDs, round notes, or PR narrative, and no (C)/(P)/(D) markers: everything here is current truth. Reference other flow docs by file and section name, not section numbers.
+
 ## Lifecycle
 
-```
-Story-scoped WHAT (delta)            Cumulative architecture (this dir)
-─────────────────────────            ──────────────────────────────────
-workflows/stories/<TASK-ID>/         context/architecture/<flow>.md
-  what.md                            (current truth)
-
-  proposes additions, changes,       (read by next story's architect
-  decisions, edge cases on top       to draft its delta against this)
-  of context/architecture/<flow>.md
-                                                ▲
-            on PR merge ──────────────────────  │
-                                                │
-              architect updates the architecture
-              file with the approved delta in
-              the same round that lands the code
-```
-
-The story-scoped `what.md` is born **as a delta** on the architecture file and dies **merged into it** when the work ships.
-
----
-
-## Conventions used in architecture files
-
-Mark every claim with one of:
-
-- **(C)** — current behaviour, documented from code
-- **(P)** — proposal, open for challenge
-- **(?)** — open question, decision needed
-- **(D)** — decision (was an open question, now resolved)
-
-Architecture files should mostly be **(C)** — they're current truth. Story WHATs are mostly **(P)** and **(?)** — they're deltas being proposed. On merge, the architect resolves the markers (anything (P) becomes (C); any remaining (?) is a bug — the WHAT shouldn't have shipped).
-
----
-
-## Required sections (template)
-
-Every architecture file should have:
-
-1. **Data model** — the on-disk and in-memory shape. Glossary for any term used elsewhere in the doc.
-2. **External shape** — wire format / API / protocol the flow exposes (if any).
-3. **State machine** — lifecycle states, transitions, what the user sees in each (if any).
-4. **Contract** — for each component participating in the flow: what it renders / produces / writes; what it does NOT.
-5. **Single-writer rule** — for each mutable field, the canonical writer. Reading is unrestricted.
-6. **Canonical scenarios** — the rendered or observable shapes the design must produce. Manually testable.
-7. **Edge cases** — what happens at the boundaries (cancel, empty, race, missing dependency).
-8. **Decisions** — resolved trade-offs. Each has a short rationale.
-
-Use `templates/what-template.md` as a starting point.
-
----
+A story's `what.md` is a detailed, story-scoped delta, drafted against the flow doc (`templates/what-template.md`). When the work lands, the implementer distills that delta into the flow doc in the same round, as a path-scoped commit in this repo. Only what the code can't say survives: new code-map entries, new or changed invariants, new traps and decisions. The WHAT itself stays with the story.
 
 ## Drift prevention
 

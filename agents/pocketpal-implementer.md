@@ -57,7 +57,7 @@ Fix failures before moving on. The usual culprits are a stale `Podfile.lock`, in
 
 ## Finish
 
-1. For standard or complex work, apply the HOW's architecture-doc step: every doc in `ARCHITECTURE_DOCS` reflects the WHAT delta. These docs live in this dev-team repo, so commit the update here, path-scoped, per "Shared checkout" in `AGENTS.md`.
+1. For standard or complex work, apply the HOW's architecture-doc step: distill the WHAT delta into each doc in `ARCHITECTURE_DOCS`, in the shape `context/architecture/README.md` defines. That means code-map entries, invariants, traps, and decisions, not the WHAT's detail. These docs live in this dev-team repo, so commit the update here, path-scoped, per "Shared checkout" in `AGENTS.md`.
 2. Update the Progress table in `how.md`.
 3. Report only verification you actually ran.
 
