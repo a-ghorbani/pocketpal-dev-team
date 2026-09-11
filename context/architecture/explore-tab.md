@@ -1,263 +1,94 @@
 # Explore Tab
 
-**Purpose**: cumulative architecture truth for the **Explore** bottom-tab root
-(`ExploreScreen`) — the PalsHub **discovery** surface and its segmented
-`[Pals | Models]` sub-tab container. This doc owns the discovery/browse UI only.
-The **purchase** flow lives in `palshub-checkout.md`; pal **configuration**
-(PACT/talents/greeting) lives in `pals-and-talents.md`; the bottom-tab shell and
-nav topology live in `app-shell.md`. Tokens resolve via `theming.md`.
+## Purpose
 
-Status: **Pals discovery shipped; Models sub-tab is a disabled stub.** The
-detail surface is the existing `PalDetailSheet`, reskinned in place — no nav
-topology change.
+This doc covers the Explore bottom-tab root (`ExploreScreen`): PalsHub pal discovery (browse, filter, sort, search, paginate), the segmented `[Pals | Models]` container, and the pal-details sheet that Explore opens.
 
-Convention:
-- **(C)** = current behaviour, documented from code
-- **(D)** = decision (was open, now resolved)
+Other flow docs own the neighbouring pieces:
 
----
+- purchase and ownership: `palshub-checkout.md`
+- pal configuration: `pals-and-talents.md`
+- the tab shell: `app-shell.md`
+- tokens and DS components: `theming.md`
 
-## 1. Surface
+**Branch:** the code exists only on the `redesign/phase-3` integration branch. `main` (v1.17.3) has no `ExploreScreen` and no bottom tabs. Every path below is relative to `src/` on that branch.
 
-`ExploreScreen` (C) is mounted by `MainTabs` as the `ExploreTab` root
-(`MainTabs.tsx`), unchanged. It renders, top to bottom:
+## Code map
 
-- a header ("Explore");
-- a sign-in promo card ("Get your pals" → "Log in to Palshub"), shown only when
-  `!authService.isAuthenticated`;
-- the DS `Tabs` (`variant='pill'`) segmented `[Pals | Models]` container;
-- the active sub-tab panel.
-
-The promo card's CTA and any gated discovery action route to the existing
-`AuthSheet` (no new auth behaviour).
-
-**Glossary:**
-- **Sub-tab** — the segmented `[Pals | Models]` container (DS `Tabs`).
-- **Pals sub-tab** — the PalsHub discovery surface (browse/filter/search public
-  pals); a single-column **Card-List** layout, distinct from PalsScreen's
-  2-column `SquarePalCard` grid.
-- **Models sub-tab** — a present-but-disabled segment with a "coming soon"
-  placeholder; content is owned by a separate Models slice.
-- **Pal-details** — the existing `PalDetailSheet` bottom-sheet, reskinned in
-  place (tokens only; behaviour byte-preserved).
-
----
-
-## 2. Data model
-
-**No new persisted model, no new store, no data-model change.** The discovery
-surface is built from existing `palStore` discovery state + existing wire types.
-
-```
-ExploreScreen local UI state (C, React state — not persisted, not a store)
-  subTab        : 'pals' | 'models'   // 'models' is disabled (never selected)
-  activeFilters : category ids + price range (local)
-  searchQuery   : string
-  searchExpanded: boolean
-  openSheet     : 'none' | 'categories' | 'price'
-  selectedPal   : PalsHubPal | null   // for the detail sheet
-  hasMore       : boolean             // reached-the-end signal
-
-Read from palStore (C, all existing):
-  cachedPalsHubPals : PalsHubPal[]        // discovery results
-  isLoadingPalsHub  : boolean
-  searchPalsHubPals(query)                // → PalsResponse (has_more on response)
-  getCategories() / getTags()             // filter-sheet options
-  isPalsHubPalDownloaded(id)
-  isUSRegion                              // buy-button region gate (in the sheet)
-```
-
-Filter/sort/search compose a `PalsQuery` (`category_ids` / `tag_names` /
-`price_min` / `price_max` / `query`) passed to `searchPalsHubPals`. The
-**reached-the-end** signal reads `has_more` off the **resolved response** —
-`PalStore.searchPalsHubPals` persists only `cachedPalsHubPals`, not `has_more`.
-
----
-
-## 3. State machine
-
-The discovery surface has a small load lifecycle (read off `isLoadingPalsHub` +
-result count + `has_more`); no new persisted lifecycle. Checkout lifecycle is
-owned by `palshub-checkout.md` (unchanged).
-
-| State | User-visible feedback |
+| Path | Role |
 | --- | --- |
-| loading | spinner in the Pals panel (`isLoadingPalsHub`) |
-| results | Card-List rows; "Available Pals" header + sort + search |
-| empty | "No Pals found" empty state |
-| reached-the-end | check-circle + "You've reached the end" + "Browse Pals on Palshub" (when `!has_more`) |
-| login-required | "Create an Account" modal on a gated action while unauthenticated |
-| models sub-tab | disabled segment; tap is a no-op; panel shows a "coming soon" placeholder |
+| `navigation/MainTabs.tsx` | Mounts `ExploreScreen` as the `ExploreTab` root |
+| `screens/ExploreScreen/ExploreScreen.tsx` | Header, sign-in promo card (signed-out only), DS `Tabs` `variant="pill"`, the `AuthSheet` host, and the Models "coming soon" placeholder |
+| `screens/ExploreScreen/components/ExplorePalsPanel.tsx` | Owns all discovery state: filters, sort, debounced search, pagination, the detail and login gates, and the overlay |
+| `…/components/ExploreFilterRow.tsx` | Filter openers (`categories`, `price`, `tags`) |
+| `…/components/ExploreSortControl.tsx` | Opens the sort sheet |
+| `…/components/CategoryFilterSheet.tsx`, `TagsFilterSheet.tsx` | Options from `palStore.getCategories()` and `getTags()`, shown in the legacy `components/Sheet` |
+| `…/components/PriceFilterSheet.tsx`, `SortFilterSheet.tsx` | Price range; `SortOption` is any `PalsQuery['sort_by']` value except `rating`, which the API orders like `popular` |
+| `…/components/PalCardList.tsx` | Single-column discovery row |
+| `…/components/ExploreSearch.tsx` | `ExploreSearchToggle` (`explore-search-toggle`) |
+| `…/components/ExploreSearchOverlay.tsx` | Search overlay in a Paper `Portal`: scrim, DS `Input`, and four body states |
+| `…/components/ExploreSearchResultRow.tsx` | Overlay result row |
+| `…/components/LoginRequiredModal.tsx` | DS `Dialog` shown when a signed-out user taps a premium pal |
+| `components/PalsHub/PalDetailSheet/PalDetailSheet.tsx` | Pal details plus the download, buy and owned actions. Explore is its only mount |
+| `store/PalStore.ts` | `searchPalsHubPals`, `isLoadingPalsHub`, `getCategories`, `getTags`, `isCheckoutEligible`, `downloadPalsHubPal` |
 
-### Search overlay body (C)
+## How it works
 
-When `searchExpanded`, `ExplorePalsPanel` renders a Portal-mounted search
-overlay over the dimmed discovery grid. The overlay body is selected from
-existing signals (`debouncedQuery`, `isLoadingPalsHub`, `items.length`);
-`items` is shared with the grid behind the scrim, so the prompt body is keyed on
-`debouncedQuery === ''`, not on `items.length`.
+`ExploreScreen` holds only `subTab` and `showAuth`. The Models item is `disabled`, so the DS `Tabs` never fires `onChange` for it, and `subTab` stays `'pals'`.
 
-| Overlay body | Selected when | User-visible feedback |
-| --- | --- | --- |
-| prompt | `debouncedQuery === ''` | centered "Start typing" + "Enter pal name and view available options" |
-| loading | query set, `isLoadingPalsHub` | in-overlay spinner |
-| 0-results | query set, `items.length === 0`, not loading | "No Results for **{query}**" (query in accent) + helper + "Explore Pals" CTA |
-| results | query set, `items.length > 0` | "Search results" header + result rows (avatar + name + `pal.description` subtitle + chevron) |
-| closed | `!searchExpanded` | overlay unmounted; discovery grid visible |
+`ExplorePalsPanel` works as follows:
 
-A result-row tap **closes the overlay before opening `PalDetailSheet`**: it runs
-the shared close-and-clear (`setSearchExpanded(false)` + clear `searchInput`),
-then `handleCardPress`. The overlay is a paper `Portal` painted above the
-`@gorhom/bottom-sheet` host, so opening the sheet while the overlay is still
-mounted would render it under the scrim and the scrim would swallow its touches.
+- **Query.** `buildQuery(page)` composes a `PalsQuery` from `sort` (default `'newest'`), `categoryIds`, `tagNames`, `priceRange` and `debouncedQuery` (the input trimmed after a 300 ms debounce).
+- **Page 1.** Any change to `buildQuery` bumps `seqRef`, resets `pageRef` to 1, and calls `palStore.searchPalsHubPals(buildQuery(1))`. The response replaces `items` and sets `hasMore` from `response.has_more`, but only if the token is still current.
+- **Paging.** `FlatList` `onEndReached` calls `loadMore`, which fetches the next page and appends to `items` under the same token check.
+- **Footer.** It shows a spinner while loading more. When `items` is non-empty, nothing is loading and `!hasMore`, it shows the reached-the-end check-circle with a title and subtitle. `ListEmptyComponent` shows a spinner while `isLoadingPalsHub`, otherwise "No Pals found".
+- **Card tap.** `handleCardPress` checks for a premium, unowned pal (`price_cents > 0 && !is_owned`). If the user is signed out it opens `LoginRequiredModal`, whose action calls `onSignInPress`, which leads to `AuthSheet`. Otherwise it sets `selectedPal` and opens `PalDetailSheet`.
+- **Search.** `searchExpanded` mounts `ExploreSearchOverlay`, which re-presents the same `searchInput`, `debouncedQuery` and `items`. The body is chosen in this order:
+  1. prompt, when `debouncedQuery === ''`
+  2. loading, when `isLoadingPalsHub`
+  3. no results, when `items.length === 0`
+  4. results
+- **Closing search.** The scrim, the "Explore Pals" call to action and a result-row tap all run `closeSearch()` (collapse the overlay and clear the input). A result tap then calls `handleCardPress`.
 
----
+## Contracts and invariants
 
-## 4. Contract
+- **No new persisted state.** All Explore UI state is React state in `ExploreScreen` and `ExplorePalsPanel`. `ExploreScreen` reads `authService.isAuthenticated` and passes it to the panel as a prop; the panel reads `palStore`. Neither writes either.
+- **Single writers.**
+  - `PalStore.searchPalsHubPals` owns `isLoadingPalsHub` and `cachedPalsHubPals`.
+  - `PalStore.downloadPalsHubPal` owns local pal rows.
+  - `CheckoutFlowStore` owns checkout state (`palshub-checkout.md`).
+  - Only the server sets ownership (`is_owned`); the sheet re-reads the pal when `checkoutFlowStore.status === 'owned'`.
+- **Last query wins.** Every response, including page fetches, is applied only if `seqRef` is unchanged, so a slow earlier response cannot overwrite a newer query (`ExplorePalsPanel.tsx`).
+- **Two separate gates.**
+  - *Sheet access:* `handleCardPress` blocks a signed-out user from opening a premium, unowned pal.
+  - *Buy action:* inside `PalDetailSheet`, `handleBuyPress` sends a signed-out user to `onSignInPress`. `buy-button` renders only when `palStore.isCheckoutEligible`; otherwise the sheet shows informational text.
+  - Keep both gates; the predicates are commented as a pair.
+- **Buying.** Both platforms call `checkoutFlowStore.start(pal.id)` directly. There is no web-buy link-out in the sheet.
+- **No navigation-topology change.** The detail surface is a sheet, with no route and no `RootStackParamList` entry.
+- **Frozen testIDs on `PalDetailSheet`:** `buy-button`, `download-button`, `downloaded-button`, `checkout-signin-button` and `pal-label-<type>`, plus the legacy `Sheet` chrome `sheet-close-button` / `sheet-handle`. Explore's own `explore-*` testIDs are additive. The consumers are `e2e/pages/PalPurchasePage.ts` and `e2e/helpers/selectors.ts`.
+- **Accessibility labels in the overlay.** The scrim is labelled `common.close`, the clear control `common.clear` (with `hitSlop` to reach a 44 px target), and the input and toggle `explore.searchLabel`.
+- **Styling.** Colours, type, spacing, radius and stroke come from tokens. The literal sizes are the 56 px avatar and the 44 px minimum touch target. `screens/ExploreScreen` and `components/PalsHub/PalDetailSheet` are on the token-consumer allow-list (`theming.md`, "Contracts and invariants").
 
-1. **Sub-tab container = DS `Tabs` pill variant (D).** `items=[{value:'pals'},
-   {value:'models', disabled:true}]`, `selectedValue=subTab`, `onChange` sets
-   `subTab` (only 'pals' is reachable; the disabled item never fires
-   `onChange`). Reuses DS `Tabs` frozen testIDs (`ui-tabs`, `ui-tab-item-*`).
-2. **Models sub-tab is a deferred stub (D).** Present-but-disabled segment;
-   selecting is a no-op; the panel renders a minimal "coming soon" placeholder.
-   The standalone Models screens + HF search do NOT reach into Explore.
-3. **Pals sub-tab is built from hub-discovery logic, NOT PalsScreen's local
-   path (D).** It owns its own discovery state and reads
-   `palStore.searchPalsHubPals` / `cachedPalsHubPals` / `getCategories` /
-   `getTags`. PalsScreen's local "my-pals" path is left intact and reachable.
-4. **Card tap opens the reskinned `PalDetailSheet` (D).** `setSelectedPal(pal)`
-   + open the sheet — the same handler shape PalsScreen uses. No navigation.
-5. **Gated actions while unauthenticated show the login-required modal (C).** A
-   buy/get attempt by a signed-out user opens the "Create an Account" modal,
-   routing to the existing auth surface (`AuthSheet`).
-6. **Tokens-only.** Every new surface reads `theme.colors/typography/spacing/
-   radius/stroke` only — no raw hex/px. Built on Phase-2 DS components; RN Paper
-   stays thin.
+## Traps and decisions
 
-### 4a. Pal-details reskin (existing sheet, in place)
+- **Close the overlay before opening the sheet.** The overlay is a Paper `Portal` that paints above the `@gorhom/bottom-sheet` host. If the sheet opened under a mounted scrim, the scrim would swallow the sheet's touches, so the result-row handler calls `closeSearch()` first.
+- **The overlay's prompt body depends on `debouncedQuery`, not `items.length`.** The overlay shares `items` with the list behind the scrim, so `items` is non-empty before the user types anything.
+- **Don't read `cachedPalsHubPals` for the list.** `searchPalsHubPals` overwrites it with each response, so it holds only the last page from the last caller. The panel accumulates its own `items`.
+- **The loading flag is store-wide.** `isLoadingPalsHub` is not scoped to the panel's query, so any other PalsHub fetch flips the overlay into its loading body.
+- **Failures look like zero results.** `searchPalsHubPals` catches errors and returns `{pals: [], has_more: false}` with `syncState: success`, so a failed fetch is indistinguishable from zero results. The no-results copy is therefore neutral; a real error state would need a store-level error signal.
+- **The purchase e2e can't reach a card on this branch.** `purchase-flow.spec.ts` still goes drawer → Pals and `PalPurchasePage` taps `palshub-pal-card-<id>` (only the unmounted `SquarePalCard` renders it); Explore rows are `explore-pal-card-<id>`. Retarget both when this branch lands.
+- **The Models sub-tab is a stub.** It is disabled, and the standalone Models screens do not render inside Explore.
+- **Only part of the rating block is shown.** The sheet shows `average_rating`, `review_count` and the created date. The Figma reviews list, discussions and Q&A are not rendered because no backend supports them.
 
-- `PalDetailSheet` is reskinned in place (D): it stays a `@gorhom/bottom-sheet`
-  (`Sheet`); tokens-only restyle of hero, rating summary (display-only),
-  categories/tags chips, gated system-prompt, and the download/buy/owned action
-  bar + checkout feedback.
-- **Behaviour byte-preserved**: `handleAction` (download), `handleBuyPress`
-  (incl. the existing `Platform.OS !== 'ios'` web-buy branch — see
-  `palshub-checkout.md` drift note), `checkoutFlowStore.start/reset`,
-  `shouldShowPalContent` gating, `getPalActionText`, and the
-  `checkoutStatus === 'owned'` ownership re-read are all unchanged.
-- **Rating summary is display-only (D)**: renders `average_rating` +
-  `review_count` + the existing created-date stat. No comments-count (no backing
-  aggregate). The Figma reviews-list / discussions / Q&A / add-review blocks are
-  NOT rendered (no data backing; separate ticket).
+## Verification
 
-### 4b. Hard invariants
-
-- **testID freeze**: every existing testID on a reskinned pal-details element is
-  preserved — `buy-button`, `download-button`, `downloaded-button`,
-  `checkout-signin-button`, `pal-label-<type>`, plus the `Sheet` chrome
-  `sheet-close-button` and `sheet-handle`. New Explore-surface testIDs are
-  additive; they do not replace any frozen id. PalsScreen's discovery testIDs
-  stay on PalsScreen — they are NOT migrated (Explore is a distinct layout).
-- **light + dark**: all surfaces resolve mode-aware tokens; dark follows
-  automatically (verified on device).
-- **RTL (he/fa)**: any animated/absolute positioning animates physical `left`
-  and mirrors `onLayout` x; verified with a real tab/segment switch under
-  forceRTL.
-- **no nav-topology change**: no new root-Stack route, no `RootStackParamList`
-  delta; the detail surface stays a sheet.
-- **no local-path dismantling**: PalsScreen's local my-pals path and its
-  `PalDetailSheet` call remain intact and reachable.
-
-### 4c. Search overlay (C)
-
-- **Overlay owned by `ExplorePalsPanel`, gated on `searchExpanded`.** A
-  Portal-mounted card sheet (`explore-search-overlay`) over a tap-to-dismiss
-  scrim; the panel's filter row, "Available Pals" header, discovery list, and
-  footer states stay mounted behind it. The header `ExploreSearchToggle`
-  (`explore-search-toggle`) opens it.
-- **Inline search input removed from the panel body.** The overlay owns the
-  focused input (`explore-search-input`) — a DS `Input` (leading `SearchIcon`,
-  trailing clear `explore-search-clear` shown when non-empty) inside a
-  token-styled wrapper: rounded accent border (`primary` on focus, `outline`
-  otherwise), mode-aware `secondaryDefault` fill, the DS Input bottom divider
-  tucked so there is no double divider. No raw hex; no shared DS-Input edit.
-- **Behaviour byte-preserved.** `searchInput`/`debouncedQuery`, the 300ms
-  debounce, `buildQuery`, `searchPalsHubPals`, and the `seqRef`/`pageRef`
-  last-query-wins guard are unchanged; the overlay only re-presents that state.
-- **Result-row tap closes the overlay, then reuses `handleCardPress`** — it
-  first runs the shared close-and-clear (so the paper `Portal` overlay/scrim is
-  gone), then opens `PalDetailSheet` via the same premium/unauth gate as a
-  discovery card. Close-before-open is required because the overlay Portal paints
-  above the `@gorhom/bottom-sheet` host. Subtitle binds `pal.description`
-  (`numberOfLines={1}`, dropped when empty); no static literal, no l10n key.
-- **Accessibility labels are distinct per control** — the backdrop dismiss
-  Pressable (`explore-search-scrim`) is labelled `common.close`, the trailing
-  clear control (`explore-search-clear`) `common.clear`, and the focused input
-  (`explore-search-input`) `explore.searchLabel`; the clear control carries a
-  `hitSlop` to reach a ~44px touch target.
-- **"Explore Pals" CTA** (`explore-search-explore-cta`, 0-results) =
-  `setSearchExpanded(false)` + clear `searchInput` → overlay closes onto the
-  discovery grid. A real action, not a dead control; same dismiss-and-clear as
-  the scrim/close path.
-- New overlay testIDs are additive and screen-scoped:
-  `explore-search-overlay`, `explore-search-scrim`, `explore-search-clear`,
-  `explore-search-prompt`, `explore-search-no-results`,
-  `explore-search-explore-cta`, `explore-search-results-header`,
-  `explore-search-result-row-<pal.id>`. `explore-search-toggle` /
-  `explore-search-input` are preserved verbatim.
-
----
-
-## 5. Single-writer rule
-
-No new writers. All mutable shared state keeps its existing single writer.
-
-| Field | Single writer |
-| --- | --- |
-| `CheckoutFlowState` | (C) `CheckoutFlowStore` (palshub-checkout.md) |
-| ownership (`is_owned`) | (C) **server** — `getPal()`; never written client-side |
-| `cachedPalsHubPals` / discovery results | (C) `PalStore.searchPalsHubPals` |
-| pal download → `local_pals` row | (C) `PalStore.downloadPalsHubPal` / `PalRepository` |
-| Explore sub-tab / filter / sort / search UI state | (C) `ExploreScreen` local React state (read-only over `palStore`) |
-| focused bottom-tab | (C) `@react-navigation` (app-shell.md) — unchanged |
-
-`ExploreScreen` reads `palStore` (discovery + region + downloaded) and
-`authService.isAuthenticated`; it writes none of them.
-
-**Deferred (out of scope, tracked elsewhere):**
-1. Explore Models sub-tab content → standalone Models slice.
-2. Pal-details reviews / discussions / Q&A / add-review → separate PalsHub
-   backend ticket.
-3. Reconcile the `handleBuyPress` Android web-buy branch with
-   `palshub-checkout.md` → checkout-flow owner (preserved verbatim here).
-4. Optionally retire PalsScreen's hub-discovery surface once Explore>Pals
-   subsumes it → Pals-slice coordination.
-
----
-
-## 6. Canonical scenarios
-
-| # | Scenario | Outcome |
-| --- | --- | --- |
-| A | Tap Explore → mounts | header + (signed-out: promo card) + pill Tabs `[Pals* \| Models(disabled)]` + filter row + "Available Pals" + Card-List (or empty / reached-the-end) |
-| B | Filter by category | category sheet (chips from `getCategories`) → apply → `searchPalsHubPals({category_ids})` → list re-renders |
-| C | Reached the end | response `has_more === false` → check-circle + "You've reached the end" + "Browse Pals on Palshub" |
-| D | Card tap → free download | free Card-List row → `PalDetailSheet` → "Get Pal" → `downloadPalsHubPal` → success (behaviour identical to today) |
-| E | Buy premium (US, signed-in) | premium card → sheet → buy-button → `checkoutFlowStore.start`; owned → button flips to download (unchanged) |
-| F | Gated action signed-out | login-required modal ("Create an Account") → `AuthSheet` |
-| G | Models segment inert | tap Models → no-op (disabled); Pals panel stays active; Models shows "coming soon" |
-| H | Dark + RTL | all surfaces resolve dark tokens; segment/filter positioning mirrored (physical left); verified on device |
-
----
-
-## 7. Edge cases
-
-| Edge case | Behaviour |
-| --- | --- |
-| PalsHub not configured / search fails | `searchPalsHubPals` swallows the failure and returns empty (sets `syncState: success`), so a failed fetch is indistinguishable from a genuine zero-results in the overlay 0-results body. Copy stays neutral rather than asserting "no matches"; an honest error/retry state needs a store-level error signal (follow-up) |
-| Non-US region, premium pal | detail sheet shows info text, no Buy button (preserved) |
-| Android premium buy | existing `Linking.openURL(getPalBuyUrl)` web path fires unchanged (drift note) |
-| Empty results after filter | "No Pals found" empty state; filters remain adjustable |
-| Tap disabled Models segment | no-op; `selectedValue` stays 'pals' |
-| Non-Latin pal title (CJK/he/fa) | Fraunces→Inter fallback via theme builder |
+- Unit tests (on `redesign/phase-3`):
+  - `screens/ExploreScreen/__tests__/ExploreScreen.test.tsx`
+  - `components/PalsHub/PalDetailSheet/__tests__/PalDetailSheet.test.tsx`, which includes Android `Platform.OS` buy cases
+  - `navigation/__tests__/MainTabs.test.tsx`
+- e2e: `e2e/helpers/selectors.ts` has only the tab item (`tabs.explore` → `ui-bottom-nav-item-ExploreTab`); there are no Explore-surface selectors yet.
+- By hand:
+  1. Signed out: the promo card shows, and tapping a premium card opens the "Create an Account" dialog.
+  2. Signed in: apply category, tag, price and sort filters and confirm the list refetches; scroll to the end-of-list footer.
+  3. Open search: the prompt shows first. Type a query with no results; the "Explore Pals" button clears it. Tap a result and confirm the sheet opens and responds to touches.
+  4. Repeat in dark mode and in `he` or `fa`.
