@@ -8,19 +8,30 @@ The library exists to stop the team from rebuilding the same design over and ove
 
 ## What lives here
 
-One file per **flow**. A flow is bounded by a single user-facing concept:
+One file per **flow**, bounded by a single user-facing concept. Per-component is too narrow (components churn); per-system is too broad (becomes a book nobody reads).
 
-- `chat-flow.md` — chat rendering, streaming, tool calls, agent loop
-- `model-loading.md` — model download, init, unload, errors
-- `pals-and-talents.md` — pal config, talent dispatch, registry
-- `persistence.md` — DB schema, migrations, exports, MMKV keys
-- `vision.md` — multimodal pipeline (when it lands)
-- `release.md` — CI / build / TestFlight / Play Store
-- `onboarding.md` — first-launch flow (Splash + 6 onboarding screens; gated by `uiStore.hasCompletedOnboarding`)
+**Read this index, then open only the flows your change touches.** Match on the scope and the code named in each row; a change that touches none of them is in an undocumented area.
 
-Per-flow is the right granularity. Per-component is too narrow (components churn). Per-system is too broad (becomes a book nobody reads).
+| Flow doc | Scope | Key code |
+| --- | --- | --- |
+| `agent-runner.md` | `runAgent()` turn loop: emitted events, abort / error / follow-up contracts | `src/services/agent/`, `useChatSession` |
+| `chat-flow.md` | chat rendering, streaming, tool-call display, `AssistantTurn` shape, reasoning | chat components, `ToolUsedChip`, `reasoningCapability` |
+| `remote-servers.md` | OpenAI-compatible servers: `ServerConfig`, request layer, timeouts, llama-server router | `src/api/openai.ts`, `ServerStore`, `routerState`, `serverUrl` |
+| `model-loading.md` | preset model list from device rules, GGUF header / caps, native model load | `deviceRules/`, `ModelStore`, `ggufHeader`, `modelCaps` |
+| `pals-and-talents.md` | what a Pal and a Talent are; tool opt-in and execution boundary | `src/services/talents/`, `src/types/pal`, `PalsSheets` |
+| `palshub-checkout.md` | buying a premium PalsHub Pal in-app; ownership confirmation | `CheckoutFlowStore`, `src/services/palshub/`, native auth-session / external-link specs |
+| `explore-tab.md` | Explore tab: PalsHub discovery, `[Pals \| Models]` sub-tabs | `ExploreScreen` |
+| `app-shell.md` | bottom-tab navigation shell and the Home (Chats) screen | `HomeScreen`, root navigator |
+| `settings.md` | Settings root and pushed sub-screens, per-control writers, testID freeze | `SettingsScreen`, `LanguageSelector` |
+| `onboarding.md` | first-launch onboarding screens and completion gate | `src/store/onboarding`, `uiStore.hasCompletedOnboarding` |
+| `theming.md` | design tokens, typography, DS component layer, Paper-import blocklist | `src/theme/tokens`, `src/components/ui/` |
+| `asr.md` | voice input: availability gate, Whisper model wire, push-to-talk FSM, native coexistence | `src/services/asr/` |
+| `tts.md` | text-to-speech: availability gate, Supertonic model wire, re-download sentinel | `src/services/tts/` |
+| `deep-linking.md` | `pocketpal://` links and the Hugging Face User-Agent / attribution wire | `useDeepLinking`, `hfResolve`, `hubRunLink` |
+| `benchmark-matrix.md` | on-device benchmark matrix runner and its CLI / spec / compare toolchain | `BenchmarkRunnerScreen`, `src/__automation__/`, `e2e/benchmark/` |
+| `release.md` | Android native build, llama.rn payload variants (incl. Hexagon), payload gate | `android/`, `android/fastlane/`, `scripts/` |
 
-A flow file does NOT live here until at least one story has produced a vetted WHAT for it. The library accrues lazily — the moment a flow has needed a WHAT, it has a doc here. Other flows stay undocumented until someone touches them.
+A flow file appears here once a story has produced a vetted WHAT for it; the library accrues lazily. Adding a flow doc means adding its row.
 
 ---
 
@@ -102,14 +113,3 @@ prevent.
 - **Not historical** — old behaviour gets overwritten on merge, not appended. Git history preserves the past.
 - **Not exhaustive** — only the flows currently under active design or that have hit pain points need a doc. Don't back-document the rest of the app speculatively.
 - **Not a substitute for code** — when the doc and the code disagree, the code wins, then the doc gets fixed. Drift is fought, not ignored.
-
----
-
-## Bootstrap
-
-The library starts empty. The first entry will be `chat-flow.md`, promoted from the AssistantTurn refactor's WHAT (`workflows/stories/TASK-20260502-2115-flow-analysis.md`) once that work lands and its canonical scenarios verify cleanly.
-
-After that, every standard/complex story either:
-
-- adds a new flow file (when the work is in an undocumented area), or
-- proposes a delta on an existing flow file (when the work touches an already-documented area).

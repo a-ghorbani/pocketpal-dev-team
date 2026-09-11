@@ -145,10 +145,10 @@ Read: ./context/pocketpal-overview.md
 Read: ./context/patterns.md
 Read: ./context/architecture/README.md
 
-# Architecture library — read every file in here. They define what
-# already exists, so you can identify which flow this task touches.
-ls ./context/architecture/
-Read: ./context/architecture/<each-flow>.md
+# The README's flow index maps each flow doc to its scope and code.
+# Open only the flow docs whose scope or code the request touches;
+# those become ARCHITECTURE_DOCS in the handoff.
+Read: ./context/architecture/<matching-flow>.md
 
 # Templates
 Read: ./templates/intent-template.md
