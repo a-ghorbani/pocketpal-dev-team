@@ -27,3 +27,6 @@ repos/pocketpal-ai.configs/
 __pycache__
 
 
+
+# Working research notes — local by default; `git add -f` one that should be shared
+docs/research/*
