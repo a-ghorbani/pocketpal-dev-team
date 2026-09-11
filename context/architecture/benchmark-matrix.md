@@ -1,395 +1,78 @@
-# Benchmark Matrix Flow
-
-**Purpose**: cumulative architecture truth for the on-device benchmark matrix runner (`BenchmarkRunnerScreen` + its CLI / spec / merge / compare toolchain). Bootstrapped from TASK-20260505-1612 (settings-sweep, Hexagon backend, isolated lifecycle, v1.1 schema). Meant to fit in your head.
-
-Convention: **(C)** = current behaviour from code, **(D)** = decision.
-
----
-
-## 0. Trigger & routing
-
-How the matrix run is *reached* and *started*. The runner screen is an E2E-only
-deep-link target; everything in this section is gated by `__E2E__` or lives in
-`src/__automation__/` (reachable only behind `__E2E__`), and Hermes DCE-strips
-it from prod.
-
-### 0a. The start path, end to end (C)
-
-```
-adb am start -a VIEW -d "pocketpal://e2e/benchmark[?autostart=1]"   (e2e flavor)
-   │
-   ▼  delivered two __E2E__-gated ways:
-   •  cold launch: Linking.getInitialURL()   in useDeepLinking.ts effect
-   •  warm launch: Linking 'url' addEventListener in the same effect
-   •  (iOS/DeepLinkService origin: dispatchAutomationDeepLink in
-   •   src/__automation__/deepLink.ts — same routing contract)
-   │
-   ▼  isBenchmarkRunnerUrl(url)  (startsWith 'pocketpal://e2e/benchmark')
-   ▼  parseBenchmarkAutostart(url)  → autostart: boolean
-   │
-   ▼  navigate(ROUTES.BENCHMARK_RUNNER, { autostart })
-   │
-   ▼  BenchmarkRunnerScreen mounts; reads route.params.autostart
-   │
-   ├─ autostart falsey → idle; render bench-run-button; wait for tap
-   │
-   └─ autostart truthy → fire onRun() ONCE after mount (same callback the
-   │                     button's onPress uses)
-   ▼
-   onRun(): single-flight gate (runningRef + status guard)
-            → loadConfig()  (reads pushed bench-config.json)
-            → runMatrix(cfg, setStatus, setLastCell)
-```
-
-- **(C)** The `pocketpal://` scheme is registered ONLY in
-  `android/app/src/e2e/AndroidManifest.xml` (e2e flavor). Prod has no
-  intent-filter for it.
-- **(C)** `isBenchmarkRunnerUrl` uses `startsWith(BENCHMARK_RUNNER_URL_PREFIX)`,
-  so a query string (`?autostart=1`) already routes correctly — it stays the
-  sole routing gate.
-- **(C)** Two independent delivery sites navigate to `BENCHMARK_RUNNER`: the
-  `useDeepLinking` cold/warm Linking effect (Android origin, raw URL) and
-  `dispatchAutomationDeepLink` (iOS/DeepLinkService origin). Both now pass
-  `{ autostart }`.
-
-### 0b. External shape (wire format) (C)
-
-```
-pocketpal://e2e/benchmark             → route only; screen stays idle, waits for tap
-pocketpal://e2e/benchmark?autostart=1 → route AND auto-invoke onRun once after mount
-```
-
-- **Autostart** — a one-shot signal carried on the deep-link URL as
-  `?autostart=1`, instructing the runner screen to invoke its existing start
-  path automatically once after mount, with no touch. Transient navigation
-  param only; never persisted, never echoed into a report.
-- **(D-AS1)** `autostart` is true iff the query value is exactly `"1"` or
-  `"true"` (case-insensitive); any other value, or absence, is false. A narrow
-  allowlist avoids an "autostart=0 still starts" foot-gun and keeps the
-  contract trivially scriptable.
-
-### 0c. Components (C)
-
-| Component | Produces / does | Does NOT do |
-| --- | --- | --- |
-| `parseBenchmarkAutostart` (`src/__automation__/benchmarkRoute.ts`) | pure boolean from a raw URL per D-AS1 | navigate, mutate store, throw, log |
-| `useDeepLinking` Linking effect | navigate to BENCHMARK_RUNNER **with** `{autostart}` | parse beyond the helper; run anything |
-| `dispatchAutomationDeepLink` | navigate to BENCHMARK_RUNNER **with** `{autostart}` from the raw URL | a new start path; read `params.queryParams` for truthiness |
-| `BenchmarkRunnerScreen` | read `route.params.autostart`; call existing `onRun` once if true | a second config-load / runMatrix call |
-| `onRun` (unchanged) | single-flight start: loadConfig → runMatrix | anything new |
-
-### 0d. Hard invariants
-
-- **I-AS1**: Autostart invokes the **same** `onRun` the button uses — exactly
-  one start path into `runMatrix` from the screen. No alternate path loads
-  config or calls `runMatrix` directly.
-- **I-AS2**: Autostart changes nothing the runner measures — `BenchConfig`,
-  cell expansion, per-cell params, fingerprints, and report/row shapes are
-  byte-for-byte what a tap-initiated run produces from the same
-  `bench-config.json`. (Preserves §4h I1–I8.)
-- **I-AS3**: The single-flight gate (`runningRef` + status guard) remains
-  authoritative. Autostart + a concurrent/subsequent tap cannot start two
-  overlapping runs.
-- **I-AS4**: Autostart fires at most once per screen mount; a re-render (the
-  screen is a MobX `observer`) does not re-trigger it.
-- **I-AS5**: All autostart code is E2E-gated. The prod bundle's
-  automation-marker set (CI "DCE sanity check") is unchanged — no new
-  automation marker leaks into prod. The deep-link protocol surface
-  (`BENCHMARK_RUNNER_URL_PREFIX`, `isBenchmarkRunnerUrl`,
-  `parseBenchmarkAutostart`) lives in `src/__automation__/benchmarkRoute.ts`;
-  the two prod-reachable mount points that import it (`App.tsx` and
-  `src/hooks/useDeepLinking.ts`) are explicitly allow-listed by the
-  `.eslintrc` `no-restricted-imports` rule.
-- **I-AS6**: A bare `pocketpal://e2e/benchmark` (no query) behaves exactly as
-  before: route, stay idle, wait for tap. Autostart is strictly opt-in.
-
-### 0e. Decisions
-
-| # | Decision | Reasoning (short) |
-| --- | --- | --- |
-| D-AS1 | `autostart` truthy iff query value is `"1"`/`"true"` (case-insensitive) | Narrow allowlist; scriptable; no "autostart=0 still runs" foot-gun. |
-| D-AS2 | `isBenchmarkRunnerUrl` unchanged; only query parsing added at the nav sites | The `startsWith` prefix already tolerates query strings. |
-| D-AS3 | Autostart calls the existing `onRun`; no parallel start path | Same start handler / code path / config as the button; single-flight stays authoritative. |
-| D-AS4 | Reuse the existing trigger path; introduce no new automation marker | Prod DCE-absent marker set is unchanged; no `ci.yml` edit needed. |
-| D-AS5 | Both delivery sites resolve `autostart` from the **raw URL** via one shared pure helper | iOS (DeepLinkService) and Android (Linking) cannot diverge in truthiness. |
-| D-AS6 | Deep-link approach over broadcast-intent / KEYCODE_ENTER | The `pocketpal://` scheme + intent-filter already exist in the e2e manifest, so no `android/` change. |
-
-### 0f. WDIO trigger (C)
-
-The spec (`e2e/specs/benchmark-matrix.spec.ts`) deep-links with
-`?autostart=1` (via `e2e/helpers/bench-runner.ts:deepLinkLaunch`) and polls
-`bench-runner-screen-status` for `complete | error:*`. It no longer taps
-`bench-run-button`; the injected tap was the step HyperOS / MediaTek dropped.
-Live confirmation on a real HyperOS / MediaTek device is the gating evidence
-for the motivating bug and is performed outside this pipeline.
-
----
-
-## 1. Data model
-
-### 1a. `BenchConfig` (on-device JSON; read by the screen, produced by the CLI / spec)
-
-```
-BenchConfig
-  models:    BenchModelEntry[]         # id, hfModelId, quants:[{quant, filename, size?}]
-  backends:  Backend[]                 # 'cpu' | 'gpu' | 'hexagon'
-  bench?:    { pp, tg, pl, nr }
-  inter_cell_settle_ms?: number        # default 2000, ≥0
-  settings_axes?: SettingsAxis[]       # sweep dimensions
-    name:   SettingsKnob               # closed enum (see below)
-    values: SettingsValue[]            # >= 1 entry; matches knob domain
-
-SettingsKnob =
-  | 'cache_type_k' | 'cache_type_v' | 'flash_attn_type'
-  | 'no_extra_bufts' | 'use_mmap' | 'n_threads'
-SettingsValue = string | number | boolean
-```
-
-Stored at the e2e flavor's `ExternalDirectoryPath`. The cell list (cartesian product `model × quant × backend × settings_axes`) is computed at runtime, never persisted.
-
-### 1b. `BenchmarkRunRow` (per-cell row)
-
-```
-BenchmarkRunRow
-  model_id, quant, requested_backend          # closed enums
-  effective_backend                           # see 1c
-  pp_avg, tg_avg: number | null               # null on failed/skipped
-  wall_ms, peak_memory_mb
-  log_signals: LogSignals                     # 1d
-  init_settings: Record<string, unknown>      # composed cellParams snapshot (post-compose, pre-initLlama)
-  effective_init_params: Record<string, unknown>  # composed cellParams, minus `model` filePath
-  settings_overrides: Partial<SettingsKnob->Value>
-  settings_fingerprint: string                # canonical key (4d)
-  status: 'ok' | 'skipped' | 'failed'
-  reason?, error?, timestamp
-```
-
-### 1c. `EffectiveBackend`
-
-```
-'cpu' | 'opencl' | 'cpu+opencl-partial' | 'hexagon' | 'cpu+hexagon-partial' | 'unknown'
-```
-
-### 1d. `LogSignals`
-
-Includes `opencl_init`, `opencl_device_name`, `adreno_gen`, `large_buffer_enabled`, `hexagon_init`, `hexagon_device_name`, `offloaded_layers`, `total_layers`, `memory_buffers`, `raw_matches[]`. Baselines ship with `raw_matches` empty (debug-only field; canonical merge path strips it).
-
-### 1e. `BenchmarkReport` (file-level)
-
-```
-BenchmarkReport
-  version: '1.1', platform: 'android', timestamp, preseeded
-  bench: { pp, tg, pl, nr }
-  inter_cell_settle_ms: number                # top-level echo from config (default 2000)
-  settings_axes_used?: SettingsAxis[]         # echo of config.settings_axes; absent when empty
-  runs: BenchmarkRunRow[]
-```
-
-### 1f. Baseline (post-merge) — `e2e/baselines/benchmark/<device>.json`
-
-Same shape as `BenchmarkReport` plus merge metadata: `device`, `soc`, `commit`, `llama_rn_version`, `os_version`, `generated_by`, `source_files`. Optional agent operational fields (`tier`, `stats`) may be present and are ignored by consumers.
-
-**Glossary**: **Cell** = element of `(model, variant, backend, settings_overrides)`. **Settings axis** = one knob + its sweep values. **Settings fingerprint** = canonical string identifying a cell's settings config; fourth axis of the dedupe key. **App-default fingerprint** = literal `"app-default"`, emitted when `settings_axes` is absent (D7).
-
----
-
-## 2. Event flow
-
-```
-for model in config.models
-  for variant in model.quants
-    for backend in config.backends
-      for overrides in expandAxes(config.settings_axes)   # [{}] when absent
-        runCell(model, variant, backend, overrides)
-```
-
----
-
-## 3. State machine
-
-Screen status: `idle | running:<tag> | downloading:<f> | cell-failed:<n>:<msg> | complete | error:<msg>`. The `<tag>` substring includes a short fingerprint hint to disambiguate identical `(model,quant,backend)` cells with different settings (D9).
-
----
-
-## 4. Contract
-
-### 4a. `runMatrix` (the runner)
-
-1. Validate config (throws on missing file). Resolve `settings_axes`; absent → `[{}]` (single cell, `app-default`). (C)
-2. **Acquire exclusive context lifecycle**: `modelStore.enterBenchmarkMode()` sets `benchmarkActive=true` synchronously and releases any pre-existing context. While the flag is true, `modelStore.initContext` / `selectModel` reject — non-bench code cannot race the matrix. (C)
-3. Per cell: `composeCellParams({base: benchBase, overrides, devices, n_gpu_layers, filePath})` → `cellParams` (pure dict; no setter calls, no store mutation). (C)
-4. Per cell: `snapshotCellInitSettings(cellParams)` → `init_settings`. The fingerprint is derived from this snapshot (4d). `settings_overrides` and `settings_fingerprint` are written on EVERY row, success or failure. (C)
-5. Per cell: `initLlama(cellParams)` directly. After it resolves, validate `effective_backend` satisfies the requested backend (`backend === effective` OR partial-offload of the same backend). Backend-mismatch → throw → row recorded as failed. (C)
-6. Per cell `finally`: release the runner-owned `LlamaContext` and detach the native-log listener (each at most once if the cell initialised). (C)
-7. Matrix-level inter-cell: `purgeNativeAllocator()` (Android `mallopt(M_PURGE_ALL)`; iOS no-op) then sleep `inter_cell_settle_ms` so allocator and driver teardown settle before the next cell. (C)
-8. Matrix-level `finally`: `toggleNativeLog(false)` + `modelStore.exitBenchmarkMode()`. Both idempotent (safe even if their setup never ran). No "restore user settings" step — the runner never wrote to `modelStore.contextInitParams`. (C)
-9. Hexagon (or GPU) unavailable on the device: write `status:'failed'`, `error:'<Backend> device not available'`, `effective_backend:'unknown'`; continue. (C)
-
-### 4b. `build-bench-config.ts` (CLI) and `bench-runner.ts:buildConfig` (spec helper)
-
-Both producers MUST emit identical JSON:
-
-1. Honour `BENCH_TIER` (smoke/focused/full), `BENCH_MODELS`, `BENCH_QUANTS`, `BENCH_BACKENDS` (includes `hexagon`). With no settings env vars, emit a config WITHOUT `settings_axes` (the absence semantic; D7). (C)
-2. Settings env vars (comma-separated, lowercase, trimmed): `BENCH_CACHE_TYPE_K`, `BENCH_CACHE_TYPE_V`, `BENCH_FLASH_ATTN_TYPE`, `BENCH_NO_EXTRA_BUFTS`, `BENCH_USE_MMAP`, `BENCH_N_THREADS`. Append a `SettingsAxis` per non-empty var in the **fixed order** `[cache_type_k, cache_type_v, flash_attn_type, no_extra_bufts, use_mmap, n_threads]` (D5). (C)
-3. Validate value domains at config-build time. Invalid → non-zero exit; no config written. (C)
-
-### 4c. `composeCellParams` (runner-internal)
-
-```ts
-composeCellParams({filePath, base: benchBase, overrides, devices, n_gpu_layers})
-  → ContextParams       // the dict passed to initLlama
-```
-
-Pure: object-spread `overrides` over `benchBase`, add `{model: filePath, devices, n_gpu_layers}`. `benchBase` is `DEFAULT_BENCH_BASE_PARAMS` with `n_threads` resolved once at run start from `getRecommendedThreadCount()`. `use_mmap: 'smart'` resolves to a platform-default boolean inside this helper, so `init_settings` and the fingerprint reflect the resolved value. There is no `restoreSettingsSnapshot`: the runner never writes to `contextInitParams`.
-
-Hexagon discovery runs through the same canonical selector as Settings and normal loading, once at matrix start via `getDeviceOptions()`. It neither reads nor writes persisted device preferences. Missing or rejected discovery omits the Hexagon option, so a requested Hexagon cell fails before initialization and the matrix continues; it must never silently measure CPU. Normal chat's explicit CPU fallback is a separate load-boundary policy. (C)
-
-Flash-ON benchmark axes and effective-backend validation remain independent of the Settings control's flash policy. `effective_init_params` records the full native device/layer arguments, while `init_settings` retains only fingerprint knobs. Multiple registered HTP sessions do not prove multi-session model execution; compare full arguments and actual model/compute allocation logs. No report-schema change is needed. (C)
-
-### 4d. Settings fingerprint contract
-
-Derived from the **composed cell params snapshot** (post-`composeCellParams`, pre-`initLlama`). Captured before `initLlama` so a post-init throw still produces a standard (non-`req:`) fingerprint. The composed dict is the only source of truth for what the cell ran.
-
-Canonical form (D6):
-
-1. Fixed key order: `[cache_type_k, cache_type_v, flash_attn_type, no_extra_bufts, use_mmap, n_threads]`. Adding a knob = fingerprint-version bump.
-2. Missing keys → `"-"` (e.g. iOS reports omit `no_extra_bufts`).
-3. Coerce: bool → `true|false`, number → decimal, string → as-is lowercased.
-4. Join: `k1=v1;k2=v2;...` in key order.
-5. **Special case** (D7): `settings_overrides == {}` AND config has no `settings_axes` → literal `"app-default"`.
-6. **Failure-path special case** (9c, I3.b): cell fails before `composeCellParams` runs. Use the matrix-level pre-run snapshot of `benchBase` overlaid with the cell's requested overrides (object spread, no setter replay). Run canonical-form steps 1-4 on that record and prefix the result with `req:`.
-
-Examples:
-
-```
-overrides {}                    → "app-default"
-overrides {cache_type_k:'q8_0'} → "cache_type_k=q8_0;cache_type_v=f16;flash_attn_type=off;no_extra_bufts=false;use_mmap=false;n_threads=6"
-pre-compose failure              → "req:cache_type_k=q8_0;cache_type_v=f16;flash_attn_type=off;no_extra_bufts=false;use_mmap=false;n_threads=6"
-```
-
-### 4e. Setter-constraint independence (intentional)
-
-The bench bypasses `modelStore.setX` setters entirely; `composeCellParams` does not replay their constraint logic (e.g. `setCacheTypeK` no-op when flash_attn off, `setFlashAttnType('off')` resetting cache types). The composed params reflect the operator's request verbatim — that's what hits `initLlama`. Trade-off: bench numbers stay reproducible from `bench-config.json` alone and aren't perturbed by drift in setter constraints; a sweep can therefore exercise combinations the in-app settings UI would never reach. Operators wanting app-state-realistic baselines must constrain their sweep configs by hand (e.g. pair `cache_type_k` with `flash_attn_type=on`). (D4 revised — see §8.)
-
-### 4f. `merge-bench-reports.ts` (dedupe)
-
-- `rowKey = ${model_id}::${quant}::${requested_backend}::${settings_fingerprint}` (4-tuple). (C)
-- Mixing `version: '1.0'` and `'1.1'` reports is fatal. Upgrade legacy `1.0` reports via a one-shot migration (D8) that stamps every row with `settings_fingerprint:'app-default'`, `settings_overrides:{}`, bumps version to `1.1`. (C)
-- `preferLatest`: `status:'ok'` wins; tie-break on later `timestamp`. (C)
-- `reconcileBench`: settings axes are NOT a bench protocol field; mixing reports with different `settings_axes_used` is allowed (union of fingerprints = more rows). (C)
-- Merger strips `log_signals.raw_matches` from output (debug-only field; baselines must not carry it).
-
-### 4g. `benchmark-compare.ts` (regression)
-
-- `rowKey` matches the merger (4-tuple). (C)
-- Different fingerprints produce different rows; settings differences are NOT a `bench_protocol_mismatch`. (C)
-- `missing_in_current` / `missing_in_baseline` extends cleanly to the 4-tuple — a baseline `app-default` row missing in a current sweep run surfaces as a real gap. (C)
-- `effective_backend` mismatch flag extends to `hexagon` / `cpu+hexagon-partial`. (C)
-
-### 4h. Hard invariants
-
-- **I1**: Every row in a 1.1 report has non-null `settings_fingerprint` and non-null `settings_overrides` (object, possibly empty). Merger rejects rows missing either field.
-- **I2**: A row with `settings_overrides == {}` AND from a config with no `settings_axes` MUST carry `settings_fingerprint == "app-default"`. No other row uses that literal.
-- **I3**: The fingerprint is a pure function of an init_settings-shaped record, with two exceptions: (a) **app-default** literal (I2); (b) **`req:` prefix** for cells that fail before `composeCellParams` runs (input = pre-run snapshot + virtual override spread). Otherwise the input is the composed `cellParams` snapshot.
-- **I4**: The runner does NOT read from or write to `modelStore.contextInitParams` during the matrix run. Per-cell params come from `composeCellParams`; no `modelStore.setX` setter is called.
-- **I5**: `modelStore.benchmarkActive == true` for the entire span from `enterBenchmarkMode()` to `exitBenchmarkMode()`. While true, `modelStore.initContext` rejects synchronously. The matrix-level `finally` always flips it back.
-- **I6**: `status:'ok'` rows always carry non-null `pp_avg` and `tg_avg`. If `ctx.bench()` resolves with a null metric, the row is forced to `status:'failed'`.
-- **I7**: Requested-backend-unavailable cells write `status:'failed'` and continue; they do NOT abort the matrix.
-- **I8**: Mixing reports with different `version` values is fatal in the merger.
-
-### 4i. What each component produces
-
-| Component | Produces | Does NOT produce |
-| --- | --- | --- |
-| `build-bench-config.ts` | `bench-config.json` with optional `settings_axes` | screen status, report file |
-| `bench-runner.ts:buildConfig` | identical JSON shape | anything new — schema parity is mandatory |
-| `runMatrix` | per-cell row (incl. fingerprint + overrides), `report.version='1.1'`; acquires/releases benchmark-mode flag | top-level `device`, `soc`, `commit`, `llama_rn_version`, `os_version` (spec fills these) |
-| `composeCellParams` | the `ContextParams` dict passed to `initLlama` | snapshot, fingerprint, row |
-| `merge-bench-reports.ts` | merged baseline keyed by 4-tuple; refuses mixed versions; strips `raw_matches` | regression verdict |
-| `benchmark-compare.ts` | regression rows + missing-row diagnostics keyed by 4-tuple | merging |
-
----
-
-## 5. Layer ownership (single-writer)
-
-| Field | Single writer | Notes |
-| --- | --- | --- |
-| `modelStore.contextInitParams.*` | persistent UI setters only | The runner never reads or writes; bench compute knobs live in `benchBase` (runMatrix closure) and `cellParams` (cell closure). UI keeps ownership even while a matrix runs. |
-| `modelStore.benchmarkActive` | `enterBenchmarkMode` / `exitBenchmarkMode` (only ever called from `runMatrix`) | Gates `modelStore.initContext` and downstream callers (ChatView auto-load, header loader) while the matrix runs. |
-| `benchBase` (runMatrix closure) | `runMatrix` at init | Read-only after init; per-cell overrides spread into `cellParams`. |
-| `cellParams` (cell closure) | `composeCellParams` | Fresh per cell; passed to `initLlama` immediately. |
-| `BenchmarkRunRow.settings_fingerprint` | `runMatrix`: composed-params snapshot (success/post-compose); pre-run snapshot + virtual overrides + `req:` (pre-compose failure) | Single writer. |
-| `BenchmarkRunRow.settings_overrides` | `runMatrix` (always — present even on failure) | Single writer. |
-| `BenchmarkReport.version` | `runMatrix` writes `'1.1'`; merger reads and validates | Disjoint phases. |
-| `BaselineReport.settings_axes_used` | `merge-bench-reports.ts` | Single writer. |
-
----
-
-## 6. Canonical scenarios
-
-**A. No settings axes.** `settings_axes` absent. Each cell emits `settings_overrides:{}`, `settings_fingerprint:'app-default'`. Merging against a legacy v1.0 baseline requires running the v1.0→v1.1 stamping migration first (D8).
-
-**B. cache_type_k sweep on iOS, flash_attn_type=on.** Two values × two backends = four cells per (model,quant). Each cell's `init_settings` reflects the applied `cache_type_k`. All four rows coexist in the report, keyed by the 4-tuple.
-
-**C. Hexagon on a non-Hexagon device (Klee).** `cpu` cells run normally. `hexagon` cells fail at the pre-check with `status:'failed'`, `error:'Hexagon device not available'`, `effective_backend:'unknown'`, `settings_fingerprint:'app-default'` (per I2/D7 when no axes set). Matrix completes; the per-row pass gate surfaces the failures.
-
-**D. Hexagon on a POCO-class device (Adreno + HTP).** `getDeviceOptions()` selects the first discovered exact HTP name in native enumeration order, excluding wildcard names. Six sessions `HTP0`…`HTP5` select only `HTP0`; a device exposing only `HTP3` selects `HTP3`. The cell passes that single name and `n_gpu_layers: 99` to native initialization. Native log capture observes `hexagon_init=true`; `deriveEffectiveBackend` returns `'hexagon'` or `'cpu+hexagon-partial'` based on the offloaded-layer count.
-
-**E. Pre-compose failure (download timeout).** `postInitSnapshot` is null. The catch path builds the fingerprint from `preRunSnapshot ⊕ requestedOverrides` and prefixes `req:` (per 9c). `init_settings` is `{}`; `settings_overrides` carries the requested map.
-
----
-
-## 7. State signals
-
-| Signal | Set by | Read by | True when |
-| --- | --- | --- | --- |
-| `report.version === '1.1'` | runner | merger, compare | always for new reports |
-| `row.settings_fingerprint === 'app-default'` | runner | merger, compare, operator | cell ran from a config without `settings_axes` |
-| `row.settings_fingerprint.startsWith('req:')` | runner | merger, compare, operator | cell failed before `composeCellParams` ran |
-| `effective_backend === 'hexagon'` | `deriveEffectiveBackend` | compare, operator | Hexagon init succeeded AND all layers offloaded |
-| `effective_backend === 'cpu+hexagon-partial'` | same | same | Hexagon init succeeded AND offloaded < total |
-| `modelStore.benchmarkActive` | enter/exitBenchmarkMode | initContext gate, ChatView auto-load gate | between `enterBenchmarkMode()` and `exitBenchmarkMode()` |
-
-No long-lived state added to `modelStore` beyond the existing `benchmarkActive` flag.
-
----
-
-## 8. Decisions
-
-| # | Decision | Reasoning (short) |
-| --- | --- | --- |
-| D1 | Hexagon = third `requested_backend` value (not a flag on `gpu`) | Matches `getDeviceOptions()` enum; keeps row shape closed. |
-| D2 | `effective_backend` gets `hexagon` + `cpu+hexagon-partial` arms | Mirror of OpenCL pair; partial-offload classification reuses the existing offload counter (init logs verified on llama.rn 0.12.0-rc.9: `ggml-hex: Hexagon backend ... allocating new registry`, `new session: HTPN`, `Hexagon Arch version vN`). |
-| D3 | Hexagon detection via existing `getDeviceOptions()` | Single source of truth; no new probe. |
-| D4 (revised) | Bench is **isolated** from `modelStore.contextInitParams`. `composeCellParams` is pure; setter constraints are NOT replayed. | Original D4 (call setters) was superseded once the bench-isolation redesign landed (`runMatrix` owns context lifecycle via `enterBenchmarkMode`). Bench numbers stay reproducible from `bench-config.json` alone; trade-off documented in 4e. |
-| D5 | Sweep axes have a fixed order in config-build | Stable cell order across runs; reproducible diffs / crash recovery. |
-| D6 | Fingerprint from the composed `cellParams` snapshot (pre-`initLlama`) | The composed dict is the only source of truth for what the cell ran — `initLlama` does not mutate it. |
-| D7 | Reserved literal `"app-default"` for the no-axes case | Distinguishes "no sweep active" from "canonicalised default happened to match"; keeps the v1.0→v1.1 migration unambiguous. |
-| D8 | One-shot v1.0→v1.1 migration stamps `app-default` on legacy rows | Single baseline file per device; I8 enforceable. |
-| D9 | Status `<tag>` includes a short fingerprint hint | Without it, identical `(model,quant,backend)` cells with different settings look like duplicates in the WDIO poll log. |
-| D10 | Hexagon gated by the same fail-fast pattern as GPU | No new code path; matches the existing gate. |
-| D11 | Constraint side-effects (where they exist in app paths) are not warned at bench time | Bench bypasses setters (D4 revised), so the original D11 surprise no longer applies in the bench context. |
-| D12 | Settings sweep + Hexagon bundled in one v1.0→v1.1 bump | Both changes touch row identity; splitting would force two sequential migrations of every device baseline. |
-| D13 | `inter_cell_settle_ms` is a top-level config knob with a 2000ms default | Long thermal-stable sweeps want 15–30s; the bench harness wants 0 for fast tests; the prod default is the conservative middle. |
-| D14 | `purgeNativeAllocator` runs between cells on Android (NDK `mallopt(M_PURGE_ALL)` via `dlsym`) | Scudo otherwise hoards freed pages across cells, OOM-killing long matrices on tight-RAM devices. iOS resolves no-op for caller parity. |
-
----
-
-## 9. Edge cases
-
-- **9a. Empty `settings_axes`** — treated as absent (D7). Producers MUST omit the key rather than emit `[]`.
-- **9b. Axis with one value** (`BENCH_CACHE_TYPE_K=q8_0`) — valid. Produces one cell per (model,variant,backend) with a canonical (NOT `app-default`) fingerprint. Operator opted in.
-- **9c. Cell fails before `composeCellParams` runs** (download timeout, GPU/Hexagon pre-check fails). `init_settings: {}`. The fingerprint is built from `preRunSnapshot ⊕ requestedOverrides` via the canonical form, prefixed `req:` (per I3.b, 4d.6). Operator can still bucket the failure with same-intent successes.
-- **9d. Cell fails after `composeCellParams` resolves** (initLlama throws, `ctx.bench` throws, backend-mismatch). The composed-params snapshot exists; the standard (non-`req:`) fingerprint applies. `init_settings` carries the snapshot.
-- **9e. Invalid sweep value in env var** — config builder rejects with non-zero exit before pushing. Screen never sees an invalid config. Defensive backstop in the runner skips the cell with `status:'failed', reason:'invalid-override-value'`.
-- **9f. Two axes with conflicting constraints** (`cache_type_k=q8_0 × flash_attn_type=off`) — no constraint replay; both values land in `cellParams` verbatim (4e). Operator sees what they asked for in `settings_overrides` and what hit native in `init_settings`.
-- **9g. Mixed-version baseline merge** — fatal (I8). Operator runs the v1.0→v1.1 stamping migration first.
-- **9h. iOS reports lacking `no_extra_bufts`** — fingerprint uses `"-"` for missing keys; iOS and Android fingerprints don't collide. Cross-platform comparison is intentionally not supported (baselines are per-device, per-platform).
-
----
-
-## 10. What this doc is NOT
-
-- Not a list of files to edit (planner's job).
-- Not a proposal to change runtime defaults — existing per-device baselines stay canonical after migration.
-- Not a migration plan for the in-app `BenchmarkScreen` (consumes `BenchmarkResult` table in MMKV; separate flow).
+# Benchmark Matrix
+
+## Purpose
+
+This doc covers the E2E-only on-device benchmark matrix: the `pocketpal://e2e/benchmark` trigger, `runMatrix`'s isolated native lifecycle, the report schema (v1.1), and the host-side config / merge / compare toolchain. The in-app `BenchmarkScreen` is a separate flow. Normal-app device selection and model loading are in `model-loading.md`.
+
+## Code map
+
+| Path | Role |
+| --- | --- |
+| `src/__automation__/screens/BenchmarkRunnerScreen.tsx` | `runMatrix`, `expandAxes`, fingerprint helpers (`FINGERPRINT_KEYS`, `canonicaliseFingerprint`, `buildSuccessFingerprint`, `buildFailureFingerprint`), report types, screen with `onRun` / autostart |
+| `src/__automation__/benchParams.ts` | `DEFAULT_BENCH_BASE_PARAMS`, `buildOverridesParams`, `composeCellParams` (pure) |
+| `src/__automation__/logSignals.ts` | `BENCH_LOG_RE`, `deriveLogSignals`, `deriveEffectiveBackend`, `requestSatisfiedBy` |
+| `src/__automation__/benchmarkRoute.ts` | `BENCHMARK_RUNNER_URL_PREFIX`, `isBenchmarkRunnerUrl`, `parseBenchmarkAutostart` |
+| `src/__automation__/deepLink.ts`, `src/hooks/useDeepLinking.ts` | the two `__E2E__`-gated delivery sites that navigate to `ROUTES.BENCHMARK_RUNNER` |
+| `android/app/src/e2e/AndroidManifest.xml` | e2e-flavor bare `pocketpal://` intent-filter |
+| `e2e/fixtures/benchmark-models.ts` | `getBenchmarkMatrix`: tiers, `BENCH_*` env parsing and validation, fixed axis order |
+| `e2e/helpers/bench-runner.ts` | shared `buildConfig`, `pushConfig`, `deepLinkLaunch`, `pullLatestReport` |
+| `e2e/scripts/build-bench-config.ts` | CLI around the shared `buildConfig` (`yarn build:bench-config` in `e2e/`) |
+| `e2e/scripts/merge-bench-reports.ts` | raw reports to per-device baseline |
+| `e2e/scripts/benchmark-compare.ts` | baseline vs current regression check |
+| `e2e/scripts/migrate-baseline-v1-to-v1_1.ts` | one-shot v1.0 to v1.1 stamping |
+| `e2e/specs/benchmark-matrix.spec.ts` | WDIO driver |
+| `e2e/baselines/benchmark/*.json` | per-device baselines |
+
+## How it works
+
+The host builds `bench-config.json` and pushes it to the e2e app's `ExternalDirectoryPath`. It then fires `pocketpal://e2e/benchmark?autostart=1`. The screen's autostart effect calls the same `onRun` the `bench-run-button` uses. `onRun` runs `loadConfig` then `runMatrix`.
+
+`runMatrix`:
+1. Resolve `benchBase` (`DEFAULT_BENCH_BASE_PARAMS` with `n_threads` from `getRecommendedThreadCount()`) and GPU/Hexagon device names once through `getDeviceOptions()`.
+2. Expand cells over model × quant × backend × `expandAxes(settings_axes)`.
+3. Turn on native logging and call `modelStore.enterBenchmarkMode()`.
+4. For each cell: a backend pre-check, then download if needed through `modelStore.downloadHFModel` (30-minute deadline), then `composeCellParams`, a direct `initLlama`, backend validation from native-log signals, `ctx.bench(pp, tg, pl, nr)`, and a row appended. The report file is rewritten after every cell.
+5. In the per-cell `finally`: `ctx.release()`, `purgeNativeAllocator()`, then sleep `inter_cell_settle_ms`.
+
+The matrix-level `finally` turns native logging off and calls `exitBenchmarkMode()`. The WDIO spec polls `bench-runner-screen-status` for `complete` or `error:*`, then pulls the newest `benchmark-report-*.json`.
+
+Screen status values are `idle`, `running:<i/n:model/quant/backend[/overrides]>`, `downloading:<file>`, `cell-failed:<i/n>:<msg>`, `complete`, and `error:<msg>`. A matrix whose every cell failed still ends `complete`, so the per-row status is the pass gate.
+
+## Contracts and invariants
+
+- **Isolation.** The runner never reads or writes `modelStore.contextInitParams`, calls no `set*` setter, and never assigns `modelStore.context`. It does read `modelStore.models` and uses the download path. While `benchmarkActive` is true, `initContext` throws. `enterBenchmarkMode` sets the flag synchronously, then releases any context under the mutex. The matrix `finally` always clears it.
+- **Per-cell params are a pure literal.** `composeCellParams` builds base ⊕ `buildOverridesParams(overrides)` ⊕ `{model, devices, n_gpu_layers}`. Setter constraints (for example, cache type vs flash attention) are not replayed, so a sweep can hit combinations Settings never would. Operators constrain configs themselves.
+- **Backend slots pin both `devices` and `n_gpu_layers`.** CPU is `['CPU']` with 0; GPU and Hexagon are the discovered name with 99.
+- **An unavailable backend fails, it does not fall back.** A missing GPU or Hexagon option writes a `status:'failed'` row with `error:'<GPU|Hexagon> device not available'` and `effective_backend:'unknown'`, and the matrix continues. The cell must never silently measure CPU. `initLlama` results that do not satisfy the request (`requestSatisfiedBy`: exact match or same-backend partial offload) throw `backend-mismatch` and fail the row.
+- **`status:'ok'` implies non-null `pp_avg` / `tg_avg`.** A null bench metric throws and the row fails.
+- **Every row carries `settings_overrides`** (possibly `{}`) **and `settings_fingerprint`.** The merger rejects v1.1 rows missing either.
+- **Fingerprint canonical form.** Keys go in `FINGERPRINT_KEYS` order (`cache_type_k, cache_type_v, flash_attn_type, no_extra_bufts, use_mmap, n_threads`). A missing key becomes `-`, booleans are `true`/`false`, numbers are decimal, strings are lowercased, and pairs join as `k=v;…`. Adding a knob means a fingerprint-version bump.
+- **Fingerprint source.**
+  - When the config has no axes and the cell's overrides are empty, the fingerprint is the literal `app-default`, on success and failure alike. No other row uses that literal.
+  - After `composeCellParams`, including a later throw, the fingerprint is canonical over the composed snapshot (`init_settings`).
+  - Before compose (pre-check or download failure), it is `req:` plus canonical over `benchBase`'s knobs overlaid with the requested overrides, and `init_settings` is `{}`.
+- **`init_settings` vs `effective_init_params`.** `init_settings` holds only the fingerprint knobs. `effective_init_params` is the full composed dict minus `model`, which includes devices and layers.
+- **Absent, not empty.** Producers omit `settings_axes` rather than emit `[]`. The report sets `settings_axes_used` only when axes were present. `inter_cell_settle_ms` is always echoed, defaulting to 2000, and a non-finite or negative value falls back to the default.
+- **One config producer.** The CLI and the spec both call `bench-runner.ts:buildConfig`. The CLI also adds a `tier` field, which the screen ignores. Env values are validated in `getBenchmarkMatrix`, and an invalid value throws before any config is written. The axis order is fixed so cell order is stable across runs.
+- **Row identity is `model_id::quant::requested_backend::settings_fingerprint`** in both merge and compare. Differing fingerprints are different rows, never a protocol mismatch.
+- **Merge rules.** Mixed `version` inputs are fatal (run the migration first). Differing `bench` blocks are fatal. `preferLatest` makes an `ok` row win, then the later `timestamp`. `settings_axes_used` is unioned. `log_signals` are re-derived from `raw_matches`, then `raw_matches` is emptied.
+- **Compare flags.** A pp or tg regression beyond `--pct` (default 15) is flagged when either one crosses. Also flagged: an `ok` row turning into anything else, a null metric on an `ok` pair, any `effective_backend` change, and a baseline row missing from the current report. Rows only in the current report are listed as new, not failed. Exit 0 means pass, 1 means regression, and 2 means bad input or a `bench` protocol mismatch.
+- **All autostart and deep-link code is `__E2E__`-gated or lives in `src/__automation__/`.** Only `App.tsx` and `useDeepLinking.ts` may import it (`.eslintrc.js` `no-restricted-imports`). CI's DCE sanity check greps the prod APK for markers such as `BENCH_RUN_MATRIX`.
+
+## Traps and decisions
+
+- **Autostart exists because HyperOS / MediaTek devices silently drop injected taps** (`adb input tap` and WDIO `.click()`). It is true only for `autostart=1` or `true` (case-insensitive), so `autostart=0` never starts. `parseBenchmarkAutostart` is the single parser for both delivery sites, and it fires at most once per mount (`autostartFiredRef`). The `runningRef` plus status guard in `onRun` stays authoritative.
+- **Prod also registers `pocketpal://`, but only for the `hub` and `checkout` hosts.** The bare `e2e/benchmark` route resolves only in the e2e flavor, and only through `__E2E__` code.
+- **`devices=['CPU']` alone does not keep layers off other registered backends.** With `n_gpu_layers > 0` and Hexagon registered, ggml offloaded to Hexagon on Snapdragon 8 Elite Gen 5, which is why the slot pins both.
+- **`purgeNativeAllocator` between cells.** On Android it calls `mallopt(M_PURGE_ALL)`; on iOS it is a no-op. It runs only after a cell that created a context, because Scudo otherwise hoards freed pages and long matrices get OOM-killed on low-RAM devices. The settle also covers deferred driver teardown (OpenCL, HTP FastRPC) and thermal recovery. Raise `inter_cell_settle_ms` in the pushed config for thermally stable sweeps, with no rebuild.
+- **Hexagon uses the same canonical pick as the app,** the first exact wildcard-free `HTP*` name (`model-loading.md`, Contracts and invariants). Several registered HTP sessions do not prove multi-session execution. Compare `effective_init_params` with the model/compute allocation logs.
+- **`use_mmap:'smart'` as an override resolves to the platform default** (iOS `true`, Android `false`), because no file is open at compose time. `init_settings` and the fingerprint show the resolved boolean.
+- **Report `platform` is hard-coded `'android'`,** and top-level `device` / `soc` / `commit` / `llama_rn_version` are filled by the merger's CLI flags, not the device. Baselines are per device and per platform, and the iOS base differs (`flash_attn_type` defaults to `auto`, not `off`), so cross-platform comparison is unsupported.
+- **Re-deriving `log_signals` on merge backfills new structured fields from old reports,** but only for lines `BENCH_LOG_RE` already captured. A new signal needs a widened regex and a re-run on device.
+- **The v1.1 bump bundled the settings sweep and Hexagon.** Both change row identity, and one migration beat two.
+
+## Verification
+
+- Unit: `src/__automation__/__tests__/` (`benchmarkRoute`, `deepLink`), `src/__automation__/screens/__tests__/BenchmarkRunnerScreen.test.tsx`, `scripts/__tests__/{build-bench-config,merge-bench-reports,benchmark-compare}.test.ts`.
+- Device: the dev-team `bench` skill, or run `yarn build:bench-config --push` (in `e2e/`) followed by `e2e/specs/benchmark-matrix.spec.ts`, then `merge-bench-reports.ts` and `benchmark-compare.ts` against `e2e/baselines/benchmark/<device>.json`.
+- By hand: `adb shell am start -a android.intent.action.VIEW -d "pocketpal://e2e/benchmark?autostart=1"` on an e2e build with a pushed config. The status should leave `idle` within seconds.
