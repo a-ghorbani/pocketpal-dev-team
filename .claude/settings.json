@@ -1,4 +1,9 @@
 {
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  },
   "permissions": {
     "allow": [
       "Read",
@@ -26,9 +31,7 @@
       "Edit(**/.env)",
       "Edit(.env.*)",
       "Edit(**/.env.*)",
-      "Edit(**/repos/pocketpal-ai/**)",
-      "Read(**/*.pem)",
-      "Read(**/gh-app-token.json)"
+      "Edit(**/repos/pocketpal-ai/**)"
     ]
   },
   "hooks": {
