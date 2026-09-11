@@ -2,6 +2,19 @@
 
 Orchestrator runbook for the top-level `/start-task` session (and the PR-fix loop it drives): how to run a task end to end. The always-on invariants every agent obeys are in `AGENTS.md`.
 
+## Dispatching a role
+
+"Use `pocketpal-<role>`" anywhere in this pipeline means: run that role as a subagent, passing the handoff block as its prompt.
+
+| Harness | Dispatch |
+| --- | --- |
+| Claude Code | `Agent` tool, `subagent_type: pocketpal-<role>` |
+| Codex | `spawn_agent` with agent `pocketpal-<role>` |
+| opencode | `task` tool with `pocketpal-<role>` (or `@pocketpal-<role>`) |
+| no subagent support | start a fresh session, have it read `agents/pocketpal-<role>.md`, and give it the handoff block |
+
+Roles are leaves: they do not dispatch further roles. The orchestrating session does all routing.
+
 ## Autonomous-run contract
 
 After each stage returns, the calling session immediately invokes the next agent in the chain. Do NOT use `AskUserQuestion` or any other interactive prompt between stages. There is no human approval gate between stages. Stop ONLY for:

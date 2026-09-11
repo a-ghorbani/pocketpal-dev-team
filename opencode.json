@@ -1,0 +1,29 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "allow",
+      "git reset *": "ask",
+      "git rebase *": "ask",
+      "rm -rf *": "deny",
+      "rm -fr *": "deny",
+      "git push -f *": "deny",
+      "git push --force *": "deny",
+      "git push origin main*": "deny",
+      "git push origin master*": "deny"
+    },
+    "edit": {
+      "*": "allow",
+      "**/.env": "deny",
+      "**/.env.*": "deny",
+      "**/repos/pocketpal-ai/**": "deny"
+    }
+  },
+  "mcp": {
+    "figma-local": {
+      "type": "remote",
+      "url": "http://127.0.0.1:3845/mcp",
+      "enabled": true
+    }
+  }
+}

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Plane CLI for any harness. The CLI ships inside the `plane` Claude Code
+# plugin; this resolves the newest installed copy (or $PLANE_SH) and runs it
+# from the repo root so it picks up the project .env and plane.config.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PLANE_SH="${PLANE_SH:-$(ls -d "$HOME"/.claude/plugins/cache/*/plane/*/skills/plane/plane.sh 2>/dev/null | sort -V | tail -1)}"
+
+if [[ -z "$PLANE_SH" || ! -x "$PLANE_SH" ]]; then
+  echo "plane.sh not found. Install the 'plane' Claude Code plugin or set PLANE_SH=/path/to/plane.sh." >&2
+  exit 1
+fi
+
+cd "$ROOT"
+exec "$PLANE_SH" "$@"

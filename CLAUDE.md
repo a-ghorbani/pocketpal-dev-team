@@ -12,5 +12,5 @@
 
 ## Tools
 
-- the `plane` skill — Plane CLI (primary tracker; `plane` Claude Code plugin); `tools/linear.sh` — legacy Linear CLI.
+- `tools/plane` — Plane CLI (primary tracker; wraps the `plane` plugin's script, also usable as the `plane` skill); `tools/linear.sh` — legacy Linear CLI.
 - For reference→tracker routing and the internal-ID hygiene rule, see `context/issue-tracking.md`.

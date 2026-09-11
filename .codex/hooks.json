@@ -32,6 +32,12 @@
             "command": "\"$(git rev-parse --show-toplevel)/tools/guard-submodule-git.sh\"",
             "timeout": 30,
             "statusMessage": "Checking submodule git policy"
+          },
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/tools/guard-secrets-read.sh\"",
+            "timeout": 30,
+            "statusMessage": "Checking secrets policy"
           }
         ]
       }

@@ -1,7 +1,5 @@
-# Shared Skill Sources
+# Skills
 
-This directory contains tool-agnostic skill source material.
+One directory per skill: `skills/<name>/SKILL.md` in the Agent Skills format (`name` must equal the directory; always set it, opencode drops skills without one). These are the only skill files to edit.
 
-Runtime-specific adapters live in tool-owned discovery paths such as `.claude/skills/` and `.codex/skills/`. Adapters may import these shared sources when include behavior is verified, or inline generated content as a fallback.
-
-Root `skills/` is shared source only. It is not assumed to be a runtime discovery path.
+`tools/sync-harness.py` links each skill into `.claude/skills/` (Claude Code) and `.agents/skills/` (Codex, opencode). Claude-only frontmatter such as `user-invocable` and `argument-hint` is ignored elsewhere.

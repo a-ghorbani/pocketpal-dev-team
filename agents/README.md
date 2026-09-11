@@ -1,7 +1,5 @@
-# Shared Agent Sources
+# Agent roles
 
-This directory contains tool-agnostic agent role source material.
+One file per role: `agents/<name>.md`, frontmatter `name` + `description`, body = the role's instructions. These are the only files to edit.
 
-Runtime-specific adapters live in tool-owned locations such as `.claude/agents/`. Adapters may import these shared sources when the tool's include behavior is verified, or they may inline generated content as a documented fallback.
-
-Do not put tool permission syntax, model names, or runtime-only frontmatter in shared agent sources.
+`tools/sync-harness.py` generates the per-harness copies (`.claude/agents/`, `.codex/agents/*.toml`, `.opencode/agents/`). Keep harness-specific keys (tools, models, permissions) out of these sources; the generator adds them.
