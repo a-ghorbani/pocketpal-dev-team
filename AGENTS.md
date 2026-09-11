@@ -1,144 +1,85 @@
 # Agent Instructions
 
-This repo is the workflow control plane for PocketPal AI. The target app code is in `repos/pocketpal-ai`, but that submodule is read-only.
+This repo is the workflow control plane for PocketPal AI. The app lives in the read-only submodule `repos/pocketpal-ai`; all app work happens in worktrees created from it. The delivery runbook (pipeline, handoff block, routing, complexity, critic loops) is [`docs/workflows/pipeline.md`](docs/workflows/pipeline.md).
 
-These are the always-on invariants every agent must obey, regardless of role. The orchestrator runbook — pipeline shape, stage handoffs, complexity matrix, critic loops, exploration policy — is in **[`docs/workflows/pipeline.md`](docs/workflows/pipeline.md)**.
+## Guardrails
 
-## Non-Negotiables
+These hold for every agent and every task. Most are hook-enforced.
 
-- Never edit, build, commit, or switch branches inside `repos/pocketpal-ai/`. Use it only as the source repo for creating worktrees and reading source.
-- All task work happens in `worktrees/<TASK-or-PR>/` on a non-`main` branch.
-- Never create a worktree from the dev-team repo itself. Worktrees come from `repos/pocketpal-ai`.
-- Never remove worktrees with raw `git worktree remove`, `git worktree prune`, `rm -r`, or `rmdir`. Use `./tools/remove-worktree.sh <name> --yes` only when the user explicitly asks for cleanup.
-- Never bulk-copy secrets or config. Use only the allowlisted sync in `./tools/sync-worktree-config.sh` or `./tools/create-worktree.sh`.
-- Never implement without the artefacts the complexity level requires (see Story gate).
-- Keep the four-stage pipeline intact: **Intent → WHAT → HOW → Implementation** — implementation and independent review must never collapse into the same role. The orchestrator runs the pipeline autonomously (no interactive prompt between stages); the exact stop conditions are in `docs/workflows/pipeline.md`.
-- `NATIVE_CHANGES=YES` requires `pod install` + iOS build + Android build before the work can be called ready.
-- Every PR that changes behaviour described in `context/architecture/*.md` must update the relevant doc **in the same round**. Drift is forbidden.
-- Every PR that changes visible UI must carry durable visual evidence posted to the PR. The trigger, ownership, and posting mechanism are in **[`docs/workflows/visual-capture.md`](docs/workflows/visual-capture.md)**.
-- **Issue tracking & routing:** see `context/issue-tracking.md` for how a work reference resolves to its tracker, and the internal-ID hygiene rule.
-- **Public artifacts hygiene.** In GitHub artifacts (PR title/body/comment, issue, commit message) and in `repos/pocketpal-ai/` source/tests/configs, reference only public things — public GitHub issues/PRs, file paths, library names. No internal tracker IDs (see `context/issue-tracking.md`), no `linear.app`, no internal task IDs, no story-doc anchors (`I_DSn`, `Dn`, `§4x`, `Scenario X`, `WHAT/HOW`, `round N`). Source comments stay terse — current state, not the story.
+- **Submodule read-only.** Inside `repos/pocketpal-ai/`, never edit, build, test, commit, or switch branches, and never use its build artifacts or upload its files as generated assets. Read it with absolute paths (`git -C "$ROOT/repos/pocketpal-ai" …`, `grep -rn … "$ROOT/repos/pocketpal-ai/src"`); after a `cd`, the harness can't resolve relative paths.
+- **Worktrees.**
+  - App work happens in `worktrees/<TASK-or-PR>/` on a non-`main` branch.
+  - Create worktrees only from the submodule, via `tools/create-worktree.sh`.
+  - Remove them only with `./tools/remove-worktree.sh <name> --yes`, and only when the user asks. Never use raw `git worktree remove`/`prune`, `rm -r`, or `rmdir`.
+  - Stop and report when you're inside the submodule, on `main`/`master`, or missing the `WORKTREE`, `BRANCH`, or story context your task needs.
+- **Secrets.** Agents never read `.env`, `.env.*`, keystores, or key files (hook-guarded). Config reaches worktrees only through `tools/sync-worktree-config.sh` / `tools/create-worktree.sh`; never bulk-copy it.
+- **Public artifacts.** GitHub artifacts (PR title, body, and comments; issues; commit messages) and everything in the app (source, tests, configs) reference only public things: GitHub `#123`, file paths, library names. Leave out:
+  - internal tracker IDs (`context/issue-tracking.md`) and `linear.app` links;
+  - task IDs;
+  - story anchors (`I_DSn`, `Dn`, `§4x`, `Scenario X`, `WHAT/HOW`, `round N`).
 
-## Operating Rules
+## Delivery rules
 
-### Worktree isolation
+These apply to work that becomes an app PR.
 
-Every implementation, test, or PR review of PocketPal app code happens in a dedicated worktree under `worktrees/`. The submodule is only the source used to create worktrees and read source code.
+- **Keep the four stages intact:** Intent → WHAT → HOW → Implementation. Implementation and independent review never collapse into one role. The orchestrator runs stages without interactive prompts; the stop conditions are in `pipeline.md`.
+- **Story gate.** Trivial work needs `intent-brief.md`; quick work adds `how.md`; standard and complex work add `what.md`.
+- **Architecture docs** (`context/architecture/`, one per flow; lifecycle in its README):
+  - a PR that changes behaviour a flow doc describes updates that doc in the same PR;
+  - for standard and complex work, WHAT is a delta on the flow doc, and the implementer absorbs it;
+  - the architect runs a drift check first, because drift is a bug.
+- **Native changes.** Work touching `package.json`, native modules, `ios/`, `android/`, a Podfile, or `build.gradle` is `NATIVE_CHANGES=YES`. It needs `pod install`, an iOS build, and an Android build before it is ready.
+- **Visual evidence.** A PR that changes visible UI carries durable captures posted to the PR (`docs/workflows/visual-capture.md`).
+- **Comments.** Default to none. A comment is usually a symptom:
+  - of a redundant line: delete it;
+  - of unclear code: fix the code;
+  - of a forced design: move the rationale to `context/architecture/`.
 
-Agents stop and report when:
+  Keep only a genuine "why" the code cannot show. The full test is under "Comments" in `docs/standards/code-review.md`.
 
-- `pwd` is inside `repos/pocketpal-ai/`
-- the current branch is `main` or `master`
-- expected `WORKTREE`, `BRANCH`, or story context is missing
-- a requested action would mutate, build, or commit inside the submodule
+## Shared checkout
 
-### Submodule read-only
+This repo is one checkout on `main`, shared by parallel sessions (`worktrees/` belong to the *app* repo).
 
-`repos/pocketpal-ai/` is read-only. Agents must never edit, switch branches, commit, build, or test inside it; never reference its build artifacts; never upload its files as generated assets. Builds, tests, screenshots, and reports happen in a worktree.
-
-Read it with absolute paths (`grep -rn … "$ROOT/repos/pocketpal-ai/src"`, `git -C "$ROOT/repos/pocketpal-ai" …`) rather than `cd repos/pocketpal-ai && grep … src`. The harness cannot resolve a relative path after `cd`, and when a `Read(...)` deny rule is in force that unresolved read becomes a permission prompt. Secret files (`.env`, `.env.*`, `*.keystore`) are guarded by `tools/guard-secrets-read.sh`, a hook rather than a deny rule, precisely so ordinary reads never prompt.
-
-### Story gate
-
-Implementation requires the artefacts the complexity level mandates. Trivial: `intent-brief.md`. Quick: + `how.md`. Standard / complex: + `what.md`.
-
-### Architecture library
-
-`context/architecture/` holds the cumulative architecture truth, one file per flow. See `context/architecture/README.md` for the lifecycle.
-
-- Standard / complex stories produce `what.md` as a **delta** on the relevant flow doc.
-- The implementer absorbs the approved delta into the flow doc in the same round that lands the code (a step in `how.md`).
-- Drift is treated as a bug. The architect runs a drift check at the start of every standard / complex story.
-
-### Native verification
-
-Tasks touching `package.json`, native modules, `ios/`, `android/`, Podfile, or build.gradle are `NATIVE_CHANGES=YES`. Required before "ready": `pod install`, an iOS build, an Android build. Missing native verification is a blocking review issue.
-
-### Visual evidence
-
-Tasks that change visible UI are `Visual Evidence Required=YES`. The pipeline must produce durable captures and post them to the PR before approval; "UI changed but no posted visual evidence" is a blocking review issue. Owners and the posting command are in `docs/workflows/visual-capture.md`.
-
-### Comments: treat the urge to write one as a diagnostic
-
-A comment is almost always a **symptom**, not a deliverable. Before writing one, work out which of these you are actually looking at — and fix *that*, rather than describing it:
-
-1. **Bad comment** — it states what the code already says, narrates the change, or records how you arrived at the answer. → **Delete it.** Names and types already carry it.
-2. **Bad code** — you need prose because the code is not self-explanatory. → **Fix the code.** Rename the variable, extract the function, drop the cleverness. The comment is buying silence for a readability problem.
-3. **Bad design** — the comment justifies why something is done this odd way. → **Fix the design**, or if the oddity is genuinely forced, put the reasoning in `context/architecture/` where design rationale belongs, not above the call site.
-4. **Genuine "why"** — a non-recoverable fact a future reader cannot derive from the code: an external constraint, non-obvious platform behaviour, a trap that looks like a bug and isn't. → **Keep it.** This is the rare case, not the normal one.
-
-The test: *if I delete this line, what does a competent reader who knows the codebase but not this task actually lose?* If the answer is "nothing", it was case 1. If it is "they would misread the code", it is probably case 2 or 3 and the code should change. Only if the answer is "they would repeat a mistake the code cannot warn them about" is it case 4.
-
-Two consequences worth stating explicitly, because they are where this usually goes wrong:
-
-- **Volume is the signal.** A diff that needs many comments is reporting a design or clarity problem, not a documentation gap. Do not resolve it by writing better prose.
-- **Nothing about the task belongs in source.** No "we hit X", no round numbers, no story anchors. Source describes the current state; the reasoning lives in the story and the architecture docs. (This overlaps Public artifacts hygiene above — same rule, different failure mode.)
-
-Reviewers: flag over-commenting as a finding, and say **which of the four** it is. "Too many comments" is not actionable; "this is case 2, the function needs splitting" is.
-
-### Concurrent lanes share one control plane
-
-This repo is a **single checkout on `main`** — `worktrees/` are of the *app* repo — so lanes running in parallel share one copy of every file under `context/architecture/`. The failure mode is a lost update, not a merge conflict: last writer wins silently and the diff looks clean. Check `git status --porcelain -- context/architecture/` before editing (a foreign modification means stop), then commit the absorption immediately and path-scoped (`git commit -- <file>`, never `add -A`).
-
-`workflows/stories/*` and `workflows/reviews/*` are gitignored, so a story doc, capture directory or wire-verification file exists only on the machine that wrote it. A PR body citing such a path cites something the reviewer cannot open — put the content inline instead.
-
-An agent can only arm a mechanism that outlives it. Reporting *"I will do X when the build finishes"* and then exiting arms nothing, and the failure is silent: no artefact, no error, no log line.
-
-### Secrets, config, cleanup
-
-- Do not read, copy, or bulk-sync `.env` files or private config by hand. Use only the allowlisted sync tools.
-- Do not remove worktrees outside `./tools/remove-worktree.sh <name> --yes`, and only when the user explicitly asks.
-
-### Subagent authorisation for reviews
-
-For PR reviews and high-risk code reviews, the user explicitly authorises delegated (e.g. Codex to use `spawn_agent`) subreviews (architect-reviewer, QA, security, performance, mobile, data, UX, local-invariants, etc.) as required by the review workflow.
+- **Architecture docs.** A lost update here is silent (last writer wins, and the diff looks clean). So:
+  - before editing `context/architecture/`, run `git status --porcelain -- context/architecture/`;
+  - a foreign modification means stop;
+  - commit your change at once, path-scoped (`git commit -- <file>`, never `add -A`).
+- **Story files.** `workflows/stories/*` and `workflows/reviews/*` exist only on the machine that wrote them. Put their content inline in a PR instead of citing the path.
+- **Follow-ups.** An agent can only arm a mechanism that outlives it. "I will do X when the build finishes", followed by exiting, arms nothing.
+- **Review subagents.** The user authorises delegated subreviews (architect, QA, security, performance, mobile, data, UX, local-invariants) wherever the review workflow requires them.
 
 ## Harness layout
 
 This repo runs under Claude Code, Codex, and opencode from one source:
 
-- Roles: `agents/<name>.md`. Skills: `skills/<name>/SKILL.md`. These are the only copies; edit them directly.
-- Harness paths point back at them: `.claude/` and `.opencode/` agents and all skill dirs are symlinks, `.codex/agents/*.toml` are one-line stubs. `tools/sync-harness.py` creates them. Run it only when you add, rename, or remove a role or skill, or change a role's description (`--check` reports drift).
-- Guards are the `tools/guard-*.sh` scripts, wired as hooks in `.claude/settings.json`, `.codex/hooks.json`, and `.opencode/plugins/guards.ts`. Add a guard to all three.
-- Source files use plain paths ("Read `docs/...`"), never `@path` imports: only Claude expands those.
+- Roles live in `agents/<name>.md` and skills in `skills/<name>/SKILL.md`. These are the only copies, so edit them directly.
+- Harness paths point back at them:
+  - `.claude/` and `.opencode/` agents, and all skill dirs, are symlinks;
+  - `.codex/agents/*.toml` are one-line stubs.
+
+  `tools/sync-harness.py` creates them. Run it only when you add, rename, or remove a role or skill, or change a role's description; `--check` reports drift.
+- The guards are the `tools/guard-*.sh` scripts, wired as hooks in `.claude/settings.json`, `.codex/hooks.json`, and `.opencode/plugins/guards.ts`. Add a new guard to all three.
+- Source files use plain paths ("Read `docs/...`"), never `@path` imports; only Claude expands those.
 
 ## GitHub conventions
 
-PR / issue / comment signature — one line, naming the harness that did the work (`Claude Code`, `Codex`, …):
+Signature: one line naming the harness that did the work. It is the only footer, with no harness-injected footers and no session links.
 
 ```text
-Generated by [PocketPal Dev Team](https://github.com/a-ghorbani/pocketpal-dev-team) · Claude Code
+Generated by [PocketPal Dev Team](https://github.com/a-ghorbani/pocketpal-dev-team) · <Claude Code | Codex | opencode>
 ```
 
-That line is the only footer. No harness-injected footers (`🤖 Generated with …`), no session links — they are private and mean nothing to a public reader.
+**Bot identity.** Every public GitHub write goes through `tools/ghb`, which runs `gh` as the `pocketpal-dev-team[bot]` App. That covers `pr create`, `pr comment`, `issue comment`, and `pr review --comment` / `--request-changes`.
+- Approvals and merges stay on the operator's account; `ghb` refuses them.
+- When the bot token is unavailable, `ghb` runs as the operator and warns. If `ghb` can't run, plain `gh` is fine.
+- Setup: `docs/workflows/github-bot-identity.md`.
 
-Bot identity: every public write on GitHub — `pr create`, `pr comment`, `issue comment`, `pr review --comment` / `--request-changes` — goes through `tools/ghb`, which runs `gh` as the `pocketpal-dev-team[bot]` GitHub App so readers see the author is automation. Approvals and merges stay on the operator's own account (`ghb` refuses them). Commits and pushes are unchanged. Getting the job done beats attribution: when the bot token is unavailable `ghb` runs the command as the operator and warns; if `ghb` itself is unusable, plain `gh` is fine. Setup: `docs/workflows/github-bot-identity.md`.
+**Commits and titles.**
+- Commits never carry `Co-Authored-By` trailers (hook-enforced).
+- Titles: `[Bug]: …` (label `bug`), `[Feat]: …` (label `enhancement`), or a short PR description under 70 characters.
 
-Commits: never add `Co-Authored-By` trailers (hook-enforced).
-
-Titles: `[Bug]: ...` (label `bug`), `[Feat]: ...` (label `enhancement`), or a short PR description under 70 chars.
-
-## Worktree commands
-
-```bash
-# New task
-./tools/create-worktree.sh TASK-YYYYMMDD-HHMM
-# Defaults: worktree=worktrees/TASK-..., branch=feature/TASK-..., ref=origin/main
-
-# PR branch (fetch first)
-./tools/create-worktree.sh PR-490 --branch pr-490 --ref pr-490
-
-# Detached E2E from existing remote ref
-./tools/create-worktree.sh PR-490-e2e --detach --ref origin/my-pr-branch
-
-# Re-sync allowlisted config into an existing worktree
-./tools/sync-worktree-config.sh ./worktrees/TASK-YYYYMMDD-HHMM
-
-# Remove a worktree (only when the user explicitly asks)
-./tools/remove-worktree.sh TASK-YYYYMMDD-HHMM --yes [--force]
-```
-
-## Naming and layout
+## Worktrees and naming
 
 | Type | Worktree | Branch | Story directory |
 | --- | --- | --- | --- |
@@ -146,18 +87,19 @@ Titles: `[Bug]: ...` (label `bug`), `[Feat]: ...` (label `enhancement`), or a sh
 | PR fix | `worktrees/PR-<n>` | `pr-<n>` | `workflows/stories/PR-<n>-fix/` |
 | PR E2E | `worktrees/PR-<n>-e2e` | detached | n/a |
 
-Inside a story directory:
-
-```
-intent-brief.md    # always
-what.md            # standard / complex only
-how.md             # quick / standard / complex (not trivial)
+```bash
+./tools/create-worktree.sh TASK-YYYYMMDD-HHMM                       # branch feature/TASK-..., ref origin/main
+./tools/create-worktree.sh PR-490 --branch pr-490 --ref pr-490      # fetch the PR ref first
+./tools/create-worktree.sh PR-490-e2e --detach --ref origin/<branch>
+./tools/sync-worktree-config.sh ./worktrees/<name>                  # re-sync allowlisted config
+./tools/remove-worktree.sh <name> --yes [--force]                   # only when the user asks
 ```
 
 ## Key references
 
-- **Orchestrator runbook:** `docs/workflows/pipeline.md` (pipeline shape, stage handoffs, complexity matrix, critic loops, exploration policy)
-- Templates: `templates/{intent,what,how}-template.md`, `templates/{design-candidate,plan-candidate,review-feedback}-template.md`
+- Pipeline runbook: `docs/workflows/pipeline.md`
+- Templates: `templates/`
 - Architecture library: `context/architecture/README.md`
 - Project context: `context/patterns.md`, `context/pocketpal-overview.md`
 - Standards: `docs/standards/code-review.md`, `docs/workflows/visual-capture.md`
+- Tracker routing: `context/issue-tracking.md`

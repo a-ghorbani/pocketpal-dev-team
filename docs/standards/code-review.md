@@ -89,13 +89,26 @@ The `local-invariants` role reviews changed lines for small contract breaks defi
 - **Correctness** _(QA)_: broken behavior, bad assumptions, null handling, state mistakes, async races, retries, cancellation, stale state, error paths.
 - **Architecture and boundaries** _(Architect)_: coupling, layering, public contracts, hidden dependencies, over-engineering.
 - **Maintainability and readability** _(Architect)_: duplication, naming, fragile logic, magic constants, hard-to-test design. (Owned by the architect role in high-risk reviews; the lead applies it against the diff directly when no architect subreview ran.)
-- **Comment load** _(Architect)_: over-commenting is a recurring defect in this repo, so review it explicitly rather than waiting to be asked. Per `AGENTS.md` ("Comments: treat the urge to write one as a diagnostic"), every comment is one of four things — a bad comment, unclear code, a shaky design, or a genuine non-recoverable "why". A finding **must name which**: "too many comments" is not actionable, "this is case 2 — the comment exists because the function does three things" is. Volume itself is evidence: a diff that needs heavy commentary is reporting a clarity or design problem, and the remedy is the code, not better prose. Also flag task narrative in source (naming the bug just fixed, round numbers, plan-step restatements) — that rots into archaeology.
+- **Comment load** _(Architect)_: over-commenting is a recurring defect in this repo, so review it explicitly rather than waiting to be asked. Classify every questionable comment with the four-case test under "Comments" below. A finding **must name which case**: "too many comments" is not actionable, "this is case 2 — the comment exists because the function does three things" is. Volume itself is evidence: a diff that needs heavy commentary is reporting a clarity or design problem, and the remedy is the code, not better prose. Also flag task narrative in source (naming the bug just fixed, round numbers, plan-step restatements) — that rots into archaeology.
 - **Tests and verification** _(QA)_: missing coverage, weak assertions, mocks that hide contracts, skipped tests, manual validation gaps. **Coverage floor: 60%** (statements, branches, functions, lines) for the changed surface; below it is a `BLOCKER` unless explicitly waived.
 - **Security and privacy** _(Security)_: PocketPal is an **on-device app, not a server** — review against the mobile threat model, not a server perimeter. The real trust boundaries are: (a) model-generated content reaching render/execution surfaces (markdown/HTML/WebView/JS, tool-call/JSON parsing); (b) external content entering the app (downloaded GGUF models, web-search/internet results, deep links / App Intents / Shortcuts params, PalsHub rows); (c) on-device data at rest and in logs (chat history, API keys, server/auth tokens, crash reports); (d) the native bridge and capability allowlist (Pals-as-apps WebView bridge); (e) debug/E2E hooks reachable in production builds. A security finding on a trust-boundary diff must name an untrusted **source** and the **sink** it reaches unsanitized.
 - **Data and migration safety** _(Data, Security)_: schema changes, persisted state, cache invalidation, backward compatibility, rollback.
 - **Performance and resources** _(Perf, Mobile Platform)_: hot paths, unbounded work, repeated I/O, memory, storage, startup time, battery. PocketPal runs LLMs on phones; any change that could plausibly increase RAM/heap, model load time, bundle size, startup, or battery use must be flagged at `CONCERN` minimum.
 - **UX and accessibility** _(UX/A11y)_: user-visible flows, honest states, error messages, accessibility, copy consistency, lost affordances.
 - **Platform and native verification** _(Mobile Platform)_: `NATIVE_CHANGES=YES` requires `pod install`, an iOS build, and an Android build before approval. Also consider cross-OS/chip compatibility — iOS version floor, Android API min, arm64 vs simulator, llama.rn backend variants, on-device vs emulator.
+
+## Comments
+
+A comment is almost always a **symptom**, not a deliverable. Work out which of these it is, and fix *that*:
+
+1. **Bad comment**: it states what the code already says, narrates the change, or records how the answer was reached. → **Delete it.** Names and types already carry it.
+2. **Bad code**: prose is needed because the code is not self-explanatory. → **Fix the code.** Rename, extract, drop the cleverness.
+3. **Bad design**: the comment justifies an odd approach. → **Fix the design**, or when the oddity is genuinely forced, put the reasoning in `context/architecture/`, not above the call site.
+4. **Genuine "why"**: a non-recoverable fact the code cannot show, such as an external constraint, non-obvious platform behaviour, or a trap that looks like a bug and isn't. → **Keep it.** This is the rare case.
+
+The test: *if this line is deleted, what does a competent reader who knows the codebase but not this task lose?* Nothing means case 1. "They would misread the code" means case 2 or 3, so the code should change. "They would repeat a mistake the code cannot warn them about" is case 4.
+
+Nothing about the task belongs in source: no "we hit X", no round numbers, no story anchors. Source describes the current state; the reasoning lives in the story and the architecture docs.
 
 ## PocketPal-Specific Checks
 
