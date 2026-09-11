@@ -1,267 +1,89 @@
 # Deep Linking & HF Download Attribution
 
-Cumulative architecture truth for the `pocketpal://` deep-link flow and the versioned Hugging Face (HF) User-Agent wire boundary.
+## Purpose
 
-Conventions: `(C)` current (verified from code), `(D)` decision (short rationale). Architecture docs are mostly `(C)`.
+This doc covers two things: inbound `pocketpal://` links, and the outbound Hugging Face (HF) User-Agent attribution wire. The links are the `hub/run` "Use this model" route, the iOS Shortcuts `chat` route, and the E2E-only routes. `pocketpal://checkout` belongs to `palshub-checkout.md`, and the flat routes it navigates to belong to `app-shell.md`. Universal Links, App Links, and the HF Local-App registration (which lives in an external repo) are not implemented.
 
-Out of scope (not implemented): the `huggingface.js` Local-App registration (external repo) and Universal/App Links (AASA + assetlinks.json).
+**Not on `main` yet:** open PR #897 adds the `llama://` pairing route (and `llama` in the iOS scheme allow-list). The previous version of this doc described it (`git show 1ad6ce1:context/architecture/deep-linking.md`); distill it back in when it lands.
 
----
+## Code map
 
-## 0. Delivery reality (C)
-
-- iOS deep-link delivery is via a native `DeepLinkModule` (`ios/PocketPal/DeepLinkModule.swift`) → `DeepLinkService` event emitter (`src/services/DeepLinkService.ts`). The handler receives `DeepLinkParams {url, scheme, host, queryParams}`.
-- Android prod has **no native deep-link bridge**. Cross-platform prod delivery for the hub/run route uses RN `Linking` (cold `getInitialURL` + warm `'url'` event), an always-on effect in `useDeepLinking`.
-- A separate `__E2E__`-gated `Linking` effect routes the benchmark deep link (`pocketpal://e2e/benchmark`). It is untouched by the hub/run flow; the two never overlap because `parseHubRunURL` returns `null` for benchmark URLs.
-- `MainActivity` is `launchMode="singleTask"` and overrides `onNewIntent` to `setIntent(intent)` so RN's warm `'url'` event fires on warm launch (D9).
-- **Navigator hosting the targets (C).** Deep-link handlers resolve targets via `navigation.navigate(ROUTES.*)` against flat route names. POC-30 replaced the top-level `@react-navigation/drawer` with a root Stack hosting a bottom-tab navigator (`context/architecture/app-shell.md`); `ROUTES.CHAT` and `ROUTES.BENCHMARK_RUNNER` are now flat sibling routes on that root Stack. The route-name strings and all handler logic are unchanged, so chat (`pocketpal://chat`), hub/run, and benchmark (`pocketpal://e2e/benchmark`) deep links resolve identically to the pre-migration drawer. `BENCHMARK_RUNNER` is registered on the root Stack only in `__E2E__` builds (injected by `App.tsx`).
-
----
-
-## 1. Data model
-
-No persisted model changes. One in-memory store field and one parsed type.
-
-```
-DeepLinkStore (MobX, src/store/DeepLinkStore.ts)
-  pendingMessage: string | null         // (C) chat-link prefill, unchanged
-  pendingHubRun: HubRunRequest | null   // (C) parked hub/run link, consumed once
-
-HubRunRequest  (src/services/hubRunLink.ts)      // (C) parsed + validated payload
-  repoId: string                         // required; "author/model"
-  filename: string | undefined           // optional; kept for attribution, NOT load-bearing
-  source: string | undefined             // optional attribution tag, e.g. "hf"
-```
-
-Persisted: none.
-
-`repoId` is the ONLY param that drives behaviour. `filename` is kept in the parsed shape for future attribution use (D14) but the UI ignores it — no single-file selection, no highlight (D13).
-
-**Repo resolution chain (C).** The host resolves the **full repo** into one `HuggingFaceModel` whose `siblings` each carry a `/resolve/` download `url`. This MUST go through `createSiblingsFromFileDetails` (`src/utils/hf.ts` → `normalizeModelSiblings` → `addModelFileDownloadUrls`), because that helper is what populates each sibling's download `url`. A hand-built sibling has no `url` → empty `downloadUrl` → `checkSpaceAndDownload` early-returns → download silently no-ops (C: defect path at `ModelStore.ts`). The no-silent-download guarantee (I1) applies to whatever file the user taps in `DetailsView`, via `ModelFileCard`'s existing `downloadHFModel` call.
-
-**Repo-level resolver (C), `resolveHFRepo(repoId, authToken?): Promise<HuggingFaceModel>` in `src/utils/hfResolve.ts`:**
-1. `Promise.all([fetchModelInfo({repoId, full, authToken}), fetchModelFilesDetails(repoId, authToken)])` — **strict**: a fetch failure throws (no per-call tolerance).
-2. `createSiblingsFromFileDetails(repoId, fileDetails)` → `ModelFile[]` with `/resolve/` `url` populated.
-3. Assemble the full `HuggingFaceModel` with `siblings` + HF_DOMAIN field fallbacks (via the shared `assembleHFModel` helper).
-
-`resolveHFModelForDownload(repoId, filename, authToken?, fallback?)` (`src/utils/hfResolve.ts`, C) is the repo+single-filename resolver:
-- **Strict path (no `fallback`)** delegates to `resolveHFRepo` (fetch failure throws), then finds the sibling whose `rfilename === filename`; no match → throws.
-- **Tolerant path (`fallback` provided, the PalsHub caller)** keeps per-fetch independence: each of `fetchModelInfo` / `fetchModelFilesDetails` is caught individually, so a partial response (e.g. file details succeed, model info fails) still yields real sibling URLs; an unmatched filename or total failure falls back to the supplied `{author, size, downloadUrl}`.
-
-`PalStore.createLocalModelFromPHModel` (`src/store/PalStore.ts`) calls `resolveHFModelForDownload` with a `fallback` derived from its `ModelReference` and catches to `createBasicModelFromReference` (D16). The hub/run host calls `resolveHFRepo` directly (no filename).
-
-**Glossary:**
-- **hub/run route** — `pocketpal://hub/run?repo_id=…&filename=…&source=…`, the VIEW deep link.
-- **landing host** — `HubRunSheetHost` (`src/components/HubRunSheetHost`); the global host sheet that wraps `DetailsView`; the entry point a download can start from for this route.
-- **DetailsView** — `src/screens/ModelsScreen/HFModelSearch/DetailsView/DetailsView.tsx` (C: takes only `hfModel`, no nav, no store read). Reused unchanged.
-- **pending link** — a `HubRunRequest` parked in `DeepLinkStore` so it survives cold start until the host mounts.
-- **attribution UA** — the versioned `PocketPal/<version> (ai.pocketpal)` User-Agent.
-
-### 1b. External shape
-
-**Inbound deep link (wire → internal):**
-
-| Wire param | Required | Maps to | Coercion at boundary |
-| --- | --- | --- | --- |
-| host `hub`, path `/run` | yes | route selector | `hostname === 'hub'`, normalized `pathname === 'run'`; else `null` (D5) |
-| `repo_id` | **yes** | `HubRunRequest.repoId` | trim; must match `author/model` (one `/`, non-empty halves) |
-| `filename` | **no** | `HubRunRequest.filename` | trim; if present accepted as-is; **not** rejected when absent or non-`.gguf` (D13) |
-| `source` | no | `HubRunRequest.source` | passthrough; not validated; default `undefined` |
-
-**Outbound HF requests (internal → wire):** add header `User-Agent: PocketPal/<version> (ai.pocketpal)` where `<version>` = `DeviceInfo.getVersion()` (JS) / `BuildConfig.VERSION_NAME` (Android native). The `(ai.pocketpal)` token is a fixed literal on both platforms (D2). Android applicationId is `com.pocketpalai`, but the UA token stays `ai.pocketpal` — it is the HF attribution key, not the appId.
-
----
-
-## 2. Event flow
-
-```
-VIEW intent / scheme open  (pocketpal://hub/run?…)
-  raw url string reaches JS via:
-    iOS   → DeepLinkService emitter → DeepLinkParams.url (host === 'hub' branch)
-    Android prod → Linking getInitialURL / 'url' event (always-on effect)
-  parseHubRunURL(url) → HubRunRequest | null              [single parse point, I7]
-    null → Alert "invalid link", no nav, no store write
-    ok   → deepLinkStore.setPendingHubRun(request)        (only repoId is load-bearing)
-  HubRunSheetHost (inside BottomSheetModalProvider, App.tsx) observes pendingHubRun:
-    non-null → opens host sheet → resolveHFRepo(repoId, authToken) → HuggingFaceModel
-      ready  → <DetailsView hfModel={resolved} />  (full quant list)
-                 user taps a file → ModelFileCard.downloadHFModel(hfModel, file, {enableVision:true})
-      error  → inline error + Retry/Cancel; no list, no download
-    dismiss  → clearPendingHubRun()
-```
-
-The store-parked request works identically for warm launch (set then observed) and cold start (set before host mounts, drained on mount). Single writer to set: the `useDeepLinking` handler; single writer to clear: the host on dismiss.
-
----
-
-## 3. State machine
-
-`HubRunSheetHost` lifecycle (`request` = `deepLinkStore.pendingHubRun`):
-
-```
-hidden ─request set→ resolving ─repo ok→ ready(list) ─tap file→ (download via ModelFileCard) ─→ stays open
-                      resolving ─repo err→ error ─retry→ resolving
-                      ready/error ─dismiss→ hidden
-```
-
-| State | User-visible feedback |
+| Path | Role |
 | --- | --- |
-| `resolving` | spinner; sheet open with repo_id header |
-| `ready` | `DetailsView` — author, title, stats, full quant list (each row a `ModelFileCard` with its own download/progress) |
-| `error` | inline error + Retry/Cancel; no list, no download started |
-| `hidden` | sheet dismissed (`request === null`) |
+| `ios/PocketPal/Info.plist` | `CFBundleURLTypes`: the `com.pocketpalai.deeplink` dict registers `pocketpal`. A separate dict registers the Google Sign-In reversed-client-id scheme. |
+| `ios/PocketPal/AppDelegate.swift` | `application(_:open:options:)`: posts `RCTOpenURLNotification` only when `url.scheme == "pocketpal"`, and returns `false` for every other scheme |
+| `ios/PocketPal/DeepLinkModule.swift` | native `onDeepLink` emitter; buffers `pendingURL` until JS listens; `getInitialURL` |
+| `src/services/DeepLinkService.ts` | iOS-only JS side of that emitter (`DeepLinkParams`) |
+| `android/app/src/main/AndroidManifest.xml` | `singleTask` activity; host-scoped VIEW filters `pocketpal`/`hub` and `pocketpal`/`checkout` |
+| `android/app/src/main/java/com/pocketpalai/MainActivity.kt` | `onNewIntent`: `forwardCheckoutCallback`, otherwise `setIntent(intent)` |
+| `src/hooks/useDeepLinking.ts` | `handleDeepLink` for the emitter path (E2E automation, `chat`, `hub`); an always-on `Linking` effect for `hub/run`; an `__E2E__` benchmark `Linking` effect; `useHubRunSheet` |
+| `src/services/hubRunLink.ts` | `isHubLink`, `parseHubRunURL`, `HubRunRequest` |
+| `src/store/DeepLinkStore.ts` | `pendingMessage` (the chat prefill), `pendingHubRun` |
+| `src/components/HubRunSheetHost/` | global sheet host, mounted in `App.tsx` inside `BottomSheetModalProvider` |
+| `src/utils/hfResolve.ts` | `resolveHFRepo` (strict) and `resolveHFModelForDownload` (tolerant, with a fallback, used by `PalStore`) |
+| `src/utils/hf.ts` | `createSiblingsFromFileDetails` → `normalizeModelSiblings` → `addModelFileDownloadUrls` |
+| `src/screens/ModelsScreen/HFModelSearch/DetailsView/` | `DetailsView` / `ModelFileCard`, reused unchanged as the landing list |
+| `src/utils/hfUserAgent.ts` | `hfUserAgent()` |
+| `src/api/hf.ts`, `src/services/downloads/DownloadManager.ts`, `android/app/src/main/java/com/pocketpalai/download/DownloadWorker.kt` | the User-Agent header sites |
+| `src/__automation__/deepLink.ts`, `benchmarkRoute.ts` | E2E-only routes |
 
-There is no `downloading` host state — per-file download/progress is owned by each `ModelFileCard` (C: `ModelFileCard.tsx`), unchanged. The host stays open after a tap so the user can pick more files.
+## How it works
 
----
+A raw URL reaches JS by one of two paths:
 
-## 4. Contract
+- **iOS:** `AppDelegate` → `RCTOpenURLNotification` → `DeepLinkModule` → `DeepLinkService` → `handleDeepLink`, which checks `isHubLink(params.url)`.
+- **Both platforms:** RN `Linking`, through cold `getInitialURL` and the warm `'url'` event. This is the only path on Android.
 
-### 4a. Route parsing & dispatch (C)
+Both paths call `handleHubRunLink(url)`. That function runs `parseHubRunURL`, which returns `null` for a missing or malformed `repo_id` and triggers an Alert. A valid result goes to `deepLinkStore.setPendingHubRun(request)`.
 
-1. **Single parse point (I7).** `parseHubRunURL(url): HubRunRequest | null` (`src/services/hubRunLink.ts`) does host/path gating + validation on a raw URL string. Only parse/validate site for this route; called by BOTH delivery paths. `DeepLinkService.parseURL` (private, iOS-emitter-only) is not extended.
-2. **Validation rule.** Require + validate `repo_id` shape (`author/model`). `filename`, if present, is trimmed and stored but never gates acceptance — a link with no `filename` (or a non-`.gguf` one) is a NORMAL success (D13). `source` passthrough.
-3. **iOS dispatch.** `useDeepLinking.handleDeepLink` `params.host === 'hub'` branch calls the shared `handleHubRunLink(params.url)`, sibling to the `host === 'chat'` branch.
-4. **Android prod dispatch.** An always-on `Linking` effect (cold `getInitialURL` + warm `'url'`) passes its raw url to the same `handleHubRunLink`. The `__E2E__` benchmark `Linking` effect stays separate.
-5. Validation happens once, inside `parseHubRunURL`, before any store mutation. `null` → Alert, no navigation, no store write.
+`HubRunSheetHost` observes `pendingHubRun` and opens a `Sheet`. It then calls `resolveHFRepo(repoId, token)`, followed by `enrichSiblingsWithStorage`, and renders `<DetailsView hfModel={resolved}/>`. When the user taps a file, `ModelFileCard.handleDownload` calls `modelStore.downloadHFModel(hfModel, file, {enableVision: true})`. Dismissing or cancelling the sheet calls `clearPendingHubRun()`.
 
-### 4b. Hard invariants (C)
+Host states:
 
-- **I1 — No silent download.** This route never auto-downloads. A download starts only when the user taps a file in `DetailsView`, and it starts a real download because every sibling from `resolveHFRepo` carries a non-empty `/resolve/` `url` (via `createSiblingsFromFileDetails`).
-- **I2 — Single download entry point.** Downloads go through `ModelStore.downloadHFModel(hfModel, modelFile, {enableVision:true})` — the existing `ModelFileCard.handleDownload`. No new download path; `DetailsView`/`ModelFileCard` are not modified.
-- **I3 — Host scoping.** Every Android prod intent-filter declares both a scheme and a host — `pocketpal`/`hub`, `pocketpal`/`checkout`, `llama`/`add-server`; no bare-scheme prod handler. iOS cannot scope a registered scheme by host, so on that platform the per-parser scheme gate (I10) is what carries the equivalent guarantee.
-- **I4 — UA on every model download.** The attribution UA is set on all HF API calls and on all model downloads on both platforms (HF is the only current download source). Authorization header behavior unchanged.
-- **I5 — Pending link consumed once.** `pendingHubRun` is cleared on host dismiss; the host does not re-open after clear.
-- **I6 — Validation precedes side effects.** A link whose `repo_id` is missing/malformed produces zero store writes and zero navigation. (`filename` absence is NOT a failure — D13.)
-- **I7 — Single parse point.** Exactly one helper (`parseHubRunURL`) parses/validates a hub/run URL; both iOS and Android prod delivery call it.
-- **I8 — Reuse, don't fork.** The host presents the existing `DetailsView` (and its `ModelFileCard` rows) with no edits; no bespoke per-file download UI for this route.
-- **I9 — One helper per route, for both delivery paths.** A pairing payload is parsed and validated by exactly one helper (`parsePairingURL`), called by the scanner, the iOS native-emitter path and the raw `Linking` path alike. `DeepLinkService.parseURL` is not extended; `parseHubRunURL` is not widened to a second scheme.
-- **I10 — The dispatcher is scheme-scoped, and each route parser is additionally scheme-gated (amends I3).** `handleDeepLink` rejects any scheme it does not route *before* reaching a route branch — which is what covers the `chat` route, selected by host alone with no parser of its own. Independently, `isHubLink` / `parseHubRunURL` / `parsePairingURL` each reject a url whose scheme is not their own. The per-parser half is **must-not-remove, not defence in depth**: the raw `Linking` path never enters the dispatcher, and on an iOS **cold** launch no native code filters the url at all, so once a second scheme is registered a `llama://hub/run` payload would otherwise reach the download flow through a gate that tests hostname and path only.
-
-### 4c. Component renders
-
-| Component | Renders | Does NOT render |
-| --- | --- | --- |
-| `HubRunSheetHost` (host) | spinner (resolving) → `<DetailsView hfModel={resolved}/>` (ready) → inline error + Retry/Cancel (error) | per-file rows itself (DetailsView owns those); filename highlight; single-file confirm |
-| `DetailsView` (reused, unchanged) | author, title, stats, full quant list via `ModelFileCard` | filename highlight, single-file confirm |
-| `ModelFileCard` (reused, unchanged) | per-file size/quant + download/progress/cancel | — |
-
----
-
-## 5. Single-writer rule
-
-| Field | Single writer |
-| --- | --- |
-| `DeepLinkStore.pendingHubRun` | `useDeepLinking` handler (set) + `HubRunSheetHost` on dismiss (clear) |
-| download start | `ModelStore.downloadHFModel` (via `ModelFileCard`) |
-| hub/run URL parse/validate | `parseHubRunURL` helper (I7) |
-| HF repo → HuggingFaceModel resolution | `resolveHFRepo` (shared strict core; `resolveHFModelForDownload` builds on it then file-matches) |
-| attribution UA header (HF API) | `hfUserAgent()` at all 4 `hf.ts` header sites (`fetchModels`, `fetchModelFilesDetails`, `fetchGGUFSpecs`, `fetchModelInfo`) |
-| attribution UA header (iOS /resolve/) | `DownloadManager` RNFS `headers` |
-| attribution UA header (Android /resolve/) | `DownloadWorker.kt` OkHttp `addHeader` (`BuildConfig.VERSION_NAME`) |
-
-Cross-store reads: the host reads the HF token via `hfStore.shouldUseToken ? hfStore.hfToken : undefined` for `resolveHFRepo`, and `ModelStore` for converted models (inside `downloadHFModel`). No new write coupling.
-
-**Deferred cleanups:** (1) unify iOS native + Android `Linking` delivery into one service; (2) Universal/App Links.
-
----
-
-## 6. Canonical scenarios
-
-### A. Valid link, app already running
 ```
-pocketpal://hub/run?repo_id=author/model&source=hf
-→ setPendingHubRun → host sheet opens → resolveHFRepo → DetailsView shows full quant list
-  → user taps a file → ModelFileCard.downloadHFModel({enableVision:true}) → real download starts
+hidden ─request set→ resolving ─ok→ ready (DetailsView) ─dismiss→ hidden
+                     resolving ─fail→ error ─retry→ resolving
+                                       error ─cancel→ hidden
 ```
 
-### B. Valid link, no filename (happy path)
-```
-pocketpal://hub/run?repo_id=author/model          (no filename param)
-→ parseHubRunURL returns a valid request (filename undefined) → host opens → full quant list (then as A)
-```
+There is no host-level download state. Each `ModelFileCard` owns its own progress, and the sheet stays open after a tap.
 
-### C. Cold start
-```
-app not running → URL launches app → getInitialURL → setPendingHubRun
-→ host mounts → observes pendingHubRun → sheet opens → (then as A)
-```
+## Contracts and invariants
 
-### D. Dismiss without downloading
-```
-valid URL → list shown → user dismisses sheet
-→ no downloadHFModel call → pendingHubRun cleared
-```
+- **One parse point for `hub/run`.** `parseHubRunURL` is the only place a hub/run URL is parsed and validated, and both delivery paths call it. `DeepLinkService.parseURL` is not extended for this route.
+- **Only the exact route reaches the parser.** `isHubLink` passes only host `hub` with path `run`. Other URLs and unknown hub paths are ignored silently, while a malformed payload on the exact route raises an Alert.
+- **Validation precedes side effects.** An invalid `repo_id` causes no store write and no navigation. `repo_id` must match `^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$` with no `.` or `..` segments (`hubRunLink.ts`).
+- **Only `repo_id` is load-bearing.** `filename` is optional and never gates acceptance, and the UI ignores it. `source` is passed through unvalidated.
+- **No silent download.** The route never downloads anything by itself. A download starts only from a tap on a `ModelFileCard`, through the existing `downloadHFModel`.
+- **Siblings must carry download URLs.** They must come from `createSiblingsFromFileDetails`, which fills in each `/resolve/` `url`. A hand-built sibling has an empty `downloadUrl`, and `checkSpaceAndDownload` then returns silently (`ModelStore.ts:1596`).
+- **The host must enrich siblings.** It must call `enrichSiblingsWithStorage`, or each `ModelFileCard`'s `canFitInStorage` download gate stays unset (`ModelFileCard.tsx:69`).
+- **Single writer for `pendingHubRun`.** It is set only by `handleHubRunLink` and cleared only by the host. A later link overwrites the parked one. Re-delivering an equal request is idempotent only because the host's resolve effect is keyed on `repoId`, not on the request object; keying it on `pendingHubRun` would re-resolve on every duplicate delivery. A sequence counter in the host drops stale resolves.
+- **Android filters are host-scoped.** Every prod Android VIEW filter declares both a scheme and a host. There is no bare-scheme handler.
+- **User-Agent wire format.** The header is `User-Agent: PocketPal/<version> (ai.pocketpal)`. `<version>` comes from `DeviceInfo.getVersion()` in JS and `BuildConfig.VERSION_NAME` in Android native code. `ai.pocketpal` is a fixed HF attribution key, not the Android applicationId (`com.pocketpalai`). The header is set at:
+  - the four HF API calls in `hf.ts` (`fetchModels`, `fetchModelFilesDetails`, `fetchGGUFSpecs`, `fetchModelInfo`)
+  - iOS LLM downloads (`DownloadManager` RNFS `headers`)
+  - Android LLM downloads (`DownloadWorker.kt:80`)
 
-### E. Missing / malformed repo_id
-```
-pocketpal://hub/run?filename=x.gguf      OR      ?repo_id=notavalidid
-→ parseHubRunURL returns null → Alert "invalid link" → no sheet, no store write
-```
+  Authorization handling is separate and unchanged.
 
-### F. UA on HF requests
-```
-each of: /resolve/ download (iOS RNFS, Android OkHttp) + all 4 hf.ts header sites
-→ request carries User-Agent: PocketPal/<version> (ai.pocketpal)
-```
+## Traps and decisions
 
-### G. Repo resolve fails
-```
-valid URL → fetchModelInfo / fetchModelFilesDetails throws (network/404/private)
-→ host shows error state + Retry/Cancel; no list, no download
-```
+- **Android prod has no native bridge.** That is why the always-on `Linking` effect exists.
+- **iOS delivers links more than once.** A warm iOS link reaches both paths, because `RCTOpenURLNotification` is observed by both `DeepLinkModule` and RN's linking manager. A cold launch can deliver up to three times. This is safe only because re-parking an equal request is idempotent, so keep it that way.
+- **`MainActivity.onNewIntent` must call `setIntent`.** Under `singleTask`, `ReactActivity` does not forward a warm intent, so without it the `Linking` `'url'` event never fires.
+- **`chat` works only on iOS.** It is selected by host alone, arrives only through the native emitter, and has no Android intent filter.
+- **iOS scheme registration has two sites.** The `Info.plist` dict is enough for a cold launch, which is forwarded unfiltered. The warm path also needs the `AppDelegate` check. That check must stay an exact match and never a wildcard: Google Sign-In depends on the `return false` for its own scheme.
+- **The parsers are not scheme-gated.** `isHubLink` and `parseHubRunURL` test only hostname and path, and `handleDeepLink` doesn't reject unknown schemes. This is safe only while `pocketpal` is the only scheme the app routes, yet an iOS cold launch already passes any registered scheme, including Google's, to `getInitialURL`. Before registering a second scheme, scheme-gate the dispatcher and every route parser. The raw `Linking` path never goes through the dispatcher.
+- **The host is global.** It is mounted once inside `BottomSheetModalProvider`, parks a request without navigating, and survives a cold start. Don't move it into a screen.
+- **The sheet lands on the full quant list.** The HF link carries no quant, so the product lets the user pick.
+- **Keep the two resolvers separate.** `resolveHFRepo` is strict: any fetch failure throws. `resolveHFModelForDownload` catches each fetch independently and falls back to a caller-supplied `{author, size, downloadUrl}`, which `PalStore.createLocalModelFromPHModel` needs.
+- **Log only `e.message` from resolve errors.** Axios errors can carry the HF bearer token in `config.headers`.
+- **The User-Agent is missing at several HF request sites.** TTS engine model downloads (`RNFS.downloadFile` in `src/services/tts/engines/*`) and GGUF header range reads (`src/utils/ggufHeader.ts:93`) send no attribution User-Agent. HF attribution misses those bytes.
 
----
+## Verification
 
-## 7. State signals
-
-| Signal | Set by | Read by | True when |
-| --- | --- | --- | --- |
-| `pendingHubRun` | `useDeepLinking` handler | `HubRunSheetHost` | a valid link is awaiting / showing the sheet |
-
----
-
-## 8. Decisions
-
-| ID | Decision | Rationale |
-| --- | --- | --- |
-| D1 | Always-on prod `Linking` cold+warm path for hub/run (covers Android) | Android prod has no native deep-link bridge |
-| D2 | UA token literal is `ai.pocketpal` on both platforms | HF attribution key, not Android appId |
-| D3 | Version from `DeviceInfo.getVersion()` (JS) / `BuildConfig.VERSION_NAME` (Android) | Already available; match each other |
-| D4 | Route path = `hub/run` (host `hub`, path `run`) | Host-scoped for security |
-| D5 | Unknown host/path silently ignored (no error) | Avoid noisy errors on future scheme routes |
-| D7 | Keep `__E2E__` benchmark Linking effect separate; prod path is its own effect | Avoid regressing benchmark E2E routing |
-| D9 | `MainActivity.onNewIntent` override (setIntent) | `ReactActivity` doesn't forward warm-launch intent under singleTask |
-| D11 | One shared `parseHubRunURL` for both platforms | Avoids divergent validators; honours I7 |
-| D12 | Park request in `DeepLinkStore`; observer host opens/clears | Survives cold start; host lives inside BottomSheetModalProvider |
-| D13 | Land on full `DetailsView` list; `filename` not required, not highlighted | HF deeplink has no quant; product chose list, not single file |
-| D14 | Keep `filename` optional in `HubRunRequest`, unused by UI | Preserve for future attribution without re-parsing |
-| D15 | Reuse `DetailsView`/`ModelFileCard` unchanged for the list | Existing card already does vision/progress/download correctly |
-| D16 | Split `resolveHFRepo` strict core; keep `resolveHFModelForDownload` for PalStore | PalStore needs file-match + per-fetch tolerance + fallback; don't regress it |
-| D17 | `llama://add-server?url=…` is our pairing route; the QR itself carries http(s) | The scheme is ours to define; the producer emits a plain url. |
-| D18 | Registration stays host-scoped on Android; parsing accepts four forms | Every form still ends at the same explicit user confirm. |
-| D19 | Port 9931 defaults **only** for the `llama://` authority form | An `http://host` payload must keep URL semantics (port 80). |
-| D20 | Scheme-gate the dispatcher, and every route parser as well | Android and the iOS cold launch bypass the dispatcher; `chat` has no parser. |
-| D21 | A schemeless bare authority requires an explicit port | Portless dotted text would surface a pairing sheet for any QR. |
-| D22 | `AppDelegate`'s URL-scheme allow-list is exact-match (`pocketpal`, `llama`), never a wildcard | A catch-all diverts Google Sign-In callbacks out of the `return false` path its SDK relies on. |
-| D23 | The pairing route **navigates** to `ROUTES.MODELS` as it parks, where `hub/run` parks for a global host | The pairing sheet is screen-hosted because pairing continues into the remote-model picker on that screen; parking alone leaves the sheet unreachable until the user walks there. `hub/run`'s flow ends inside its own sheet, so it needs no screen. Rationale in `remote-servers.md` §10a (D-QR16). |
-
----
-
-## 9. Edge cases
-
-| ID | Edge case | Behaviour |
-| --- | --- | --- |
-| 9a | Missing/malformed `repo_id` | `null` → Alert; no side effects (I6, E) |
-| 9b | `filename` absent | NORMAL success; list shown (D13, Scenario B) |
-| 9c | `filename` present but non-`.gguf` or not in repo | accepted by parser, ignored by UI; user picks from list (D13) |
-| 9d | Already-downloaded file tapped | `ModelFileCard` shows "already downloaded" alert (C) — unchanged |
-| 9e | `source` absent or arbitrary | accepted; passthrough; no validation |
-| 9f | Warm-launch on Android (singleTask) | `onNewIntent` forwards intent → `Linking` 'url' fires → host opens (D9) |
-| 9g | Two rapid links | later `setPendingHubRun` overwrites the parked request (I5) |
-| 9h | Private/gated repo metadata | `resolveHFRepo` uses HF token; failure → error state (G) |
-| 9i | iOS scheme registration | Three sites, not one: `CFBundleURLTypes` (the app's own `com.pocketpalai.deeplink` dict, not the Google Sign-In dict, which carries no `CFBundleURLName` at all) **and** `AppDelegate`'s scheme allow-list, which carries the **warm** path — a cold launch is forwarded unfiltered, so the plist alone is enough there but not warm. Exact-match only (D22). |
-| 9j | Vision repo | `DetailsView` already renders the vision tag + LLM-file filtering (C) — unchanged |
-| 9k | `llama://` link delivered on iOS | Delivered **twice** — once through the native emitter, once through the always-on `Linking` effect — and on a cold launch possibly three times, since the OS also invokes `open:options:` after `didFinishLaunching`. All deliveries are idempotent: an equal request parks over the parked one (D12, 9g). Stated so a reviewer counting emissions is not surprised. |
-| 9l | `llama://<authority>` opened on Android | Never delivered: the intent-filter is `host="add-server"`, so `llama://192.168.1.5:9931` has host `192.168.1.5` and no activity matches. Deliverable on iOS, where a scheme cannot be host-scoped; I10's per-parser gate is what makes that safe. |
-| 9m | An unrecognised `llama://` url | Ignored silently, with no alert (D5) — the pairing route parks nothing, navigates nowhere and writes nothing. |
+- Unit tests: `src/hooks/__tests__/useDeepLinking.test.ts`, `useDeepLinking.hubRun.test.ts`, `src/services/__tests__/hubRunLink.test.ts`, `src/utils/__tests__/hfResolve.test.ts`, `src/components/HubRunSheetHost/__tests__/`, `src/api/__tests__/hfUserAgent.test.ts`.
+- E2E: `e2e/specs/features/hub-run.spec.ts` covers a valid link through download, load and chat, plus the missing-`repo_id` rejection.
+- By hand:
+  - **Open a link.** On Android, run `adb shell am start -a android.intent.action.VIEW -d "pocketpal://hub/run?repo_id=<org>/<repo>"`, both cold and warm. On iOS, run `xcrun simctl openurl booted "<url>"`.
+  - **User-Agent.** Check it on the wire through a proxy.
