@@ -34,6 +34,8 @@ INTENT_BRIEF: <STORY_DIR>/intent-brief.md
 WHAT: <STORY_DIR>/what.md                      # standard / complex
 HOW: <STORY_DIR>/how.md                        # quick / standard / complex
 ARCHITECTURE_DOCS: ./context/architecture/<flow>.md, ...
+FIGMA_FILE: <file key>                         # Figma-pinned slices
+NODE_IDS: <node id>, ...                       # Figma-pinned slices
 VISUAL_CAPTURE_PATHS: <png> <png> ...          # tester, when captures exist
 PR: #<n>                                       # pipeline-reviewer, once the draft PR exists
 ```
