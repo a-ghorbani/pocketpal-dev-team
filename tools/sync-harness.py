@@ -40,7 +40,8 @@ def frontmatter(path: Path) -> dict[str, str]:
         if line.startswith(" "):
             continue
         key, _, value = line.partition(":")
-        fields[key.strip()] = value.strip().strip('"')
+        value = value.strip()
+        fields[key.strip()] = json.loads(value) if value.startswith('"') else value
     return fields
 
 
@@ -48,7 +49,7 @@ def codex_stub(name: str, description: str) -> str:
     return (
         f"{STUB_MARKER} from agents/{name}.md\n"
         f"name = {json.dumps(name)}\n"
-        f"description = {json.dumps(description)}\n"
+        f"description = {json.dumps(description, ensure_ascii=False)}\n"
         f"developer_instructions = {json.dumps(f'Your role is defined in agents/{name}.md at the repository root. Read that file now and follow its body as your instructions; its frontmatter is harness configuration and can be ignored.')}\n"
     )
 
