@@ -99,14 +99,16 @@ Each task gets its own git worktree under `worktrees/`, so several tasks can run
 
 ## Harnesses
 
-| | Claude Code | Codex | opencode |
-| --- | --- | --- | --- |
-| Instructions | `CLAUDE.md` → `AGENTS.md` | `AGENTS.md` | `AGENTS.md` |
-| Roles | `.claude/agents/` (symlinks) | `.codex/agents/*.toml` (stubs) | `.opencode/agents/` (symlinks) |
-| Skills | `.claude/skills/` (symlinks) | `.agents/skills/` (symlinks) | both |
-| Guards | hooks in `.claude/settings.json` | `.codex/hooks.json` + `.codex/rules/` | `.opencode/plugins/guards.ts` |
-| Permissions | allow all, deny list | sandbox profile in `.codex/config.toml` | `opencode.json` |
-| Unattended | `--dangerously-skip-permissions` | `--dangerously-bypass-approvals-and-sandbox` | allowed by default |
+| | Claude Code | Codex | opencode | pi |
+| --- | --- | --- | --- | --- |
+| Instructions | `CLAUDE.md` → `AGENTS.md` | `AGENTS.md` | `AGENTS.md` | `AGENTS.md` |
+| Roles | `.claude/agents/` (symlinks) | `.codex/agents/*.toml` (stubs) | `.opencode/agents/` (symlinks) | `.pi/agents/` (symlinks; needs pi's subagent extension) |
+| Skills | `.claude/skills/` (symlinks) | `.agents/skills/` (symlinks) | both | `.agents/skills/` |
+| Guards | hooks in `.claude/settings.json` | `.codex/hooks.json` + `.codex/rules/` | `.opencode/plugins/guards.ts` | `.pi/extensions/guards/` |
+| Permissions | allow all, deny list | sandbox profile in `.codex/config.toml` | `opencode.json` | no sandbox; guards only |
+| Unattended | `--dangerously-skip-permissions` | `--dangerously-bypass-approvals-and-sandbox` | allowed by default | `--approve` or trusted project |
+
+pi has no MCP support, and its subagents come from the example extension shipped in its npm package (`examples/extensions/subagent/`), which reads the `.pi/agents/` links.
 
 All three point at one source: roles in `agents/`, skills in `skills/`. See "Harness layout" in `AGENTS.md`. Codex needs the project trusted and its hooks approved once via `/hooks`.
 

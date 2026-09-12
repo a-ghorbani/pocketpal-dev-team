@@ -8,6 +8,7 @@ Sources (the only files to edit):
 Wiring (created here; content never needs syncing):
   .claude/agents/<name>.md    -> ../../agents/<name>.md    Claude Code
   .opencode/agents/<name>.md  -> ../../agents/<name>.md    opencode
+  .pi/agents/<name>.md        -> ../../agents/<name>.md    pi (via its subagent extension)
   .codex/agents/<name>.toml   stub pointing at agents/<name>.md (Codex reads TOML only)
   .claude/skills/<name>       -> ../../skills/<name>       Claude Code
   .agents/skills/<name>       -> ../../skills/<name>       Codex + opencode
@@ -65,7 +66,7 @@ def expected() -> tuple[dict[str, str], dict[str, str]]:
         name, description = fields.get("name"), fields.get("description")
         if name != src.stem or not description:
             sys.exit(f"{src}: needs description and name equal to '{src.stem}'")
-        for harness in (".claude", ".opencode"):
+        for harness in (".claude", ".opencode", ".pi"):
             links[f"{harness}/agents/{name}.md"] = f"../../agents/{name}.md"
         stubs[f".codex/agents/{name}.toml"] = codex_stub(name, description)
 
@@ -116,8 +117,17 @@ def sync(check: bool) -> int:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
 
+    pi_settings = ROOT / ".pi/settings.json"
+    guards = "./.pi/extensions/guards"
+    try:
+        listed = guards in json.loads(pi_settings.read_text()).get("extensions", [])
+    except (OSError, ValueError):
+        listed = False
+    if not listed:
+        drift.append(f"config  .pi/settings.json must list {guards} (pi loads no guards otherwise)")
+
     wanted = set(links) | set(stubs)
-    for directory in (".claude/agents", ".opencode/agents", ".codex/agents", ".claude/skills", ".agents/skills"):
+    for directory in (".claude/agents", ".opencode/agents", ".pi/agents", ".codex/agents", ".claude/skills", ".agents/skills"):
         for path in (ROOT / directory).glob("*"):
             rel = str(path.relative_to(ROOT))
             if rel not in wanted and managed(path):

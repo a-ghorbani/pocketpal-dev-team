@@ -56,11 +56,11 @@ This repo runs under Claude Code, Codex, and opencode from one source:
 
 - Roles live in `agents/<name>.md` and skills in `skills/<name>/SKILL.md`. These are the only copies, so edit them directly.
 - Harness paths point back at them:
-  - `.claude/` and `.opencode/` agents, and all skill dirs, are symlinks;
+  - `.claude/`, `.opencode/` and `.pi/` agents, and all skill dirs, are symlinks;
   - `.codex/agents/*.toml` are one-line stubs.
 
   `tools/sync-harness.py` creates them. Run it only when you add, rename, or remove a role or skill, or change a role's description; `--check` reports drift.
-- The guards are the `tools/guard-*.sh` scripts, wired as hooks in `.claude/settings.json`, `.codex/hooks.json`, and `.opencode/plugins/guards.ts`. Add a new guard to all three.
+- The guards are the `tools/guard-*.sh` scripts, wired as hooks in `.claude/settings.json`, `.codex/hooks.json`, `.opencode/plugins/guards.ts`, and `.pi/extensions/guards/`. Add a new guard to all four.
 - Source files use plain paths ("Read `docs/...`"), never `@path` imports; only Claude expands those.
 
 ## GitHub conventions

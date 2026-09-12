@@ -1,0 +1,1 @@
+../../agents/pocketpal-plan-critic.md

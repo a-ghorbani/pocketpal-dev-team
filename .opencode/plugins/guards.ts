@@ -2,7 +2,8 @@
 // PreToolUse/PostToolUse hooks) for opencode tool calls. The guards read
 // Claude-shaped hook JSON on stdin and exit 2 to block.
 import { spawnSync } from "node:child_process"
-import { resolve } from "node:path"
+import { homedir } from "node:os"
+import { isAbsolute, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const TOOLS = fileURLToPath(new URL("../../tools/", import.meta.url))
@@ -20,6 +21,12 @@ const AFTER: Record<string, string[]> = {
 
 type HookCall = { tool_name: string; tool_input: Record<string, unknown> }
 
+function absolutePath(raw: unknown, cwd: string): string | undefined {
+  if (typeof raw !== "string" || raw === "") return undefined
+  const expanded = raw.startsWith("~") ? resolve(homedir(), raw.slice(1).replace(/^[/\\]/, "")) : raw
+  return isAbsolute(expanded) ? expanded : resolve(cwd, expanded)
+}
+
 function patchPaths(patch: string): string[] {
   const header = /^\*\*\* (?:Add|Update|Delete) File: (.+)$|^\*\*\* Move to: (.+)$/gm
   return [...patch.matchAll(header)].map((m) => (m[1] ?? m[2]).trim())
@@ -31,9 +38,9 @@ function toHookCalls(tool: string, args: Record<string, any>, cwd: string): Hook
       return [{ tool_name: "Bash", tool_input: { command: args.command } }]
     case "edit":
     case "multiedit":
-      return [{ tool_name: "Edit", tool_input: { file_path: args.filePath } }]
+      return [{ tool_name: "Edit", tool_input: { file_path: absolutePath(args.filePath, cwd) } }]
     case "write":
-      return [{ tool_name: "Write", tool_input: { file_path: args.filePath } }]
+      return [{ tool_name: "Write", tool_input: { file_path: absolutePath(args.filePath, cwd) } }]
     case "patch":
     case "apply_patch":
       return patchPaths(String(args.patchText ?? args.patch ?? "")).map((path) => ({
@@ -41,7 +48,7 @@ function toHookCalls(tool: string, args: Record<string, any>, cwd: string): Hook
         tool_input: { file_path: resolve(cwd, path) },
       }))
     case "read":
-      return [{ tool_name: "Read", tool_input: { file_path: args.filePath } }]
+      return [{ tool_name: "Read", tool_input: { file_path: absolutePath(args.filePath, cwd) } }]
     case "grep":
       return [{ tool_name: "Grep", tool_input: { path: args.path, pattern: args.pattern, glob: args.include } }]
     default:
@@ -52,7 +59,9 @@ function toHookCalls(tool: string, args: Record<string, any>, cwd: string): Hook
 function runGuards(table: Record<string, string[]>, call: HookCall, cwd: string): string | undefined {
   const payload = JSON.stringify({ ...call, cwd })
   for (const script of table[call.tool_name] ?? []) {
-    const result = spawnSync(TOOLS + script, { cwd, input: payload, encoding: "utf8" })
+    const result = spawnSync(TOOLS + script, { cwd, input: payload, encoding: "utf8", timeout: 30_000 })
+    // Fail closed: a guard that times out or cannot run has not cleared the call.
+    if (result.error || result.signal) return `${script}: ${result.error?.message ?? result.signal}`
     if (result.status === 2) return (result.stderr || result.stdout || `${script} blocked the call`).trim()
   }
   return undefined
