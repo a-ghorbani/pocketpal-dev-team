@@ -108,7 +108,7 @@ Each task gets its own git worktree under `worktrees/`, so several tasks can run
 | Permissions | allow all, deny list | sandbox profile in `.codex/config.toml` | `opencode.json` | no sandbox; guards only |
 | Unattended | `--dangerously-skip-permissions` | `--dangerously-bypass-approvals-and-sandbox` | allowed by default | `--approve` or trusted project |
 
-pi has no MCP support, and its subagents come from the example extension shipped in its npm package (`examples/extensions/subagent/`), which reads the `.pi/agents/` links.
+pi has no MCP support. Its subagent tool is pi's own MIT example extension, vendored under `.pi/extensions/subagent/` (see its `VENDORED.md`), which reads the `.pi/agents/` links; dispatch needs `agentScope: "project"`.
 
 All four point at one source: roles in `agents/`, skills in `skills/`. See "Harness layout" in `AGENTS.md`. Codex needs the project trusted and its hooks approved once via `/hooks`.
 

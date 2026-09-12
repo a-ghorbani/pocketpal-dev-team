@@ -117,14 +117,15 @@ def sync(check: bool) -> int:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
 
-    pi_settings = ROOT / ".pi/settings.json"
-    guards = "./.pi/extensions/guards"
+    # pi loads an extension only from an explicit entry file; a directory path silently loads nothing.
+    pi_entries = ["./.pi/extensions/guards/index.ts", "./.pi/extensions/subagent/index.ts"]
     try:
-        listed = guards in json.loads(pi_settings.read_text()).get("extensions", [])
+        listed = json.loads((ROOT / ".pi/settings.json").read_text()).get("extensions", [])
     except (OSError, ValueError):
-        listed = False
-    if not listed:
-        drift.append(f"config  .pi/settings.json must list {guards} (pi loads no guards otherwise)")
+        listed = []
+    for entry in pi_entries:
+        if entry not in listed:
+            drift.append(f"config  .pi/settings.json must list {entry}")
 
     wanted = set(links) | set(stubs)
     for directory in (".claude/agents", ".opencode/agents", ".pi/agents", ".codex/agents", ".claude/skills", ".agents/skills"):

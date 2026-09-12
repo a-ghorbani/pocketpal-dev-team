@@ -11,6 +11,7 @@ Orchestrator runbook for the top-level `/start-task` session (and the PR-fix loo
 | Claude Code | `Agent` tool, `subagent_type: pocketpal-<role>` |
 | Codex | `spawn_agent` with agent `pocketpal-<role>` |
 | opencode | `task` tool with `pocketpal-<role>` (or `@pocketpal-<role>`) |
+| pi | `subagent` tool: `agent: pocketpal-<role>`, `agentScope: "project"`, `confirmProjectAgents: false` (it defaults to user-scope agents and to prompting) |
 | no subagent support | start a fresh session, have it read `agents/pocketpal-<role>.md`, and give it the handoff block |
 
 Roles are leaves: they do not dispatch further roles. The orchestrating session does all routing.
