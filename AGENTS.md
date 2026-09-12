@@ -52,7 +52,7 @@ This repo is one checkout on `main`, shared by parallel sessions (`worktrees/` b
 
 ## Harness layout
 
-This repo runs under Claude Code, Codex, and opencode from one source:
+This repo runs under Claude Code, Codex, opencode, and pi from one source:
 
 - Roles live in `agents/<name>.md` and skills in `skills/<name>/SKILL.md`. These are the only copies, so edit them directly.
 - Harness paths point back at them:

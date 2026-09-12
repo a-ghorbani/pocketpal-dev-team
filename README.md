@@ -1,6 +1,6 @@
 # PocketPal Dev Team
 
-An agentic dev team for [PocketPal AI](https://github.com/a-ghorbani/pocketpal-ai), runnable under Claude Code, Codex, or opencode. It takes an issue or a description to a reviewed draft PR; a human reviews and merges.
+An agentic dev team for [PocketPal AI](https://github.com/a-ghorbani/pocketpal-ai), runnable under Claude Code, Codex, opencode, or pi. It takes an issue or a description to a reviewed draft PR; a human reviews and merges.
 
 ## How it works
 
@@ -110,7 +110,7 @@ Each task gets its own git worktree under `worktrees/`, so several tasks can run
 
 pi has no MCP support, and its subagents come from the example extension shipped in its npm package (`examples/extensions/subagent/`), which reads the `.pi/agents/` links.
 
-All three point at one source: roles in `agents/`, skills in `skills/`. See "Harness layout" in `AGENTS.md`. Codex needs the project trusted and its hooks approved once via `/hooks`.
+All four point at one source: roles in `agents/`, skills in `skills/`. See "Harness layout" in `AGENTS.md`. Codex needs the project trusted and its hooks approved once via `/hooks`.
 
 ## Safety
 
@@ -150,6 +150,6 @@ pocketpal-dev-team/
 
 ## Requirements
 
-- One agent harness: [Claude Code](https://code.claude.com), [Codex CLI](https://github.com/openai/codex), or [opencode](https://opencode.ai)
+- One agent harness: [Claude Code](https://code.claude.com), [Codex CLI](https://github.com/openai/codex), [opencode](https://opencode.ai), or [pi](https://pi.dev)
 - Git 2.20+, Node.js 18+, `jq`, Python 3.11+
 - Optional: Xcode 15+ and CocoaPods (iOS builds), Android SDK (Android builds)
