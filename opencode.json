@@ -10,7 +10,13 @@
       "git push -f *": "deny",
       "git push --force *": "deny",
       "git push origin main*": "deny",
-      "git push origin master*": "deny"
+      "git push origin master*": "deny",
+      "git push *:main": "deny",
+      "git push *:master": "deny",
+      "git push *:refs/heads/main": "deny",
+      "git push *:refs/heads/master": "deny",
+      "git push *--all*": "deny",
+      "git push *--mirror*": "deny"
     },
     "edit": {
       "*": "allow",
