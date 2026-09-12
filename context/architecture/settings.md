@@ -59,12 +59,13 @@ On mount the screen calls `checkGpuSupport()` and `getDeviceOptions()`. `inferBa
   - Fixed `75%` snap point; no dimension depends on `supportedLanguages.length`.
   - The query resets on every close path (`handleClose`), so reopening shows the full list.
   - Every `languageDisplayNames` entry contains its `(CODE)`, a Latin search handle for every locale (guarded by `src/locales/__tests__/locales.test.ts`).
+- **`languageRegistry` (`src/locales/index.ts`) is the only writable locale list.** Every other wired-locale set is derived from it — the Weblate download list and the l10n validator fixture via `scripts/lib/registry-languages.js`, the `locales.test.ts` ranges off the `ALL_LANGUAGES` pin — or is a hand-maintained value fixture (the pin itself, display names, e2e strings). `en` never appears in a translation-side set, and directory enumeration never defines wired behaviour (the validator's fallback is the one sanctioned use).
 
 ## Traps and decisions
 
 - **RTL text alignment differs between `Text` and `TextInput`.** RN's `textAlign` has no `start`/`end`, so `'left'` spells "start". RN mirrors `left`/`right` for `Text` under RTL, so row labels use plain `'left'`; an `isRTL` ternary would flip twice. `TextInput` is not mirrored, so the search field *needs* the ternary. `'auto'` is forbidden: it aligns by the first strong character, so the field flips mid-keystroke once a Latin code is typed. RTL follows the device locale (the app never calls `forceRTL`), so e2e can't reach it: use a forced-RTL capture.
 - **The language list is virtualized** (`BottomSheetFlatList`), so unrendered rows can't be tapped. `SettingsPage.selectLanguage` types the code into `language-search` before tapping; the page waits for `language-sheet` to appear and to disappear, because a lingering backdrop swallows the next gesture.
-- **`language.spec.ts` hardcodes translated text per locale:** `screenTitles.settings` and `settings.modelInitializationSettings` (the first card's title). Changing either string, or the first card, breaks it. e2e reaches Settings through the drawer by the English text `Settings`.
+- **`language.spec.ts` hardcodes translated text per locale:** `screenTitles.settings` and `settings.modelInitializationSettings` (the first card's title). Changing either string, or the first card, breaks it. Its locale list and assertion keys stay literal but are cross-checked against the registry by `scripts/__tests__/language-sync.test.js` on every `yarn test`; the translated strings themselves are still only proven by running the spec. e2e reaches Settings through the drawer by the English text `Settings`.
 - **`SearchableSelectSheet` is shared with the TTS language picker**, so a behaviour change reaches both, and its empty-state copy comes from `common.noResults`, never `settings`.
 - **The context-size input keeps a local draft.** A valid value is debounced 500 ms into `setNContext`; the store re-sync is skipped while the input is focused. e2e waits ~700 ms after typing.
 - **`uiStore.iOSBackgroundDownloading` has a setter but no control.** Not persisted; the `UIStore` constructor forces it `true`; `DownloadManager` reads it.
@@ -72,6 +73,6 @@ On mount the screen calls `checkGpuSupport()` and `getDeviceOptions()`. `inferBa
 
 ## Verification
 
-- Jest: `src/screens/SettingsScreen/__tests__/SettingsScreen.test.tsx`; `src/components/{SearchableSelectSheet,SearchProviderKeySheet}/__tests__/`; `src/store/__tests__/{SearchProviderStore,UIStore}.test.ts`; `src/locales/__tests__/locales.test.ts`.
+- Jest: `src/screens/SettingsScreen/__tests__/SettingsScreen.test.tsx`; `src/components/{SearchableSelectSheet,SearchProviderKeySheet}/__tests__/`; `src/store/__tests__/{SearchProviderStore,UIStore}.test.ts`; `src/locales/__tests__/locales.test.ts`; `scripts/__tests__/language-sync.test.js` (cross-checks the e2e locale lists against the registry). `yarn l10n:validate` gates the locale JSONs.
 - e2e: `e2e/specs/features/language.spec.ts` (cycles every locale); `speculative.spec.ts`, `speculative-paired.spec.ts`, `speculative-visual.spec.ts` (Advanced accordion and draft rows).
 - By hand: toggle flash-attn off (K/V rows disable and reset to F16); switch device on an Android with Hexagon or OpenCL; type a code in the language sheet, select, reopen (full list); before consent, the search key button is disabled.
