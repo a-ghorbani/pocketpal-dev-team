@@ -49,6 +49,7 @@ for token in $ARGS; do
     case "$token" in
         -*) continue ;;
     esac
+    token="${token//\'/}"; token="${token//\"/}"
     dest="${token##*:}"
     dest="${dest#+}"
     dest="${dest#refs/heads/}"
