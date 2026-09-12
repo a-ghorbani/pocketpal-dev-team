@@ -68,7 +68,7 @@ On mount the screen calls `checkGpuSupport()` and `getDeviceOptions()`. `inferBa
 - **`SearchableSelectSheet` is shared with the TTS language picker**, so a behaviour change reaches both, and its empty-state copy comes from `common.noResults`, never `settings`.
 - **The context-size input keeps a local draft.** A valid value is debounced 500 ms into `setNContext`; the store re-sync is skipped while the input is focused. e2e waits ~700 ms after typing.
 - **`uiStore.iOSBackgroundDownloading` has a setter but no control.** Not persisted; the `UIStore` constructor forces it `true`; `DownloadManager` reads it.
-- **Why the language picker is a searchable sheet.** An anchored Paper `Menu` is width-fragile and grows with locale count; the DS `Dropdown` wraps `Menu`, so it has the same defect, and `Menu` is slated for the Paper blocklist (`theming.md`, Contracts and invariants). Search stays on even at 14 locales so a user stuck in an unreadable script can recover, and e2e stays deterministic. Filtering is on the label only, in registry order.
+- **Why the language picker is a searchable sheet.** An anchored Paper `Menu` is width-fragile and grows with locale count; the DS `Dropdown` wraps `Menu`, so it has the same defect, and `Menu` is slated for the Paper blocklist (`theming.md`, Contracts and invariants). Search stays on whatever the locale count, so a user stuck in an unreadable script can recover, and e2e stays deterministic. Filtering is on the label only, in registry order.
 
 ## Verification
 
