@@ -66,6 +66,7 @@ The orchestrator picks the next role from the returning stage's verdict:
 | design-parity-reviewer | `APPROVED` / `NEEDS_FIXES` | pipeline-reviewer / implementer (max 2 rounds) |
 | pipeline-reviewer | `APPROVED` (with `PR`) | independent review (`review-pr`) |
 | pipeline-reviewer | `REQUEST_CHANGES` | implementer |
+| pipeline-reviewer | `ESCALATE` (branch already on `origin/main`) | stop; the merge gate was bypassed |
 | any stage | `NEEDS_INPUT` / `ESCALATE` | stop |
 
 ## Autonomous-run contract

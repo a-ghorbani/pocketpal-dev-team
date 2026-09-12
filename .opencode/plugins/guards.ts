@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url"
 const TOOLS = fileURLToPath(new URL("../../tools/", import.meta.url))
 
 const BEFORE: Record<string, string[]> = {
-  Bash: ["block-commit-to-main.sh", "guard-worktree-ops.sh", "guard-submodule-git.sh", "guard-secrets-read.sh"],
+  Bash: ["block-commit-to-main.sh", "guard-worktree-ops.sh", "guard-submodule-git.sh", "guard-secrets-read.sh", "guard-push-to-main.sh"],
   Edit: ["guard-submodule-edit.sh"],
   Write: ["guard-submodule-edit.sh"],
   Read: ["guard-secrets-read.sh"],

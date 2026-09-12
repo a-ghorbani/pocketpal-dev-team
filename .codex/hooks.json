@@ -38,6 +38,12 @@
             "command": "\"$(git rev-parse --show-toplevel)/tools/guard-secrets-read.sh\"",
             "timeout": 30,
             "statusMessage": "Checking secrets policy"
+          },
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/tools/guard-push-to-main.sh\"",
+            "timeout": 30,
+            "statusMessage": "Checking push policy"
           }
         ]
       }

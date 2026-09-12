@@ -13,6 +13,7 @@ These hold for every agent and every task. Most are hook-enforced.
   - Remove them only with `./tools/remove-worktree.sh <name> --yes`, and only when the user asks. Never use raw `git worktree remove`/`prune`, `rm -r`, or `rmdir`.
   - Stop and report when you're inside the submodule, on `main`/`master`, or missing the `WORKTREE`, `BRANCH`, or story context your task needs.
 - **Secrets.** Agents never read `.env`, `.env.*`, keystores, or key files (hook-guarded). Config reaches worktrees only through `tools/sync-worktree-config.sh` / `tools/create-worktree.sh`; never bulk-copy it.
+- **App code reaches `main` only through a reviewed PR.** Push the feature branch; never push, fast-forward, or merge a branch onto the app's `main` yourself (hook-enforced, any refspec).
 - **Public artifacts.** GitHub artifacts (PR title, body, and comments; issues; commit messages) and everything in the app (source, tests, configs) reference only public things: GitHub `#123`, file paths, library names. Leave out:
   - internal tracker IDs (`context/issue-tracking.md`) and `linear.app` links;
   - task IDs;

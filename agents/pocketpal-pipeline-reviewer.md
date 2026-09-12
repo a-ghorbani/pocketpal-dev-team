@@ -81,6 +81,10 @@ Lint · TypeCheck · Tests (X/Y) · Coverage (X%) · Pod Install · iOS Build ·
 ### Conditions for Approval (if REQUEST_CHANGES)
 ```
 
+## Before approving: the branch must still be unmerged
+
+Run `git log --oneline origin/main..HEAD` in the worktree. If it is empty, this branch's commits are already on `origin/main`, so the PR and the human merge gate were bypassed. Reply `VERDICT: ESCALATE` saying so and naming the commits; do not open a PR (one would propose reverting `main`) and do not approve. `APPROVED` always carries a `PR`.
+
 ## On approval: open the draft PR and post evidence
 
 Run these from the worktree, substituting the `WORKTREE` and `BRANCH` values from the handoff block. `gh` infers the pocketpal-ai repo from the current directory; from anywhere else it would target this repo.
