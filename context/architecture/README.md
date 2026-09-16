@@ -21,6 +21,7 @@ One file per **flow**, bounded by a single user-facing concept. Per-component is
 | `pals-and-talents.md` | what a Pal and a Talent are; tool opt-in, search grounding, execution boundary | `src/services/talents/`, `src/services/search/`, `ChatSessionStore.resolveCompletionSettings`, `systemPromptResolver`, `TalentSurface` |
 | `palshub-checkout.md` | buying a premium PalsHub Pal in-app; ownership confirmation | `CheckoutFlowStore`, `src/services/palshub/`, `NativeAuthSession` / `NativeExternalContentLink` specs and native modules |
 | `explore-tab.md` | Explore tab: PalsHub discovery and `[Pals \| Models]` sub-tabs (**`redesign/phase-3` only**) | `ExploreScreen`, `ExplorePalsPanel`, `PalDetailSheet` |
+| `pals-screen.md` | Pals screen grid: width-driven column count, shared row chunking, card content sizing, testIDs e2e depends on | `PalsScreen`, `palGridLayout`, `PalGridRow`, `SquarePalCard` |
 | `app-shell.md` | root providers, onboarding switch, Drawer and sidebar, global hosts | `App.tsx` (`SwitchPoint`, Drawer), `SidebarContent`, `HeaderLeft`, `ROUTES` |
 | `settings.md` | the Settings screen: controls and their writers, testIDs e2e depends on | `SettingsScreen`, `LanguageSelector` / `SearchableSelectSheet`, `SearchProviderStore` |
 | `onboarding.md` | first-launch onboarding screens and the completion gate | `src/screens/OnboardingScreens/`, `src/store/onboarding/`, `uiStore.hasCompletedOnboarding`, `App.tsx` `SwitchPoint` |
