@@ -76,7 +76,7 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 - **I-V1**: outside `src/api/servers/` (and tests and mocks) there is no literal compare or `switch` on a server-type string. A `no-restricted-syntax` pair in `.eslintrc.js` enforces it; because an override *replaces* the base selector list rather than merging with it, the shared selectors are spread into every `no-restricted-syntax` list the config has. Known evasions: a type held in a variable, or tested with `includes` / a `Set`. Review catches those.
 - `DIALECTS` is a `Record<ServerType, ServerDialect>`, so a new type offered in the UI cannot compile until it has a dialect. Each dialect is written with `satisfies`, never annotated `: ServerDialect` — the annotation would widen its `sendNames` and defeat the compile-time check below.
 - `bodyExtras` and `readFinish` are pure: no store, no clock, no network, and no type input other than `endpoint.serverType`.
-- What the call sites ask for: `discovery.hasProps` gates the `/props` request, `discovery.listReportsCaps` gates the sheet's vision slot, `discovery.healthPath` the reachability probe, and `readModelEntry` replaces the type gate that used to live inside `deriveListCaps`.
+- What the call sites ask for: `discovery.hasProps` gates the `/props` request, `discovery.listReportsCaps` gates the sheet's vision slot, and `readModelEntry` replaces the type gate that used to live inside `deriveListCaps`. `discovery.healthPath` and `discovery.hasRouter` are stated facts with no consumer yet — #897 and #896 own those call sites.
 - Sampler wire (`sendNames`; app name → wire name, emitted only for a **finite** number, never coerced to `null`):
 
 | Type | `sendNames` beyond the base |
