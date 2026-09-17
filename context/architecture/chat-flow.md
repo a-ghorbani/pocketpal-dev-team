@@ -78,7 +78,7 @@ any ─step_started (initial or follow-up)→ prefill
 - Reasoning collapses once the step has content or `partial === false`, and only on that transition. After the user toggles it, `ThinkingBubble.userToggledRef` keeps the user's choice.
 - For each call, `TalentSurface` renders nothing until the outcome exists, then `ToolErrorBlock` for an error, else the registered TalentUI's non-null `renderResult` (plus `ToolMetricsFooter` when `call.metrics` is set), else `ToolUsedChip`. A missing TalentUI (e.g. in an old chat) falls back to the chip.
 - `ToolUsedChip` expands on tap to show the persisted call arguments and the outcome's `responseContent` with the untrusted markers stripped for display. It expands for every tool, never branching on a tool's source, and stays a plain row when there is nothing to show, so an old chip is unchanged. It computes nothing: the response was already redacted before it was stored.
-- Every assistant row has exactly one `AssistantTurnFooter`, attached in `Message`'s outer JSX and never inside `Bubble`. It renders iff `timings || copyable || interrupted`, and each part checks its own field (see "Completion timings"). The run's outcome is not checked.
+- Every assistant row has exactly one `AssistantTurnFooter`, attached in `Message`'s outer JSX and never inside `Bubble`. It renders iff `timings || copyable || interrupted`, and each part checks its own field (see "Completion timings"). The run's outcome is not checked. The two remote parts are the exception: they check the turn's origin as well.
 - Copy (`derivedText`) joins step contents only, with no reasoning and no tool JSON.
 - `Message` must stay an `observer`. Streaming swaps `steps[last]` under a stable row reference, which a memo would miss.
 
@@ -88,6 +88,8 @@ any ─step_started (initial or follow-up)→ prefill
 - **Finite on write, tolerated on read.** `normaliseTimings` keeps only fields holding a finite number and drops everything else; an object with nothing left becomes `undefined`, so a turn carries no `timings` rather than an empty one. The remote engine normalises through the dialect's `readFinish`, the local engine wraps llama.rn's result, and those are the only writers.
 - The read side assumes nothing, because rows persisted by older builds hold the raw server object. Every numeric read in `AssistantTurnFooter` goes through `finiteNumber`, compared against `undefined` so a reported `0` still renders, and a part renders only for a finite value. A stored string used to throw in render (`.toFixed`) and a stored `NaN` used to print the literal text `NaN`; both now render no part.
 - Stored rows are never migrated. Tolerating the read is what makes them safe.
+- Two parts are **origin-gated, not presence-gated**: prompt speed (`prompt_per_second`, `components.bubble.promptTokensPerSec`) and cached tokens (`cache_n`, `components.bubble.cachedTokens`) render only when `completionResult.isRemote` is true. llama.rn reports both on local turns too, so presence alone would silently change the local footer; what the local footer shows is a separate decision. A remote turn missing prompt speed therefore means the server did not report it, while a local turn shows no such part whatever the engine reported.
+- `cache_n` renders at `0`: a build that does not report prompt-cache reuse omits the key, while a cold prompt on a build that does reports `0`, and those are different facts.
 
 **Pending indicator**
 

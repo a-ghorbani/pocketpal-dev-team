@@ -4,7 +4,7 @@
 
 Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keychain API key, the `src/api/openai.ts` request layer (timeouts, the per-`serverType` reasoning wire), llama.cpp capability discovery (the `/props` probe tier and the `/v1/models` list tier), and the binding between a live remote session and its backend. Not covered: the reasoning capability model and pill (`chat-flow.md`, "Contracts and invariants", "Reasoning"), remote token accounting and the context banner (`chat-flow.md`, "Contracts and invariants", "Context banner", and the Traps entry "`used` counts the whole prompt, and unknown is not zero"), local-model capabilities (`model-loading.md`).
 
-**Not on `main` yet:** #896 (llama-server router mode) and #897 (QR/link pairing, presence) add behaviour this doc leaves out. The sampler and `/props` layer described below arrives with the request-path restructure, which is stacked on #895; only `hasRouter` / `healthPath` are stated ahead of their PRs. The previous version of this doc described it, including measured router wire facts (`git show 1ad6ce1:context/architecture/remote-servers.md`); distill each part back in when its PR lands.
+**Not on `main` yet:** #896 (llama-server router mode) and #897 (QR/link pairing, presence) add behaviour this doc leaves out; only `hasRouter` / `healthPath` are stated ahead of their PRs. Everything else below, the dialect layer and the three `/props` tiers included, is what #895 delivers. The previous version of this doc described it, including measured router wire facts (`git show 1ad6ce1:context/architecture/remote-servers.md`); distill each part back in when its PR lands.
 
 ## Code map
 
@@ -17,10 +17,12 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 | `src/api/llamaServer/props.ts` | `fetchServerProps` (`GET /props`), `PROPS_READ_NAMES`, `PROPS_TIMEOUT_MS` |
 | `src/api/sseParser.ts` | SSE `data:` line parser for the completion stream |
 | `src/api/completionEngines.ts` | `OpenAICompletionEngine`: captures one `RemoteEndpoint` at construction, fills `samplers` via `pickSamplers`, forwards intent; optional `ensureReady` hook |
-| `src/store/ServerStore.ts` | servers, Keychain keys, `serverModels`, `userSelectedModels`, `remoteReasoning`, `remoteCaps`, computed `listCaps`; `fetchModelsForServer`, `fetchRemoteModelCaps`, prunes, throttled foreground refresh |
-| `src/store/ModelStore.ts` | `setRemoteModel` (engine + `activeRemoteBinding` + detached probe), `reprobeRemoteCapsIfUnknown`, `remoteModels`, `capsFor` / `activeModelCaps` |
-| `src/utils/types.ts` | `ServerConfig`, `RemoteModelCaps`, `RemoteSessionBinding` |
-| `src/utils/remoteCaps.ts` | probe-tier read side: `resolveRemoteCaps`, `capsMatchBinding` |
+| `src/store/ServerStore.ts` | servers, Keychain keys, `serverModels`, `userSelectedModels`, `remoteReasoning`, `remoteCaps`, `remoteProps`, `remotePresence`, computed `listCaps`; `fetchModelsForServer`, `fetchRemoteModelCaps` (coalescing wrapper over the private `probeRemoteModel`), `lastObservedSleepState`, prunes, throttled foreground refresh |
+| `src/store/ModelStore.ts` | `setRemoteModel` (engine + `activeRemoteBinding` + detached probe), `reprobeRemoteCapsIfUnknown`, `remoteModels`, `capsFor` / `activeModelCaps`, `activeSamplerDefaults` |
+| `src/components/CompletionSettings/` | sampler controls; presentational `serverDefaults` prop drives the "server default" indicator and the per-parameter reset |
+| `src/utils/types.ts` | `ServerConfig`, `RemoteModelCaps`, `RemoteModelProps`, `RemoteModelPresence`, `SamplerDefaults`, `RemoteModelInfo`, `ListDerivedCaps`, `RemoteSessionBinding` |
+| `src/utils/remoteCaps.ts` | probe-tier read side: `resolveRemoteCaps`, `resolveRemoteProps`, `capsMatchBinding` |
+| `src/utils/remotePresence.ts` | presence read side: `lastObservedSleepState` (`'awake' \| 'asleep' \| 'unknown'`) |
 | `src/utils/modelCaps.ts` | `resolveModelCaps`: merges probe over list, declared vs session axes |
 | `src/utils/serverTypes.ts` | `SERVER_TYPE_OPTIONS`, `ServerType`, `toServerType`, `seedServerType` |
 | `src/utils/samplerParams.ts` | `SAMPLER_PARAMS`, `SamplerParam`, `Samplers`, `pickSamplers` (app names only; wire names belong to a dialect) |
@@ -62,7 +64,7 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 | --- | --- |
 | `servers[]` fields (`url`, `serverType`, `requestTimeoutMs`) | `addServer` / `updateServer` (`lastConnected`: `fetchModelsForServer`) |
 | API key | `setApiKey` → Keychain service `pocketpal-server-<id>`; never on `ServerConfig` |
-| `remoteCaps` | `fetchRemoteModelCaps`, plus the prunes |
+| `remoteCaps`, `remoteProps`, `remotePresence` | `fetchRemoteModelCaps` (through `probeRemoteModel`), plus the prunes. One response writes each tier independently: a tier the body did not resolve is left alone |
 | `serverModels` | **two**: `fetchModelsForServer` and `RemoteModelSheet.handleServerChipPress`, both storing `fetchModels` output; `probeServer` writes nothing to the store |
 | `listCaps` | none: a computed over `servers` + `serverModels`, not persisted |
 | `remoteReasoning` | the reasoning writers in `chat-flow.md`; nothing derived from `/props` is ever written there |
@@ -100,12 +102,25 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 - Unknown or strict servers receive no reasoning controls: omitting beats a 400. `temperature`, `top_p`, `max_completion_tokens` (from `n_predict`), `stop`, `tools`, `tool_choice`, `response_format` are sent for every type.
 - `chat_template_kwargs` is merged inside `bodyExtras`. The transport merges nothing, and a dialect may never return a transport-owned key (`model`, `messages`, `stream`, `stop`, `tools`, `tool_choice`, `response_format`) — one parameterised test checks every dialect.
 
-**Probe tier (`/props`)**
+**Probe tier (`/props`): three tiers, split by how long a fact stays true**
 
-- Parse: `contextLength ← default_generation_settings.n_ctx ?? n_ctx`, only when finite and `> 0`. `supportsVision ← modalities.vision === true`, set only on a model-describing body (`model_path` non-empty and not `'none'`, or a context resolved); there, a missing `modalities` is a definite `false`.
+| Tier | Type | Holds | Persisted |
+| --- | --- | --- | --- |
+| capability | `RemoteModelCaps` | `contextLength`, `supportsVision`, `supportsAudio` — facts that **gate** an action or an affordance | yes |
+| description | `RemoteModelProps` | `samplerDefaults`, `slotCount`, `chatTemplateCaps` — facts that **describe**, true for the life of a server process. Nothing here may gate | yes |
+| presence | `RemoteModelPresence` | `isSleeping`, with `probedUrl` and `at` | **no**: a hydrated "asleep" would be a claim about now that nobody checked |
+
+- All three are keyed `${serverId}/${remoteModelId}` and stamped with `probedUrl`. Each carries a `tier` discriminant that is never read, so the three are mutually non-assignable and a volatile observation cannot be written where a persisted fact belongs.
+- Parse: `contextLength ← default_generation_settings.n_ctx ?? n_ctx`, only when finite and `> 0`. `supportsVision ← modalities.vision === true`, set only on a model-describing body (`model_path` non-empty and not `'none'`, or a context resolved); there, a missing `modalities` is a definite `false`. `supportsAudio` reads `modalities.audio` the same way.
+- `samplerDefaults` reads `default_generation_settings.params` (older builds: the object itself) through `PROPS_READ_NAMES`, which is the llama.cpp dialect's send map plus one override (`n_predict` is reported under its own name and sent as `max_completion_tokens`). It is total over `SamplerParam`, so a new app parameter cannot be added without naming it here. `seed` is skipped: the server reports the live seed, which is not a default anyone should return to.
+- `chat_template_caps.supports_thinking` exists only on builds newer than b9976, so an absent key is unknown, never a definite `false`.
+- Sleep takes the **weaker** gate: it is read whenever the body is not the router placeholder (`role: 'router'`), because a sleeping child may report almost nothing else, and requiring a model-describing body would suppress the very observation the field exists for.
+- `lastObservedSleepState(serverId)` returns the newest observation across that server's models whose `probedUrl` still matches the server, so a url edit reads unknown. It never expires an observation; a consumer needing freshness bounds `at` itself.
 - `fetchServerProps` never throws: timeout, non-2xx (a 401 included) and malformed JSON all resolve `{}`. A failure is never evidence of absence.
 - Non-downgrading write: `{}` writes nothing; a field the response did not resolve keeps its prior value; an entry probed against another url is replaced, not blended; an unchanged merge is not written.
-- The write re-checks the server's `url` / `serverType` against the pre-flight snapshot inside `runInAction` and discards on mismatch or removal.
+- The write re-checks the server's `url` / `serverType` against the pre-flight snapshot inside `runInAction` and discards on mismatch or removal. A merge carries a prior entry forward **field by field by name**, never by spreading it, so a field dropped from the schema stops being carried for the life of the entry.
+- An unchanged answer is not written: scalars compare with `===`, and nested `samplerDefaults` / `chatTemplateCaps` compare by content, so a repeat probe does not wake observers or re-persist the map.
+- Probes coalesce per `${serverId}/${remoteModelId}/${url}`: a second request for a key in flight awaits the first. The url is in the key because a probe issued before a server edit is asking a different backend. A settling probe removes only **its own** registration, so a late settle cannot evict the replacement a clear registered under the same key.
 - Bare `/props` is issued only when the scoped answer was unusable **and** `serverModels` for that server is exactly `[that model]`. An absent or empty list is unknown and does not pass.
 - Triggers are activation and a foreground with no entry valid for the binding (skipped once the server url has moved off the binding). A valid entry is never re-fetched, so a good answer cannot be clobbered back to a placeholder. `fetchModelsForServer` issues no `/props`.
 
@@ -119,8 +134,8 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 
 **Invalidation**
 
-- `removeServer` drops `serverModels`, `userSelectedModels`, `remoteReasoning`, `remoteCaps` (prefix `dropServerEntries`) and the Keychain key.
-- An `updateServer` that changes `url` or `serverType` drops `remoteCaps` and `serverModels`, but keeps `remoteReasoning`, which holds user declarations. The list must go too: the sheet never refetches after a save, so a stale one-entry list would pass the bare-retry gate against a new multi-model server.
+- `removeServer` drops `serverModels`, `userSelectedModels`, `remoteReasoning`, `remoteCaps`, `remoteProps`, `remotePresence` (prefix `dropServerEntries`) and the Keychain key.
+- An `updateServer` that changes `url` or `serverType` drops all three probe maps and `serverModels`, but keeps `remoteReasoning`, which holds user declarations. The list must go too: the sheet never refetches after a save, so a stale one-entry list would pass the bare-retry gate against a new multi-model server.
 
 ## Traps and decisions
 
@@ -137,6 +152,9 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 - **iOS Local Network.** `NSLocalNetworkUsageDescription` is required. Without it, iOS 18 silently denies (NSURLError -1009, indistinguishable from a dead server; Safari is exempt, so it misleads). A denied device never re-prompts (Settings → Privacy & Security → Local Network). The simulator never enforces it. The first probe is the request that raises the prompt and fails, which is why the foreground re-probe exists: remote models are exempt from auto-release, so nothing else would retry. It lives in `ModelStore` because `ServerStore` cannot see the active model without an import cycle.
 - **Detection only seeds.** `detectServerType` cannot identify OpenAI or vLLM, so the type is user-selectable. Only the add path detects, and `ServerDetailsSheet` never re-detects. The Ollama probe (`GET /`) carries no key.
 - **`ServerDetailsSheet`'s Save sits in `Sheet.Actions`**, and `Sheet` pans rather than resizes on Android. Measured: with a field focused, the button is behind the keyboard.
+- **Server defaults are a reference, not a resolution layer.** `CompletionSettings` takes `serverDefaults` as a prop and stays presentational: a parameter equal to the server's value shows "server default", a different one offers a reset carrying the value. Equality is per control kind — sliders within `step / 2`, discrete controls exact — and reset writes through the same `onChange` every control uses, so there is no second writer. Server values are never layered into `resolveCompletionSettings`: session settings are baked at birth and persisted, and a session may later run locally.
+- **The defaults shown are the live session's, on two surfaces that are not the session.** `activeSamplerDefaults` is scoped to the model the live session is bound to, but the Pal sheet edits a Pal carrying its own model and the chat sheet edits the app-wide preset when no session exists. Both can therefore annotate, and reset into, settings that will never be sent to that server. Known and deferred, not designed: it is the open finding on #895.
+- **`n_probs` is forwarded and its server default is read, but nothing renders it.** No control exists, so the indicator never shows for it. Above `0` the server computes per-token probabilities and adds a `logprobs` block to every chunk, which nothing reads; the default `0` makes forwarding inert.
 - **Decisions.** One timeout for both phases, because both end the same conversation and a second knob buys nothing. Persisted type, never detection, because detection is incomplete and the user override is the escape hatch. `remoteCaps` persists but the binding does not, since a session does not survive a launch. `lastUsedModelId` is never set for a remote model, because the server may be offline next launch. Token counts come from `timings`, not `usage`, because `usage` needs a `stream_options.include_usage` opt-in and no `usage` object appears without it.
 
 ## Verification
