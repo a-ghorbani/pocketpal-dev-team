@@ -135,7 +135,7 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 **Invalidation**
 
 - `removeServer` drops `serverModels`, `userSelectedModels`, `remoteReasoning`, `remoteCaps`, `remoteProps`, `remotePresence` (prefix `dropServerEntries`) and the Keychain key.
-- An `updateServer` that changes `url` or `serverType` drops all three probe maps and `serverModels`, but keeps `remoteReasoning`, which holds user declarations. The list must go too: the sheet never refetches after a save, so a stale one-entry list would pass the bare-retry gate against a new multi-model server.
+- An `updateServer` that changes `url` or `serverType` drops all three probe maps and `serverModels`, but keeps `remoteReasoning`, which holds user declarations. The type comparison normalises **both** sides: a row written before the field existed carries no key, which already means `'unknown'`, and the server sheet always sends `serverType`, so comparing the raw values made every unchanged save on such a row look like a type switch and discard what the server had reported. The list must go too: the sheet never refetches after a save, so a stale one-entry list would pass the bare-retry gate against a new multi-model server.
 
 ## Traps and decisions
 
