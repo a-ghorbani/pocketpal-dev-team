@@ -22,6 +22,7 @@ How a chat turn is sent, streamed, persisted and rendered: tool-call and reasoni
 | `src/components/Message/Message.tsx` | row dispatcher; `renderAssistantTurn`; owns the one `AssistantTurnFooter` |
 | `src/components/{TextMessage,ReasoningBlock,ThinkingBubble,Bubble}/` | content block; reasoning block; collapse state; pure shape |
 | `src/components/TalentSurface/` | per-call dispatcher: `ToolErrorBlock` / TalentUI + `ToolMetricsFooter` / `ToolUsedChip` |
+| `src/components/ToolConfirmationSheet/` | the approve / decline sheet for a gated tool call, hosted by `ChatScreen` |
 | `src/components/AssistantTurnFooter/`, `PendingIndicator/` | turn chrome; the dot row under the newest turn |
 | `src/utils/reasoningCapability.ts` | `resolveReasoningCapability`; UI in `ChatInput`, `ModelSettingsSheet` |
 | `src/components/SidebarContent/` | drawer session list and pin menu |
@@ -54,7 +55,7 @@ any ─step_started (initial or follow-up)→ prefill
 
 - Storage is rolled up: one `assistant_turn` row per turn, with outcomes nested in their step. Messages are stored newest-first (`[0]`). On the wire, `stepToApiMessages` flattens a step to an assistant message (`content`, `tool_calls`, `reasoning_content`), then one `tool` message per outcome (`src/utils/chat.ts:77`).
 - Orphan guard: a call with no outcome gets a synthetic `{role:'tool', content:'aborted'}` message (`chat.ts:99`). Strict Jinja templates reject an unanswered `tool_call_id`, and an abort mid-tool leaves one behind.
-- `step.toolCalls[i].id === outcome.callId` holds by construction: `appendToolCall` runs once per step, on `step_finished`, with the runner's normalised ids. Token deltas never write `toolCalls` (`useChatSession.ts:369`).
+- `step.toolCalls[i].id === outcome.callId` holds by construction: `appendToolCall` runs once per step, on `step_finished`, with the runner's normalised ids. Token deltas never write `toolCalls` (`useChatSession.ts:373-376`).
 
 **Single writers**
 
@@ -65,6 +66,7 @@ any ─step_started (initial or follow-up)→ prefill
   - The empty turn has no `copyable`.
 - `lastCompletionResult` has one writer, `recordCompletionSnapshot`, called right after `metadata.completionResult` is written. That same action clears `dismissedBannerVariants` and updates `consecutiveFullFailures`. `setActiveSession` hydrates the snapshot from the newest turn. `resetActiveSession` and `removeMessagesFromId` (edit or regenerate) clear it.
 - Only `handleStopPress` sets `isStopping`, and it is cleared when the loop exits. Stop intent is the `AbortSignal`, and the runner's listener calls `engine.stopCompletion()`.
+- **The pending tool confirmation is hook-local React state, not a store field**, so `applyEventToStore` stays the only store writer during a run. `useChatSession` sets it from `confirmToolCall` and clears it on resolve, in the send path's `finally`, and on unmount (resolving `false`), so a pending confirmation never outlives its run. Answers are keyed by `callId` and the first one for an id wins: any other id, or a second answer for a settled id, is a no-op. That is what makes a late `onDismiss` from the previous call's close animation harmless while the next call is already pending, because the shared `Sheet` reports a programmatic close as a dismiss. `ChatScreen` keys the sheet by `callId` so each call gets a fresh instance, and dismissing is a decline.
 - `contextInitParams.n_ctx` is a single global, written only by `setNContext` (Settings, `IncreaseContextSheet`). Sessions cannot override it.
 - `persistReasoning` sets `newChatThinkingOverride` / `newChatReasoningEffort` only when there is no session. Creating, resetting or switching a session clears them, and a staged override makes the new session `'custom'`.
 - `ChatSessionStore` never reads `ModelStore`. `BannerRow`, `ChatView` and `usePalLoadHint` do the cross-store reads.
@@ -75,6 +77,7 @@ any ─step_started (initial or follow-up)→ prefill
 - `ReasoningBlock` renders outside the bubble shell and never shows the sender name. The name goes on the first content block.
 - Reasoning collapses once the step has content or `partial === false`, and only on that transition. After the user toggles it, `ThinkingBubble.userToggledRef` keeps the user's choice.
 - For each call, `TalentSurface` renders nothing until the outcome exists, then `ToolErrorBlock` for an error, else the registered TalentUI's non-null `renderResult` (plus `ToolMetricsFooter` when `call.metrics` is set), else `ToolUsedChip`. A missing TalentUI (e.g. in an old chat) falls back to the chip.
+- `ToolUsedChip` expands on tap to show the persisted call arguments and the outcome's `responseContent` with the untrusted markers stripped for display. It expands for every tool, never branching on a tool's source, and stays a plain row when there is nothing to show, so an old chip is unchanged. It computes nothing: the response was already redacted before it was stored.
 - Every assistant row has exactly one `AssistantTurnFooter`, attached in `Message`'s outer JSX and never inside `Bubble`. It renders iff `timings || copyable || interrupted`, and each part checks its own field. The run's outcome is not checked.
 - Copy (`derivedText`) joins step contents only, with no reasoning and no tool JSON.
 - `Message` must stay an `observer`. Streaming swaps `steps[last]` under a stable row reference, which a memo would miss.

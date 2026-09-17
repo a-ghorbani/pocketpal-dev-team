@@ -17,6 +17,7 @@ The launcher root, Preferences / App Settings sub-screens and account routes exi
 | `src/components/LanguageSelector/` | Language trigger plus the searchable sheet |
 | `src/components/SearchableSelectSheet/` | Shared searchable picker; also used by the TTS `HeroRow` |
 | `src/store/SearchProviderStore.ts` | Search provider, result count, consent, BYOK keys in Keychain |
+| `src/store/CustomToolStore.ts`, `src/screens/CustomToolsScreen/` | Custom HTTP tools: the count the card shows, and the manager the card opens (`custom-tools.md`) |
 | `src/components/SearchProviderKeySheet/`, `src/components/HFTokenSheet/` | Key entry sheets for search providers and Hugging Face |
 | `src/store/UIStore.ts`, `ModelStore.ts`, `HFStore.ts`, `TTSStore.ts` | The stores every control writes to |
 | `App.tsx` | Mounts `SettingsScreen` as the `ROUTES.SETTINGS` drawer screen |
@@ -38,12 +39,14 @@ On mount the screen calls `checkGpuSupport()` and `getDeviceOptions()`. `inferBa
   - `userTTSOverride` → `ttsStore.setUserTTSOverride`
   - HF token → `hfStore.setToken / clearToken` (from `HFTokenSheet`); `useHfToken` → `hfStore.setUseHfToken`
   - search prefs → `searchProviderStore.setActiveProvider / setResultCount / setConsent`; keys → `setKey / clearKey`
+  - custom tools → **nothing**. The card only reads the count and navigates to `ROUTES.CUSTOM_TOOLS`; every write belongs to the manager and editor (`custom-tools.md`). The route is hidden from the drawer sidebar (`drawerItemStyle: {display:'none'}`), so the card is the only way in.
 - **`uiStore.setLanguage` is the only writer of `_language`**, and `LanguageSelector` is its only caller.
 - **testIDs are frozen.** e2e resolves:
   - `context-size-input` (the `SettingsPage.waitForReady` probe)
   - `advanced-settings-accordion`, with `batch-size-slider` as its "expanded" probe (`speculative*.spec.ts`)
   - `speculative-*`, `device-option-{cpu,gpu,hexagon}`, `gpu-layers-slider`, `dark-mode-switch`, `display-memory-usage-switch`
   - `language-selector-button`, `language-sheet`, `language-search`, `language-option-<lang>`
+  - `custom-tools-card`, `custom-tools-open-button` (additive)
 
   A rename or move lands with `e2e/helpers/selectors.ts` and the affected specs in the same change. New testIDs are additive.
 - **The device option reads back from persisted names.** On Android `getCurrentDeviceId()` maps any name starting with `HTP` to `hexagon`, so a saved wildcard still shows as Hexagon.
