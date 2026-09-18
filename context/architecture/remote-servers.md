@@ -16,12 +16,11 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 | `src/api/llamaServer/props.ts` | `fetchServerProps` (`GET /props`), `PROPS_READ_NAMES`, `PROPS_TIMEOUT_MS` |
 | `src/api/sseParser.ts` | SSE `data:` line parser for the completion stream |
 | `src/api/completionEngines.ts` | `OpenAICompletionEngine`: captures one `RemoteEndpoint` at construction, fills `samplers` via `pickSamplers`, forwards intent; optional `ensureReady` hook |
-| `src/store/ServerStore.ts` | servers, Keychain keys, `serverModels`, `userSelectedModels`, `remoteReasoning`, `remoteCaps`, `remoteProps`, `remotePresence`, computed `listCaps`; `fetchModelsForServer`, `fetchRemoteModelCaps` (coalescing wrapper over the private `probeRemoteModel`), `lastObservedSleepState`, prunes, throttled foreground refresh |
+| `src/store/ServerStore.ts` | servers, Keychain keys, `serverModels`, `userSelectedModels`, `remoteReasoning`, `remoteCaps`, computed `listCaps`; `fetchModelsForServer`, `fetchRemoteModelCaps` (wrapper over the private `probeRemoteModel`), prunes, throttled foreground refresh |
 | `src/store/ModelStore.ts` | `setRemoteModel` (engine + `activeRemoteBinding` + detached probe), `reprobeRemoteCapsIfUnknown`, `remoteModels`, `capsFor` / `activeModelCaps`, `activeSamplerDefaults` |
 | `src/components/CompletionSettings/` | sampler controls; presentational `serverDefaults` prop drives the "server default" indicator and the per-parameter reset |
 | `src/utils/types.ts` | `ServerConfig`, `RemoteModelCaps`, `RemoteModelProps`, `RemoteModelPresence`, `SamplerDefaults`, `RemoteModelInfo`, `ListDerivedCaps`, `RemoteSessionBinding` |
-| `src/utils/remoteCaps.ts` | probe-tier read side: `resolveRemoteCaps`, `resolveRemoteProps`, `capsMatchBinding` |
-| `src/utils/remotePresence.ts` | presence read side: `lastObservedSleepState` (`'awake' \| 'asleep' \| 'unknown'`) |
+| `src/utils/remoteCaps.ts` | probe read side: `resolveRemoteCaps`, `capsMatchBinding` |
 | `src/utils/modelCaps.ts` | `resolveModelCaps`: merges probe over list, declared vs session axes |
 | `src/utils/serverTypes.ts` | `SERVER_TYPE_OPTIONS`, `ServerType`, `toServerType`, `seedServerType` |
 | `src/utils/samplerParams.ts` | `SAMPLER_PARAMS`, `SamplerParam`, `Samplers`, `pickSamplers` (app names only; wire names belong to a server profile) |
@@ -63,7 +62,7 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 | --- | --- |
 | `servers[]` fields (`url`, `serverType`, `requestTimeoutMs`) | `addServer` / `updateServer` (`lastConnected`: `fetchModelsForServer`) |
 | API key | `setApiKey` → Keychain service `pocketpal-server-<id>`; never on `ServerConfig` |
-| `remoteCaps`, `remoteProps`, `remotePresence` | `fetchRemoteModelCaps` (through `probeRemoteModel`), plus the prunes. One response writes each tier independently: a tier the body did not resolve is left alone |
+| `remoteCaps` | `fetchRemoteModelCaps` (through `probeRemoteModel`), plus the prunes. One response writes one record: a field the body did not resolve is left alone |
 | `serverModels` | **two**: `fetchModelsForServer` and `RemoteModelSheet.handleServerChipPress`, both storing `fetchModels` output; `probeServer` writes nothing to the store |
 | `listCaps` | none: a computed over `servers` + `serverModels`, not persisted |
 | `remoteReasoning` | the reasoning writers in `chat-flow.md`; nothing derived from `/props` is ever written there |
@@ -74,7 +73,7 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 **Every type decision goes through `profileFor`**
 
 - The only input is the **persisted** `serverType`, never live detection, and it is normalised by `toServerType` at every writer (hydration, `addServer`, an `updateServer` that carries the key, `setRemoteModel`). An unrecognised value — a legacy `''`, a case variant, a free string — is `'unknown'` and speaks the base profile.
-- **I-V1**: outside `src/api/servers/` (and tests and mocks) there is no literal compare or `switch` on a server-type string. A `no-restricted-syntax` pair in `.eslintrc.js` enforces it, exempting the folder with one glob; because an override *replaces* the base selector list rather than merging with it, the shared selectors are spread into every `no-restricted-syntax` list the config has. Known evasions: a type held in a variable, or tested with `includes` / a `Set`. Review catches those.
+- **I-V1**: outside `src/api/servers/` (and tests and mocks) there is no literal compare or `switch` on a server-type string. A `no-restricted-syntax` pair in `.eslintrc.js` enforces it, exempting `src/api/servers/detect.ts` alone — the ban stays **live inside the profile table**, which needs no exemption because it uses server-type literals only as object keys, never in a compare or a `switch`; because an override *replaces* the base selector list rather than merging with it, the shared selectors are spread into every `no-restricted-syntax` list the config has. Known evasions: a type held in a variable, or tested with `includes` / a `Set`. Review catches those.
 - `SERVER_PROFILES` is keyed `Record<ServerType, ServerProfile>`, so a new type offered in the UI cannot compile until it has a profile. The table is written with `satisfies`, never annotated — the annotation would widen each `sendNames` and defeat the compile-time check below.
 - `bodyExtras` and `readFinish` are pure: no store, no clock, no network, and no type input other than `endpoint.serverType`. `readFinish` is the same read for every type, so it is a module function rather than a profile member — a per-type copy of it would be a place for them to drift.
 - What the call sites ask for: `hasProps` gates the `/props` request, and `readListRow` both reads a `/v1/models` row and, by its presence, gates the sheet's vision slot — one member, so "this type reports list caps" and "this is how it reports them" cannot disagree. Every member has a reader, and a flag with no reader is not carried here. `healthPath` was dropped for a second reason that outlives it: **two call sites ask different questions of a server** — "does it answer" (reachability) and "what can it serve" (`testConnection` → `fetchModels`, `/v1/models` for every type) — and a field named for neither invites the next author to wire it to both. #897 adds it as `reachabilityPath`, scoped in the name, with the call site that reads it; #896 adds `hasRouter` the same way.
@@ -86,6 +85,15 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 | llama.cpp | `top_k`, `min_p`, `typical_p`, `xtc_threshold`, `xtc_probability`, `seed`, `n_probs`, `mirostat`, `mirostat_tau`, `mirostat_eta` under their own names; `penalty_last_n→repeat_last_n`, `penalty_repeat→repeat_penalty`, `penalty_freq→frequency_penalty`, `penalty_present→presence_penalty` |
 
 - `vLLM` sends nothing beyond the base until its names are verified live; it spells at least one of them differently (`repetition_penalty`).
+
+**A sampler the user never moved is left to the server**
+
+- Forwarding a sampler overrides whatever the server was launched with. `pickSamplers` therefore omits a control whose stored value still equals the app's own default (`defaultCompletionParams`), so `--top-k 20` on the server survives a user who never opened the sheet.
+- `temperature`, `top_p` and `n_predict` are **exempt** and always sent. They shipped unconditionally before this rule, and the app's temperature default (0.7) is not the server's (OpenAI's is 1.0), so omitting one at the app default would change what runs rather than preserve it. The other 14 `SAMPLER_PARAMS` are conditional.
+- One function owns the rule: `valueLeftToServer(param)` returns the value that leaves a param to the server, or `undefined` for the three always sent. `pickSamplers` holds the comparison and the settings sheet asks the same function, so **the sheet and the wire cannot disagree** about what is omitted.
+- The comparison is exact, deliberately unlike the half-step tolerance used to match a server-reported default: a wider band would promise an omission that `pickSamplers` does not perform.
+- `seed` is the one conditional param whose omission is not observable as a value change — an untouched `-1` and an absent `seed` both mean "pick a random one".
+- The sheet's three states, so it never displays a number the server is not using: value **equals** the app default and the server's default is known → "Using server default: X", no reset; value **differs** → "Server default: X" with reset, and reset stores the **app** default (which omits the param again) rather than pinning the server's value; server default **unknown** → nothing.
 - The `/props` read map is **derived** from the send map: `PROPS_READ_NAMES = {...SERVER_PROFILES['llama.cpp'].sendNames, n_predict: 'n_predict'} satisfies Record<SamplerParam, string>`. `n_predict` is the one param whose read name is not its send name. The `satisfies` makes a param added to `SAMPLER_PARAMS` without a llama.cpp name a compile error on the read side, so send and read cannot drift; a cast anywhere in that expression defeats it.
 - Reasoning wire (each profile's `reasoningExtras`, merged by `bodyExtras`; samplers are emitted first, so a reasoning key wins a collision):
 
@@ -101,27 +109,21 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 - Unknown or strict servers receive no reasoning controls: omitting beats a 400. `temperature`, `top_p`, `max_completion_tokens` (from `n_predict`), `stop`, `tools`, `tool_choice`, `response_format` are sent for every type.
 - `chat_template_kwargs` is merged inside `bodyExtras`. The transport merges nothing, and a profile may never return a transport-owned key (`model`, `messages`, `stream`, `stop`, `tools`, `tool_choice`, `response_format`) — one parameterised test checks every type.
 
-**Probe tier (`/props`): three tiers, split by how long a fact stays true**
+**Probe (`/props`): one persisted record**
 
-| Tier | Type | Holds | Persisted |
-| --- | --- | --- | --- |
-| capability | `RemoteModelCaps` | `contextLength`, `supportsVision`, `supportsAudio` — facts that **gate** an action or an affordance | yes |
-| description | `RemoteModelProps` | `samplerDefaults`, `slotCount`, `chatTemplateCaps` — facts that **describe**, true for the life of a server process. Nothing here may gate | yes |
-| presence | `RemoteModelPresence` | `isSleeping`, with `probedUrl` and `at` | **no**: a hydrated "asleep" would be a claim about now that nobody checked |
+`RemoteModelCaps` holds what the probe learned about one model: `contextLength` and `supportsVision`, which **gate** an affordance, and `samplerDefaults`, which **describes**. Earlier rounds split these across three records by how long each fact stays true; the split cost a type, a resolver and a field-set table per tier and bought nothing, because every consumer read one tier. A volatile observation (is the model asleep, is it loaded) is not persisted here at all — #897 brings presence with the call site that reads it.
 
-- All three are keyed `${serverId}/${remoteModelId}` and stamped with `probedUrl`. Each carries a `tier` discriminant that is never read, so the three are mutually non-assignable and a volatile observation cannot be written where a persisted fact belongs.
-- Parse: `contextLength ← default_generation_settings.n_ctx ?? n_ctx`, only when finite and `> 0`. `supportsVision ← modalities.vision === true`, set only on a model-describing body (`model_path` non-empty and not `'none'`, or a context resolved); there, a missing `modalities` is a definite `false`. `supportsAudio` reads `modalities.audio` the same way.
+- Keyed `${serverId}/${remoteModelId}` and stamped with `probedUrl`.
+- Parse: `contextLength ← default_generation_settings.n_ctx ?? n_ctx`, only when finite and `> 0`. `supportsVision ← modalities.vision === true`, set only on a model-describing body (`model_path` non-empty and not `'none'`, or a context resolved); there, a missing `modalities` is a definite `false`.
 - `samplerDefaults` reads `default_generation_settings.params` (older builds: the object itself) through `PROPS_READ_NAMES`, which is the llama.cpp profile's send map plus one override (`n_predict` is reported under its own name and sent as `max_completion_tokens`). It is total over `SamplerParam`, so a new app parameter cannot be added without naming it here. `seed` is skipped: the server reports the live seed, which is not a default anyone should return to.
-- `chat_template_caps.supports_thinking` exists only on builds newer than b9976, so an absent key is unknown, never a definite `false`.
-- Sleep takes the **weaker** gate: it is read whenever the body is not the router placeholder (`role: 'router'`), because a sleeping child may report almost nothing else, and requiring a model-describing body would suppress the very observation the field exists for.
-- `lastObservedSleepState(serverId)` returns the newest observation across that server's models whose `probedUrl` still matches the server, so a url edit reads unknown. It never expires an observation; a consumer needing freshness bounds `at` itself.
-- `fetchServerProps` never throws: timeout, non-2xx (a 401 included) and malformed JSON all resolve `{}`. A failure is never evidence of absence.
+- `fetchServerProps` never throws: timeout, non-2xx (a 401 included) and malformed JSON all resolve `{}`. A failure is never evidence of absence. The non-2xx guard is pinned by a test that sends a **model-describing** body with a 503 — an error fixture that describes no model parses to `{}` anyway, so it cannot fail when the guard is deleted.
 - Non-downgrading write: `{}` writes nothing; a field the response did not resolve keeps its prior value; an entry probed against another url is replaced, not blended; an unchanged merge is not written.
 - The write re-checks the server's `url` / `serverType` against the pre-flight snapshot inside `runInAction` and discards on mismatch or removal. A merge carries a prior entry forward **field by field by name**, never by spreading it, so a field dropped from the schema stops being carried for the life of the entry.
-- An unchanged answer is not written: scalars compare with `===`, and nested `samplerDefaults` / `chatTemplateCaps` compare by content, so a repeat probe does not wake observers or re-persist the map.
-- Probes coalesce per `${serverId}/${remoteModelId}/${url}`: a second request for a key in flight awaits the first. The url is in the key because a probe issued before a server edit is asking a different backend. A settling probe removes only **its own** registration, so a late settle cannot evict the replacement a clear registered under the same key.
-- Bare `/props` is issued only when the scoped answer was unusable **and** `serverModels` for that server is exactly `[that model]`. An absent or empty list is unknown and does not pass.
+- An unchanged answer is not written: scalars compare with `===` and `samplerDefaults` compares by content, so a repeat probe does not wake observers or re-persist the map.
+- Probes are **not** coalesced. Two probes for the same server, model and url in one tick issue two requests; callers invoke the probe detached and the write is idempotent, so the cost is the extra request. The coalescing this replaced carried three ordering rules of its own and no demonstrated double-probe bug.
+- Bare `/props` is issued only when the scoped answer resolved **nothing** and `serverModels` for that server is exactly `[that model]`. An absent or empty list is unknown and does not pass. One record means a scoped answer carrying only `samplerDefaults` counts as resolved, so it no longer triggers a bare retry and `contextLength` can stay unknown where the three-tier version filled it in.
 - Triggers are activation and a foreground with no entry valid for the binding (skipped once the server url has moved off the binding). A valid entry is never re-fetched, so a good answer cannot be clobbered back to a placeholder. `fetchModelsForServer` issues no `/props`.
+- No migration: entries persisted under the old three-record schema are not read. Stored sampler defaults are lost once and re-probed, which matches how an entry with no `probedUrl` is already treated.
 
 **List tier and precedence**
 
@@ -133,8 +135,8 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 
 **Invalidation**
 
-- `removeServer` drops `serverModels`, `userSelectedModels`, `remoteReasoning`, `remoteCaps`, `remoteProps`, `remotePresence` (prefix `dropServerEntries`) and the Keychain key.
-- An `updateServer` that changes `url` or `serverType` drops all three probe maps and `serverModels`, but keeps `remoteReasoning`, which holds user declarations. The type comparison normalises **both** sides: a row written before the field existed carries no key, which already means `'unknown'`, and the server sheet always sends `serverType`, so comparing the raw values made every unchanged save on such a row look like a type switch and discard what the server had reported. The list must go too: the sheet never refetches after a save, so a stale one-entry list would pass the bare-retry gate against a new multi-model server.
+- `removeServer` drops `serverModels`, `userSelectedModels`, `remoteReasoning`, `remoteCaps` (prefix `dropServerEntries`) and the Keychain key.
+- An `updateServer` that changes `url` or `serverType` drops `remoteCaps` and `serverModels`, but keeps `remoteReasoning`, which holds user declarations. The type comparison normalises **both** sides: a row written before the field existed carries no key, which already means `'unknown'`, and the server sheet always sends `serverType`, so comparing the raw values made every unchanged save on such a row look like a type switch and discard what the server had reported. The list must go too: the sheet never refetches after a save, so a stale one-entry list would pass the bare-retry gate against a new multi-model server.
 
 ## Traps and decisions
 
