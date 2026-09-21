@@ -8,8 +8,8 @@ This doc covers how the preset model list comes from device rules, how capabilit
 
 | Path | Role |
 | --- | --- |
-| `src/services/deviceRules/` | `parse.ts` (untrusted-JSON guard), `classify.ts` (device to tier), `signals.ts` (`readDeviceSignals`), `rules.ts` (`fetchRules`), `rulesUrls.ts` (jsDelivr URL) |
-| `src/store/bundledDeviceRules/rules.{android,ios}.json` | committed offline floor |
+| `src/services/deviceRules/` | `parse.ts` (untrusted-JSON guard), `classify.ts` (device to tier), `signals.ts` (`readDeviceSignals`), `rules.ts` (`fetchRules`), `rulesUrls.ts` (jsDelivr `rules.<platform>.v2.json`), `appVersion.ts` (`toCoreVersion`, `passesMinAppVersion`) |
+| `src/store/bundledDeviceRules/rules.{android,ios}.json` | committed offline floor (schema 2.0.0, ungated) |
 | `src/store/ModelStore.ts` | `initializeStore`, `resolvePresetModels` / `candidateToPair` / `draftToStub`, `reconcilePresets`, `initContext`, `proceedWithInitialization`, `getEffectiveContextInitParams`, `resolveDraftConfig`, `enter/exitBenchmarkMode` |
 | `src/store/draftResolution.ts` | pure draft-mode resolution: `resolveDraftCandidate`, `effectiveDraftModeOf`, `draftCacheDefaults` |
 | `src/utils/mtp.ts` | `isMTPCapable`, `nEmbdOut`, `isDraftOnlyModel`, `probeRemoteMTPCapability` |
@@ -33,9 +33,13 @@ Load path:
 
 ## Contracts and invariants
 
-- **The floor is applied before any network.** A hanging or failed fetch never empties a fresh install. `fetchRules` returns `null` (keep the floor) on network error, non-2xx, parse throw, platform mismatch, or zero models across tiers.
+- **The floor is applied before any network.** A hanging or failed fetch never empties a fresh install. `fetchRules` returns `null` (keep the floor) on network error, non-2xx, parse throw (including schema major ≠ 2), platform mismatch, or zero models across tiers (including every candidate gated out).
 - **Parse is the security boundary, not the host check.** Untrusted CDN JSON drives download paths and, through the URL, the HF token. `parse.ts` requires `hf_repo` to be exactly two non-empty parts, `isSafePathSegment` on author, repo and filename, and `.gguf`. Only then does it derive the URL from a hard-coded `huggingface.co` template, so `isHuggingFaceUrl` on it is tautological. `DownloadManager` separately sends the Bearer token only to `huggingface.co`.
 - **A bad `mmproj` drops the whole candidate; a bad `draft` drops only the draft.** The `mmproj.hf_repo` must equal `hf_repo` and the filename must match `MMProjRegex`, because `hfAsModel` pairs projectors as same-repo siblings. Drafts are usually cross-repo, so `parseDraft` skips those two checks but keeps the path guard.
+- **Only schema major 2 parses.** `parseDeviceRules` throws unless `schema_version` is `x.y.z` (optional `-`/`+` suffix) with major 2, so an off-major doc ends at the floor. The app fetches only `rules.<platform>.v2.json`, never the v1 file, which stays frozen for pre-v2 clients whose parser ignores unknown fields.
+- **`min_app_version` gates fail closed, with the mmproj/draft asymmetry.** The field is optional on a candidate, its `mmproj` and its `draft`, and must be strict `x.y.z`. Absent passes; unmet or malformed (including `null`) drops the candidate for a candidate or `mmproj` gate, and only the draft for a `draft` gate. An `mmproj` gate counts only when `multimodal: true`.
+- **The app version is injected, and only the parser gates.** `parseDeviceRules(raw, appVersion)` and `fetchRules(appVersion, platform)` require it; `resolvePresets` and `upgradeToFetchedRules` pass `DeviceInfo.getVersion()`. The suffix after `-` or `+` is stripped; an unparseable version fails every present gate. Consumers downstream of parse never see the field.
+- **The bundled floor carries no `min_app_version`,** so it parses identically under any app version, unknown included (`bundledRules.test.ts`).
 - **Model id is `author/repo/filename`.** Rule `model` is a label. Dedupe and reconcile key on the full id, which spans origins: a downloaded legacy `origin: PRESET` suppresses the matching `origin: HF` stub, so there is no double card and no re-download. Keying on `{repo, filename}` would merge different authors' files.
 - **`reconcilePresets` prunes only non-downloaded `isRulePreset` stubs** absent from the fresh set. It never prunes downloaded, user-added HF, or LOCAL models. The `MODEL_LIST_VERSION` bump is skipped when presets resolve empty, so a transient signal failure retries next launch.
 - **Rule JSON is thin.** `oid`, `lfs` and template tokens are not stored. The URL is deterministic, so downloads never early-return. `checkModelFileIntegrity` sees the missing `lfs` on an `origin: HF` model and calls `fetchAndUpdateModelFileDetails`. Templates come from the GGUF or defaults.
