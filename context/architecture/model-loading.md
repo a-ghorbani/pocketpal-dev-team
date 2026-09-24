@@ -19,6 +19,7 @@ This doc covers how the preset model list comes from device rules, how capabilit
 | `src/utils/index.ts` | `hfAsModel` (HF file to `Model`) |
 | `src/utils/contextInitParamsVersions.ts` | persisted `contextInitParams` migrations |
 | `src/components/ErrorSnackbar/`, `src/components/ModelErrorReportSheet/` | load-failure surface and **Report** |
+| `android/app/src/main/java/com/pocketpalai/MainApplication.kt` | process env for ggml (`GGML_OPENCL_ADRENO_USE_LARGE_BUFFER`), set before `SoLoader.init` |
 
 ## How it works
 
@@ -56,11 +57,13 @@ Load path:
 - **Mode defaults never override the user.** `getEffectiveContextInitParams` applies them as `??` fallbacks: paired uses `flash_attn_type 'off'` and draft GPU layers 99; embedded uses `'auto'`. It also coerces `spec_draft_n_max` to at least 1, because llama.rn throws on ≤0.
 - **Draft cache type defaults to f16**, except q8_0 when the mode is embedded and `flash_attn_type` is explicitly `'on'` (`draftCacheDefaults`). A quantized draft V is clamped to f16 whenever flash attention is `'off'`.
 - **Single writers for draft state.** `speculativeEnabled`, `selectedDraftModelId` and `spec_draft_*` are written only by the `modelStore.set*` setters. The `2.2 → 2.3` params migration sets `speculativeEnabled: false`.
+- **Every ggml env var the app sets is one the vendored ggml `getenv`s.** A name nothing reads is a silent no-op that no test catches; the upgrade re-check is in `release.md`, Verification.
+- **llama.rn is the app's only ggml-bearing native dependency.** Its ggml is unprefixed, so a second ggml copy would collide at link or bind time. On iOS, `rnllama.framework` hides `ggml_*` / `gguf_*`, so `ios/PocketPal/AppIntents/LlamaContextWrapper.mm` may reference only exported symbols (`common_*`, `llama_*`, `rnllama::`), header inlines included.
 - **A paired draft is resident alongside the target and projector.** The memory check sums all three, with the draft's weights plus its KV cache. `_downloadDraftModelIfNeeded` is best-effort and uses the same draft-selection order.
 
 ## Traps and decisions
 
-- **A width mismatch is an uncatchable SIGABRT.** `LM_GGML_ASSERT` fires in `init_mtp`. The JS width check is the only guard, so an unknown width means not paired. Sending `spec_type` to a non-MTP target is a native error, not a no-op, which is why the app resolves to off before emitting.
+- **A width mismatch is an uncatchable SIGABRT.** `GGML_ASSERT` fires in `init_mtp`. The JS width check is the only guard, so an unknown width means not paired. Sending `spec_type` to a non-MTP target is a native error, not a no-op, which is why the app resolves to off before emitting.
 - **MTP capability reads cached `ggufMetadata.nextn_predict_layers`,** and width reads cached `n_embd` / `embedding_length_out`. A model whose metadata is missing resolves as not capable or not paired. For example, e2e pre-seeded files skip metadata fetch, so pairing silently degrades there. A converter that omits the KV false-negatives safely to off.
 - **`auto` flash attention resolves per backend after init params are committed.** On Android CPU it resolves off, and llama.cpp refuses a quantized V cache without flash attention, so q8_0-with-`auto` (llama.rn's example) is Apple-safe only.
 - **The pre-download probe is tri-state (`capable | not-capable | unknown`) and uses an in-repo reader.** `@huggingface/gguf` needed `TextDecoder`, which Hermes lacks: it threw on device while jest stayed green, and a `catch → false` hid that. `ggufHeader.ts` seeks past values, hand-decodes short keys, and throws to `unknown` on any anomaly. The HF API's `expand[]=gguf` omits the arch-namespaced KVs and tensor names this probe needs.
@@ -70,7 +73,7 @@ Load path:
 - **The classifier is pure and total.** Any unclassifiable device gets `low`.
 - **Remote-attached images are inlined as `data:` URIs** in `openai.ts`, because a server cannot read device paths.
 - **Single-session Hexagon is deliberate.** Requesting several `HTP` sessions engages the multi-session pipeline, whose compute buffers amplify memory. Registry discovery does not prove which sessions execute; the native init arguments and model/compute allocation logs do. CPU, OpenCL and every iOS selection skip the discovery call.
-- **llama.rn is the published npm pin in `package.json`, not a git ref.** Speculative needs ≥ 0.12.5 (MTP) and ≥ 0.12.7 (speculative-correct native timings). iOS vendors the prebuilt `rnllama.xcframework`; Android compiles from source, which is what silently dropped the Hexagon backend once. The build contract lives in `release.md`.
+- **llama.rn is the published npm pin in `package.json`, not a git ref.** Speculative needs ≥ 0.12.5 (MTP) and ≥ 0.12.7 (speculative-correct native timings); ≥ 0.13.0-rc.5 is unprefixed ggml. iOS vendors the prebuilt `rnllama.xcframework`; Android compiles from source, which is what silently dropped the Hexagon backend once. The build contract lives in `release.md`.
 
 ## Verification
 

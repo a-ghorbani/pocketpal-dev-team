@@ -18,6 +18,7 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 | `android/fastlane/Fastfile` | `build_android_release` and `upload_android_alpha` (explicit `aab:`). |
 | `android/app/build.gradle`, `android/gradle.properties` | ABI filters, flavors; the root properties file must not carry `rnllamaBuildFromSource`. |
 | `node_modules/llama.rn/android/` | Upstream: its own `gradle.properties` (`rnllamaBuildFromSource=true`), `build.gradle` (mode, variants, `syncRNLlamaHtpAssets`), CMake variant list, and `RNLlama.java` (the load ladder, `HTP_LIBS`, `isHexagonSupported`). |
+| `node_modules/llama.rn/{cmake,vendor}/` | Upstream: `cmake/rnllama-sources.cmake` (source lists) and `vendor/llama.cpp`, unrenamed upstream llama.cpp pinned in `vendor/VERSIONS`. |
 
 ## How it works
 
@@ -33,10 +34,11 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 - **The root `android/gradle.properties` is not a lever.** llama.rn's own `gradle.properties` wins for its subproject (measured on Gradle 9.0.0). Only `ORG_GRADLE_PROJECT_…`, `-P`, or a `$GRADLE_USER_HOME/gradle.properties` override it, and the last is live because `release.yml` points `GRADLE_USER_HOME` at `runner.temp`. Build mode is always declared in the job, never inferred.
 - **Every way of losing the Hexagon backend is silent.** A missing SDK directory prints one line, a missing `libcdsprpc.so` is a CMake warning, and missing DSP sources skip the sync. The build succeeds each time. That shipped once (issue #858), which is why the check sits on the artifact.
 - **Backend presence is read from `.dynsym`, never `strings` or file size.** Both give false results. The #858 APK had all 12 libraries and all 4 DSP assets, so only the symbol rule would have failed it.
+- **Symbol names match exactly.** From llama.rn 0.13.0-rc.5, ggml symbols are unprefixed, and each older `lm_` name ends with its successor, so a suffix or substring reader would pass an old artifact. The gate's fixtures keep the `lm_` names as defined noise for that reason.
 - **Local builds are a coin toss.** `build.gradle` defaults `HEXAGON_SDK_ROOT` to `~/.hexagon-sdk/6.4.0.2`, so the backend is included only if that directory exists. Run the gate locally to find out. A macOS host can build it: nothing on the Android path invokes `hexagon-clang`.
 - **The gate proves presence, not engagement.** `isHexagonSupported()` gates the backend on SoC hints at runtime, and no emulator has a DSP.
 - **The escape hatch is `-PrnllamaBuildFromSource=false`**, not the default. The JNI wrapper would link against a prebuilt from another snapshot, and struct-layout drift wouldn't surface.
-- **Consume llama.rn npm releases, not git refs.** A git install lacks `bin/`, `htp/v73`, `jniLibs` and `lib/`.
+- **Consume llama.rn npm releases, not git refs.** A git install lacks `bin/`, `jniLibs`, `lib/`, and the QAIC `vendor/llama.cpp/ggml/src/ggml-hexagon/htp/v73` artifacts.
 
 **The variant ladder**
 - **Rung 6 (`rnllama_v8`) is not a duplicate of the generic `rnllama`.** Non-generic arches add optimised ARM sources; dropping rung 6 silently demotes pre-fp16 devices to portable C.
@@ -62,5 +64,7 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 
 - `yarn test scripts/__tests__/` after `yarn install` (the ladder and SDK tests read `node_modules/llama.rn`).
 - Local gate: `node scripts/verify-android-payload.js --apk <apk> [--aab <aab>]`. A sound artifact shows 12 arm64 + 4 x86_64 `librnllama*` libraries, 4 assets, and both Hexagon symbols `present`. A backend-less build fails only those two symbols.
-- On a llama.rn upgrade, re-check the println wording, the CMake call sites, `HTP_LIBS`, and the SDK paths CMake references.
+- On a llama.rn upgrade, re-check the println wording, the CMake call sites, `HTP_LIBS`, and the SDK paths CMake references. Also re-check:
+  - the manifest's symbol names against the vendored header: `grep -n ggml_backend_hexagon_reg node_modules/llama.rn/vendor/llama.cpp/ggml/include/ggml-hexagon.h`;
+  - every env var `MainApplication.kt` sets against the vendored ggml's `getenv` names (a name nothing reads is a silent no-op): `for v in $(grep -o 'setenv("[A-Z_]*"' android/app/src/main/java/com/pocketpalai/MainApplication.kt | cut -d'"' -f2); do grep -rq "getenv(\"$v\")" node_modules/llama.rn/vendor/llama.cpp/ggml/src && echo "ok $v" || echo "DEAD $v"; done`.
 - `release.yml` publishes and can't be rehearsed. Check lane, `aab:` and step-order changes by reading, then watch the next release. To see the backend engage, run an `e2e-tests.yml` APK on a Snapdragon 8-series device.
