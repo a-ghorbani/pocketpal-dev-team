@@ -24,7 +24,8 @@ What a Pal carries for tool use (`pact`, `greeting`), what a Talent is (engine p
 | `src/utils/systemPromptResolver.ts` | `assembleMessages`: one leading system message |
 | `src/components/TalentSurface/TalentSurface.tsx` | per-call render dispatch |
 | `src/components/PalsSheets/PalSheet.tsx`, `TalentSection.tsx`, `GreetingSection/` | in-app Pal editor |
-| `src/database/models/LocalPal.ts`, `src/repositories/PalRepository.ts` | `local_pals.pact` / `greeting` JSON columns |
+| `src/database/models/LocalPal.ts`, `src/repositories/PalRepository.ts` | `local_pals.pact` / `greeting` JSON columns; `getPalByPalshubId` |
+| `src/store/PalStore.ts` | the PalsHub install path: `insertPalsHubPalOnce`, `downloadPalsHubPal`, `installOwnedPal`, `applyOwnedPalContent` |
 | `src/utils/exportUtils.ts`, `importUtils.ts` | Pal export/import round-trip of `pact` and `greeting` |
 
 ## How it works
@@ -58,6 +59,9 @@ The run dispatches through `talentLookup` with `allowedTalentNames` from `pact.t
 - **The search token ceiling is charged against the rendered bullet.** `budgetHits` takes the model-facing renderer, because counting raw fields under-counts markdown and indentation and leaks past the cap. Engines read their own `recommendedContextTokens` as that ceiling.
 - **Outside engines, `recommendedContextTokens` is read only by `usePalLoadHint` and `BannerRow.deriveHeavyTalentName`;** it never moves a banner threshold.
 - **`web_search` returns `{type:'search'}`,** with structured `results[]` for `WebSearchTalentUI` and the wrapped menu as `summary`. The UI never parses model-facing text.
+- **PalsHub install path.** Every PalsHub Pal enters `local_pals` through `PalStore.insertPalsHubPalOnce`: a per-`palshub_id` promise chain that checks the DB (not the in-memory `pals`) and returns an existing row instead of inserting a second one. `downloadPalsHubPal` (library, with its ownership check) and `installOwnedPal` (store purchases, no ownership check, `in-app-purchase.md`) both use it; `PalStore.ready` is the `initialize()` promise that installs wait on.
+- **A store purchase never writes an empty prompt.** `installOwnedPal` throws without `system_prompt`, and `applyOwnedPalContent` skips the prompt fields when the new content has none.
+- **A creator update never overwrites the user's prompt edit.** `applyOwnedPalContent` rewrites name, description, thumbnail, pact, greeting, default model and generation settings, but `systemPrompt` / `originalSystemPrompt` / `parameterSchema` only when the local prompt's hash (`promptHash`: `hashCode:length`) equals the last applied hash (or already equals the new prompt). User `parameters` survive for keys the new schema keeps.
 - **The editor always writes `necessity: 'required'`** (`PalSheet.onSubmit`). `'optional'` arrives only through import or PalsHub (wire `required` maps strictly, `=== true`, in `PalStore.createLocalPalFromPalsHub`). Nothing enforces `necessity`, so a future gate must default to not blocking. `onSubmit` always passes `pact` (possibly `{talents: []}`) because `PalRepository` skips `undefined` updates.
 
 ## Traps and decisions
@@ -72,10 +76,11 @@ The run dispatches through `talentLookup` with `allowedTalentNames` from `pact.t
 - **The greeting is UI-only and gated on a loaded model.** It is never persisted or sent to the model. `ChatView` renders the greeting bubble and suggested prompts only when `modelStore.activeModelId` is set.
 - **`TalentUI.renderPending` is deprecated and never called.** `PendingIndicator` owns in-flight UX. New UIs must not implement it.
 - **Two registries rather than one map,** so text-only talents (`calculate`, `datetime`, `read_url`) need no UI plumbing and engine consumers never load the UI tree.
+- **The prompt hash, not `isSystemPromptChanged`, detects user edits.** No editor path sets that flag, so it cannot tell a user's edit from the creator's text.
 - **Edits to `pact` apply on the next `resolveCompletionSettings`.** An in-flight run keeps the `tools` / markers it captured at submit.
 
 ## Verification
 
-- Unit: `src/services/talents/__tests__/` (engines, registries, allowlist, untrusted wrapping, fragments), `src/services/search/__tests__/` and `providers/__tests__/`, `src/components/TalentSurface/__tests__/`, `src/components/PalsSheets/__tests__/`, `src/utils/__tests__/systemPromptResolver.test.ts`, `src/hooks/__tests__/useChatSession.test.ts` (single-system-message assertions).
+- Unit: `src/store/__tests__/PalStore.install.test.ts` (one row for concurrent installs, no ownership check, prompt-hash rule), `src/services/talents/__tests__/` (engines, registries, allowlist, untrusted wrapping, fragments), `src/services/search/__tests__/` and `providers/__tests__/`, `src/components/TalentSurface/__tests__/`, `src/components/PalsSheets/__tests__/`, `src/utils/__tests__/systemPromptResolver.test.ts`, `src/hooks/__tests__/useChatSession.test.ts` (single-system-message assertions).
 - e2e: `e2e/specs/features/talent-tool-use.spec.ts` (`render_html` end to end) and `e2e/specs/features/pal-greeting.spec.ts`.
 - By hand: enable `web_search` on a Pal without consenting in Settings. The call must return an error result, not a fetch.

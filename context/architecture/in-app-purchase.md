@@ -1,0 +1,77 @@
+# In-App Purchase
+
+## Purpose
+
+Buying a paid PalsHub Pal through the platform store (StoreKit 2 on iOS, Google Play Billing on Android), turning the store transaction into an installed Pal, and keeping that ownership correct across crashes, restarts, refunds, creator edits, restore and sign-in. Not covered: what a Pal is and how a PalsHub Pal becomes a local Pal (`pals-and-talents.md`, Contracts and invariants, "PalsHub install path"), the Pals grid (`pals-screen.md`), model selection (`model-loading.md`), and the account library sync (`SyncService`).
+
+## Code map
+
+| Path | Role |
+| --- | --- |
+| `src/store/PurchaseStore.ts` | Ledger, availability, product cache, the transaction pipeline, recovery, refresh, restore, link. Sole writer of all purchase state |
+| `src/services/iap/StorePort.ts` | The store interface (`StoreTransaction`, `PurchaseOutcome`); type only |
+| `src/services/iap/NativeStore.ts` | Adapter over `react-native-iap`; the only file importing the library |
+| `src/services/iap/storeOutcomes.ts` | Library error code → `PurchaseOutcome`, including the availability-downgrade codes |
+| `src/services/iap/iapApi.ts`, `iapWire.ts` | HTTP for verify / refresh / link / binding with request chunking; `iapWire` is the one parse point for IAP wire names |
+| `src/services/iap/bindingSource.ts` | `getBinding()`: account binding values for a signed-in purchase, `null` after 2 s |
+| `src/services/palshub/apiBase.ts` | `getApiBase()` (e2e-only override), `clientHeaders()` |
+| `src/services/palshub/palEvents.ts` | Fire-and-forget funnel events |
+| `src/components/PalsHub/PalPurchaseFooter/` | The sheet footer: Buy, every purchase phase, Owned routing, sign-in line and link prompt |
+| `src/components/PalsHub/PalModelStep/` | Post-purchase model offer (`modelOffer.ts`) and Start chat |
+| `src/screens/PalsScreen/myPals.ts`, `SquarePalCard/` | One card per PalsHub id; Pending / Unlocking badges |
+| `src/screens/SettingsScreen/PurchasesCard.tsx` | Settings › Purchases |
+| `src/__automation__/fakeStore.ts`, `adapters/IapAdapter.tsx` | The e2e `StorePort` and its Android command surface |
+| `App.tsx` | `purchaseStore.start()`, with the FakeStore under `__E2E__` |
+
+## How it works
+
+`App.tsx` calls `purchaseStore.start()`: it subscribes the store's transaction listener and an `AppState → active` handler, waits for `palStore.ready`, then runs `recover()`. Recovery re-inits billing (availability), drains the grant queue, drives every store transaction whose record is still open through `processTransaction`, drops stale pending records, then calls refresh.
+
+**Buy** (footer): `buy_tap` event → binding when signed in → `store.purchase` → outcome. `purchased` goes to `processTransaction`; `pending` writes `pending_payment`; `already_owned` runs `installOwned` (current entitlements, no sync); `cancelled` / `error` send their event and close the sheet.
+
+**processTransaction** is serialized per product and branches on the record's current status. Open (missing, `pending_payment`, `unlocking`): write `unlocking`, verify, then write the outcome and, on iOS, finish. Settled records never re-open; they are re-verified only when the caller asks (`settledVerify`: listener, `installOwned`, restore), for refunds and content updates. A grant is installed by `drainQueue` through `palStore.installOwnedPal`, which moves the record to `active`.
+
+```
+(none) ─tx pending→ pending_payment ─tx purchased→ unlocking ─verify active→ granted ─install→ active
+unlocking ─verify fail / unavailable→ unlocking (backoff)      ─pending→ pending_payment
+          ─unfulfillable→ unfulfillable   ─revoked|removed→ removed (tombstone)   ─invalid→ record deleted
+active ─verify/refresh revoked|removed→ removed        removed ─verify active→ granted (revived)
+```
+
+The footer phase is `flowFor(palId)`: the record status plus transient `paying`, `ready` (active reached in this sheet session), `invalid` and `restore_needed`.
+
+## Contracts and invariants
+
+- **One writer.** `PurchaseStore` alone writes the ledger (`purchase-ledger` in AsyncStorage, `{version: 1, records}`), availability and the product cache. Writes are full-document, awaited, and serialized through one queue.
+- **Status only moves forward.** No event returns a settled record (`granted | active | unfulfillable | removed`) to an open one, and a failed or `unavailable` verify never changes a settled record.
+- **Persist before finish (iOS).** The outcome (`granted`, `unfulfillable`, tombstone, or the `invalid` delete) is written before `store.finish`. Android never finishes, acknowledges or consumes: the server acknowledges, and `NativeStore.finish` is a no-op there.
+- **Only Buy starts a payment.** Recovery, restore, `installOwned` and already-owned never call `store.purchase`.
+- **Only an explicit server `revoked | removed` removes ownership**, from a verify or a refresh that parsed. A failed refresh, a Pal missing from the store list, sign-out or a library change removes nothing. Removal keeps the local Pal when the signed-in library lists it.
+- **Legacy installs are untouchable.** A local paid Pal with `is_owned` and no ledger record (a web purchase) is owned, and the IAP flow never refreshes, mutates or deletes it.
+- **Buy renders only when** billing is `ready`, `iap_enabled[Platform.OS]` is true, the store returned a product in this storefront, and the Pal is not owned and has no ledger record of any status. Otherwise nothing renders: no disabled or error variant. The price string comes only from the store.
+- **Wire names live in `iapWire.ts`.** An unparseable body is a failed verify, never a grant. An `active` result without a system prompt is treated as failed. `unavailable` is retryable; `invalid` is terminal for that transaction this session (`invalidTxIds`, skipped by `recover`).
+- **Request limits.** Verify sends at most 10 transactions (Android) or 50 (iOS) per request and refresh at most 200 `known` entries; `iapApi` chunks and merges. Each refresh chunk carries the full transaction list.
+- **Account-free calls carry no `Authorization`:** verify, refresh and events. Link and binding do. `X-IAP-Capable: 1` and `X-Client-Platform` always travel together, on every PalsHub request (`apiRequest`, `iapApi`, `palEvents`).
+- **Tokens, JWS and binding values are never persisted or logged.** The ledger stores transaction ids and support codes only; proofs are re-read from the store when needed. Support codes are shown exactly as the server sends them.
+- **Automatic paths never prompt for an Apple ID.** `recover` and `installOwned` use current entitlements; only `restore()` calls `store.sync()`.
+- **`FakeStore` and the API-base override exist only under `__E2E__`.** Their markers (`IAP_FAKE_STORE`, `IAP_API_BASE_OVERRIDE`) are in the `ci.yml` prod-bundle grep.
+
+## Traps and decisions
+
+- **The library is event-based.** `requestPurchase` resolves before the outcome; `NativeStore.purchase` waits for the first matching update or error event. The same purchase also reaches the global listener, so every purchase is processed twice; per-product serialization makes the second a settled no-op (it may re-verify, which is idempotent).
+- **iOS already-owned is inferred.** StoreKit returns success with the original transaction; a transaction dated more than 60 s before the request is read as `already_owned`. A misread is harmless: `installOwned` re-verifies through the same pipeline.
+- **One ledger in AsyncStorage, not WatermelonDB tables.** `mobx-persist-store` writes cannot be awaited, and the persist-before-finish rule needs an awaited write.
+- **Tombstones, not deletions.** The store keeps listing a refunded product; a `removed` record stops `recover` re-driving it and hides Buy until a later explicit `active` verify revives it.
+- **Stale pending differs by platform.** Play lists pending purchases, so Android drops a `pending_payment` record at once once a successful query no longer lists it. A declined Ask to Buy emits nothing on iOS, so the record ages out after 72 h, or at once on Restore.
+- **Refresh never installs.** It updates only installed Pals with an `active` record, so a Pal the user deleted stays deleted until they tap Owned or Restore.
+- **Closing the sheet never cancels a paid flow.** State is in the ledger; reopening shows the current phase.
+- **Availability downgrade is per session.** A store refusal (`developer-error`, `billing-unavailable`, `item-unavailable`, …) sets `unavailable` until relaunch. A sideloaded build Play refuses shows no Buy rather than errors.
+- **Binding never blocks a purchase.** A slow or failing binding request goes ahead unbound after 2 s; a signed-in purchase links silently after `active`, and a signed-out buyer gets one dismissable sign-in prompt that links on sign-in (`requestLink` + an `isAuthenticated` reaction). A 409 keeps the Pal and shows "linked to another account".
+- **Retries are in memory.** Backoff is 2, 4, 8, 16, 32 s, then every 60 s while foregrounded, paused in the background. After a restart, `recover` re-drives open records from the store's own list, and Retry runs at once.
+- **Android e2e cannot use the deep-link host.** The Android Linking listener routes only the benchmark URL, so specs drive the FakeStore through `IapAdapter`; iOS uses `pocketpal://iap?cmd=…`. The FakeStore persists its state (including the API base) under `e2e.fakeStore`, and `start()` awaits `fakeStore.restore()` before the first `init()`.
+
+## Verification
+
+- Jest: `src/store/__tests__/PurchaseStore.{pipeline,recover,link}.test.ts` (with `purchaseTestHarness.ts`; state-machine cells, crash after each awaited write, write-then-finish order, Android never finishing), `src/services/iap/__tests__/`, `src/__automation__/__tests__/fakeStore.test.ts`, `src/store/__tests__/PalStore.install.test.ts`, `PalPurchaseFooter`, `PalModelStep`, `PurchasesCard`, `myPals` tests.
+- e2e: `e2e/specs/features/iap-{purchase,recovery,restore}.spec.ts` against the FakeStore and `e2e/helpers/iapMockServer.ts` (`adb reverse tcp:8787` on Android); every spec asserts the mock's traffic (headers, no auth on account-free calls, event bodies). Frozen testIDs: `buy-button`, `owned-button`, `purchase-retry-button`, `purchase-{pending,unlocking,ready,unfulfillable,invalid}`, `purchase-link-prompt`, `model-step-start-chat`, `pal-badge-{pending,unlocking}`, `restore-purchases-row`, `purchases-card`, `settings-{restore,link}-purchases`, `iap-command-{input,result}`.
+- By hand: a real sandbox purchase needs the deployed server; on a device without Play services, a paid Pal shows no Buy, no restore row and no error.

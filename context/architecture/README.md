@@ -20,7 +20,7 @@ One file per **flow**, bounded by a single user-facing concept. Per-component is
 | `model-loading.md` | preset list from device rules, GGUF metadata and caps, speculative drafts, Hexagon device selection, load errors | `src/services/deviceRules/`, `ModelStore`, `store/draftResolution.ts`, `utils/{mtp,ggufHeader,modelCaps,deviceSelection}.ts` |
 | `pals-and-talents.md` | what a Pal and a Talent are; tool opt-in, search grounding, execution boundary | `src/services/talents/`, `src/services/search/`, `ChatSessionStore.resolveCompletionSettings`, `systemPromptResolver`, `TalentSurface` |
 | `custom-tools.md` | user-authored HTTP tools: definition, request encoding, response pipeline, secrets, manager and editor | `src/services/customTools/`, `CustomToolStore`, `CustomToolsScreen`, `CustomToolSheet`, `docs/custom-tools/` |
-| `palshub-checkout.md` | buying a premium PalsHub Pal in-app; ownership confirmation | `CheckoutFlowStore`, `src/services/palshub/`, `NativeAuthSession` / `NativeExternalContentLink` specs and native modules |
+| `in-app-purchase.md` | buying a paid PalsHub Pal through StoreKit 2 / Play Billing; ledger, recovery, refresh, restore, link | `PurchaseStore`, `src/services/iap/`, `StorePort` |
 | `explore-tab.md` | Explore tab: PalsHub discovery and `[Pals \| Models]` sub-tabs (**`redesign/phase-3` only**) | `ExploreScreen`, `ExplorePalsPanel`, `PalDetailSheet` |
 | `pals-screen.md` | Pals screen grid: width-driven column count, shared row chunking, card content sizing, testIDs e2e depends on | `PalsScreen`, `palGridLayout`, `PalGridRow`, `SquarePalCard` |
 | `app-shell.md` | root providers, onboarding switch, Drawer and sidebar, global hosts | `App.tsx` (`SwitchPoint`, Drawer), `SidebarContent`, `HeaderLeft`, `ROUTES` |

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Covers how the Pals screen lays out pal cards: the column count derived from the live window width, the row chunking both render paths share, and the card's content sizing. What a Pal is and how it reaches a chat belongs to `pals-and-talents.md`; buying a premium pal to `palshub-checkout.md`; the redesign branch's replacement surface to `explore-tab.md`.
+Covers how the Pals screen lays out pal cards: the column count derived from the live window width, the row chunking both render paths share, and the card's content sizing. What a Pal is and how it reaches a chat belongs to `pals-and-talents.md`; buying a paid pal to `in-app-purchase.md`; the redesign branch's replacement surface to `explore-tab.md`.
 
 ## Code map
 
@@ -13,7 +13,8 @@ Covers how the Pals screen lays out pal cards: the column count derived from the
 | `src/screens/PalsScreen/components/PalGridRow/` | One row: fixed-width cells with `GAP` between them, one card per cell |
 | `src/screens/PalsScreen/components/SquarePalCard/` | The card. Fills its cell, sizes to its content, keeps its footer at the bottom |
 | `src/screens/PalsScreen/styles.ts` | Screen and list-container styles. Holds no row style |
-| `e2e/pages/PalPurchasePage.ts` | e2e consumer of the card testID |
+| `src/screens/PalsScreen/myPals.ts` | `myPals()`: the owned sections' union, one card per PalsHub id |
+| `e2e/pages/PalBuyPage.ts` | e2e consumer of the card testID |
 
 ## How it works
 
@@ -32,7 +33,9 @@ Both paths pass their items through `chunkIntoRows` and render each chunk with `
 - **The footer sits on the card's bottom edge because of `marginTop: 'auto'`.** `content`'s `justifyContent: 'space-between'` pins it only while the card is content-height; once the card stretches, that rule spreads the slack across `header`, `middleContent` and `footer`, floating a short description away from the title. The auto margin holds the outcome at any card height.
 - **Row keys are positional and id-derived.** The row's start index prefixes the joined item ids, so uniqueness is structural and does not rest on ids being unique. Rows below an insert or delete are re-indexed and remount: inherent to positional keys, not a defect.
 - **Text is limited by `numberOfLines` only** — two lines, one when the model warning shows. No character count determines what the user sees, and nothing is ever appended to signal a cut; no display branch carries a character bound at all, non-visible ones included, since `MAX_COLUMNS` clamps the column count and not the card width, so no constant can be shown to sit outside what the card can render. And no fixed height on a container that holds text.
-- **testIDs are frozen**: `local-pal-card-<id>` and `palshub-pal-card-<id>` on the card's pressable, `pals-flat-list` on the `FlatList`. e2e resolves `palshub-pal-card-<id>`.
+- **testIDs are frozen**: `local-pal-card-<id>` and `palshub-pal-card-<id>` on the card's pressable, `pals-flat-list` on the `FlatList`. e2e resolves `palshub-pal-card-<id>`. Additive: `pal-badge-pending` / `pal-badge-unlocking` on the card, `restore-purchases-row` as the list footer (both render paths) while billing is `ready`.
+- **Owned sections are one card per PalsHub id.** `myPals()` unions installed local Pals, purchase-ledger records (except `unfulfillable` and `removed`) and, when signed in, the library and created Pals. The installed card wins, then a listing card, then a card built from the record's snapshot; both the sectioned and the flat `all` / `my-pals` paths use it.
+- **Purchase badges sit in the card's footer row**, so they add no height and leave the height chain intact. They show only for `pending_payment` and `unlocking` / `granted` records.
 
 ## Traps and decisions
 

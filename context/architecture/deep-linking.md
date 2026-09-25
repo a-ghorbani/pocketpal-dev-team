@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This doc covers two things: inbound `pocketpal://` links, and the outbound Hugging Face (HF) User-Agent attribution wire. The links are the `hub/run` "Use this model" route, the iOS Shortcuts `chat` route, and the E2E-only routes. `pocketpal://checkout` belongs to `palshub-checkout.md`, and the flat routes it navigates to belong to `app-shell.md`. Universal Links, App Links, and the HF Local-App registration (which lives in an external repo) are not implemented.
+This doc covers two things: inbound `pocketpal://` links, and the outbound Hugging Face (HF) User-Agent attribution wire. The links are the `hub/run` "Use this model" route, the iOS Shortcuts `chat` route, and the E2E-only routes. The flat routes it navigates to belong to `app-shell.md`. Universal Links, App Links, and the HF Local-App registration (which lives in an external repo) are not implemented.
 
 **Not on `main` yet:** open PR #897 adds the `llama://` pairing route (and `llama` in the iOS scheme allow-list). The previous version of this doc described it (`git show 1ad6ce1:context/architecture/deep-linking.md`); distill it back in when it lands.
 
@@ -14,8 +14,8 @@ This doc covers two things: inbound `pocketpal://` links, and the outbound Huggi
 | `ios/PocketPal/AppDelegate.swift` | `application(_:open:options:)`: posts `RCTOpenURLNotification` only when `url.scheme == "pocketpal"`, and returns `false` for every other scheme |
 | `ios/PocketPal/DeepLinkModule.swift` | native `onDeepLink` emitter; buffers `pendingURL` until JS listens; `getInitialURL` |
 | `src/services/DeepLinkService.ts` | iOS-only JS side of that emitter (`DeepLinkParams`) |
-| `android/app/src/main/AndroidManifest.xml` | `singleTask` activity; host-scoped VIEW filters `pocketpal`/`hub` and `pocketpal`/`checkout` |
-| `android/app/src/main/java/com/pocketpalai/MainActivity.kt` | `onNewIntent`: `forwardCheckoutCallback`, otherwise `setIntent(intent)` |
+| `android/app/src/main/AndroidManifest.xml` | `singleTask` activity; host-scoped VIEW filter `pocketpal`/`hub` |
+| `android/app/src/main/java/com/pocketpalai/MainActivity.kt` | `onNewIntent`: `setIntent(intent)` |
 | `src/hooks/useDeepLinking.ts` | `handleDeepLink` for the emitter path (E2E automation, `chat`, `hub`); an always-on `Linking` effect for `hub/run`; an `__E2E__` benchmark `Linking` effect; `useHubRunSheet` |
 | `src/services/hubRunLink.ts` | `isHubLink`, `parseHubRunURL`, `HubRunRequest` |
 | `src/store/DeepLinkStore.ts` | `pendingMessage` (the chat prefill), `pendingHubRun` |
@@ -25,7 +25,7 @@ This doc covers two things: inbound `pocketpal://` links, and the outbound Huggi
 | `src/screens/ModelsScreen/HFModelSearch/DetailsView/` | `DetailsView` / `ModelFileCard`, reused unchanged as the landing list |
 | `src/utils/hfUserAgent.ts` | `hfUserAgent()` |
 | `src/api/hf.ts`, `src/services/downloads/DownloadManager.ts`, `android/app/src/main/java/com/pocketpalai/download/DownloadWorker.kt` | the User-Agent header sites |
-| `src/__automation__/deepLink.ts`, `benchmarkRoute.ts` | E2E-only routes |
+| `src/__automation__/deepLink.ts`, `benchmarkRoute.ts` | E2E-only routes: `memory`, `tts`, `iap` (FakeStore commands, `in-app-purchase.md`), the benchmark runner |
 
 ## How it works
 
@@ -71,6 +71,7 @@ There is no host-level download state. Each `ModelFileCard` owns its own progres
 - **Android prod has no native bridge.** That is why the always-on `Linking` effect exists.
 - **iOS delivers links more than once.** A warm iOS link reaches both paths, because `RCTOpenURLNotification` is observed by both `DeepLinkModule` and RN's linking manager. A cold launch can deliver up to three times. This is safe only because re-parking an equal request is idempotent, so keep it that way.
 - **`MainActivity.onNewIntent` must call `setIntent`.** Under `singleTask`, `ReactActivity` does not forward a warm intent, so without it the `Linking` `'url'` event never fires.
+- **The E2E `iap` host works only on iOS.** Android's `Linking` listener routes only the benchmark URL, so Android specs script the FakeStore through the hidden `IapAdapter` instead.
 - **`chat` works only on iOS.** It is selected by host alone, arrives only through the native emitter, and has no Android intent filter.
 - **iOS scheme registration has two sites.** The `Info.plist` dict is enough for a cold launch, which is forwarded unfiltered. The warm path also needs the `AppDelegate` check. That check must stay an exact match and never a wildcard: Google Sign-In depends on the `return false` for its own scheme.
 - **The parsers are not scheme-gated.** `isHubLink` and `parseHubRunURL` test only hostname and path, and `handleDeepLink` doesn't reject unknown schemes. This is safe only while `pocketpal` is the only scheme the app routes, yet an iOS cold launch already passes any registered scheme, including Google's, to `getInitialURL`. Before registering a second scheme, scheme-gate the dispatcher and every route parser. The raw `Linking` path never goes through the dispatcher.

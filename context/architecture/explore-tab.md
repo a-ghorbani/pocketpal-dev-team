@@ -6,7 +6,7 @@ This doc covers the Explore bottom-tab root (`ExploreScreen`): PalsHub pal disco
 
 Other flow docs own the neighbouring pieces:
 
-- purchase and ownership: `palshub-checkout.md`
+- purchase and ownership: `in-app-purchase.md`
 - pal configuration: `pals-and-talents.md`
 - the tab shell: `app-shell.md`
 - tokens and DS components: `theming.md`
@@ -30,7 +30,7 @@ Other flow docs own the neighbouring pieces:
 | `…/components/ExploreSearchResultRow.tsx` | Overlay result row |
 | `…/components/LoginRequiredModal.tsx` | DS `Dialog` shown when a signed-out user taps a premium pal |
 | `components/PalsHub/PalDetailSheet/PalDetailSheet.tsx` | Pal details plus the download, buy and owned actions. Explore is its only mount |
-| `store/PalStore.ts` | `searchPalsHubPals`, `isLoadingPalsHub`, `getCategories`, `getTags`, `isCheckoutEligible`, `downloadPalsHubPal` |
+| `store/PalStore.ts` | `searchPalsHubPals`, `isLoadingPalsHub`, `getCategories`, `getTags`, `downloadPalsHubPal` |
 
 ## How it works
 
@@ -56,16 +56,15 @@ Other flow docs own the neighbouring pieces:
 - **Single writers.**
   - `PalStore.searchPalsHubPals` owns `isLoadingPalsHub` and `cachedPalsHubPals`.
   - `PalStore.downloadPalsHubPal` owns local pal rows.
-  - `CheckoutFlowStore` owns checkout state (`palshub-checkout.md`).
-  - Only the server sets ownership (`is_owned`); the sheet re-reads the pal when `checkoutFlowStore.status === 'owned'`.
+  - `PurchaseStore` owns purchase state and store ownership (`in-app-purchase.md`); account ownership stays server-set (`is_owned`).
 - **Last query wins.** Every response, including page fetches, is applied only if `seqRef` is unchanged, so a slow earlier response cannot overwrite a newer query (`ExplorePalsPanel.tsx`).
 - **Two separate gates.**
   - *Sheet access:* `handleCardPress` blocks a signed-out user from opening a premium, unowned pal.
-  - *Buy action:* inside `PalDetailSheet`, `handleBuyPress` sends a signed-out user to `onSignInPress`. `buy-button` renders only when `palStore.isCheckoutEligible`; otherwise the sheet shows informational text.
+  - *Buy action:* inside `PalDetailSheet`, the `PalPurchaseFooter` renders `buy-button` only when `purchaseStore.canBuy(pal)`; otherwise it renders no action. A signed-out buyer needs no account; the footer offers an in-app sign-in line only for already-owned purchases.
   - Keep both gates; the predicates are commented as a pair.
-- **Buying.** Both platforms call `checkoutFlowStore.start(pal.id)` directly. There is no web-buy link-out in the sheet.
+- **Buying.** Both platforms call `purchaseStore.buy(pal)` from the footer (platform store payment sheet). There is no web-buy link-out in the sheet.
 - **No navigation-topology change.** The detail surface is a sheet, with no route and no `RootStackParamList` entry.
-- **Frozen testIDs on `PalDetailSheet`:** `buy-button`, `download-button`, `downloaded-button`, `checkout-signin-button` and `pal-label-<type>`, plus the legacy `Sheet` chrome `sheet-close-button` / `sheet-handle`. Explore's own `explore-*` testIDs are additive. The consumers are `e2e/pages/PalPurchasePage.ts` and `e2e/helpers/selectors.ts`.
+- **Frozen testIDs on `PalDetailSheet`:** `buy-button`, `owned-button`, `download-button`, `downloaded-button` and `pal-label-<type>`, the footer phases listed in `in-app-purchase.md` (Verification), plus the legacy `Sheet` chrome `sheet-close-button` / `sheet-handle`. Explore's own `explore-*` testIDs are additive. The consumers are `e2e/pages/PalBuyPage.ts` and `e2e/helpers/selectors.ts`.
 - **Accessibility labels in the overlay.** The scrim is labelled `common.close`, the clear control `common.clear` (with `hitSlop` to reach a 44 px target), and the input and toggle `explore.searchLabel`.
 - **Styling.** Colours, type, spacing, radius and stroke come from tokens. The literal sizes are the 56 px avatar and the 44 px minimum touch target. `screens/ExploreScreen` and `components/PalsHub/PalDetailSheet` are on the token-consumer allow-list (`theming.md`, "Contracts and invariants").
 
@@ -76,7 +75,7 @@ Other flow docs own the neighbouring pieces:
 - **Don't read `cachedPalsHubPals` for the list.** `searchPalsHubPals` overwrites it with each response, so it holds only the last page from the last caller. The panel accumulates its own `items`.
 - **The loading flag is store-wide.** `isLoadingPalsHub` is not scoped to the panel's query, so any other PalsHub fetch flips the overlay into its loading body.
 - **Failures look like zero results.** `searchPalsHubPals` catches errors and returns `{pals: [], has_more: false}` with `syncState: success`, so a failed fetch is indistinguishable from zero results. The no-results copy is therefore neutral; a real error state would need a store-level error signal.
-- **The purchase e2e can't reach a card on this branch.** `purchase-flow.spec.ts` still goes drawer → Pals and `PalPurchasePage` taps `palshub-pal-card-<id>` (only the unmounted `SquarePalCard` renders it); Explore rows are `explore-pal-card-<id>`. Retarget both when this branch lands.
+- **The purchase e2e can't reach a card on this branch.** The `iap-*` specs go drawer → Pals and `PalBuyPage` taps `palshub-pal-card-<id>` (only the unmounted `SquarePalCard` renders it); Explore rows are `explore-pal-card-<id>`. Retarget both when this branch lands.
 - **The Models sub-tab is a stub.** It is disabled, and the standalone Models screens do not render inside Explore.
 - **Only part of the rating block is shown.** The sheet shows `average_rating`, `review_count` and the created date. The Figma reviews list, discussions and Q&A are not rendered because no backend supports them.
 

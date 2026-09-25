@@ -16,7 +16,7 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 | `.github/actions/setup-hexagon-sdk/action.yml` | Provisions and verifies the SDK. The only home of its version and both digests. |
 | `.github/workflows/{release,ci,e2e-tests}.yml` | The three Android building jobs; each gates the artifact it uploads. |
 | `android/fastlane/Fastfile` | `build_android_release` and `upload_android_alpha` (explicit `aab:`). |
-| `android/app/build.gradle`, `android/gradle.properties` | ABI filters, flavors; the root properties file must not carry `rnllamaBuildFromSource`. |
+| `android/app/build.gradle`, `android/gradle.properties` | ABI filters, flavors; the root properties file must not carry `rnllamaBuildFromSource`. No Play Billing pin: Billing (9.x) arrives through `react-native-iap`'s `openiap-google`. |
 | `node_modules/llama.rn/android/` | Upstream: its own `gradle.properties` (`rnllamaBuildFromSource=true`), `build.gradle` (mode, variants, `syncRNLlamaHtpAssets`), CMake variant list, and `RNLlama.java` (the load ladder, `HTP_LIBS`, `isHexagonSupported`). |
 | `node_modules/llama.rn/{cmake,vendor}/` | Upstream: `cmake/rnllama-sources.cmake` (source lists) and `vendor/llama.cpp`, unrenamed upstream llama.cpp pinned in `vendor/VERSIONS`. |
 
@@ -59,6 +59,7 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 - **No ccache on the release path**: a prefix restore could link objects of unreviewed provenance into the shipped binary. In `ci.yml`, ccache needs `CCACHE_COMPILERCHECK=content` plus the sloppiness list, or every lookup misses and it looks like a cold cache.
 - **GitHub caps caches at 10 GB per repo and evicts silently.** An evicted SDK or ccache entry shows only as a slow run. `ci.yml` `build-android` takes about 44 min cold and 23 min warm.
 - **Enabling release minify needs a `-keep class com.rnllama.**` rule.** None exists.
+- **Play Billing comes only from `react-native-iap`.** `openiap-versions.json` in the package pins `openiap-google`, which brings `billingclient:billing` 9.x; the app declares no billing dependency, so check `./gradlew :app:dependencies --configuration prodReleaseRuntimeClasspath | grep billingclient` after a library bump. iOS gains the `NitroIap`, `NitroModules` and `openiap` pods.
 
 ## Verification
 
