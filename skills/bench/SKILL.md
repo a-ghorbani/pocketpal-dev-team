@@ -1,6 +1,6 @@
 ---
 name: bench
-description: Run the benchmark matrix on physical Android devices and compare against baselines.
+description: Run the benchmark matrix on physical Android and iOS devices and compare against baselines.
 user-invocable: true
 argument-hint: "[smoke|focused|full] [--devices id1,id2] [--models id1,id2] [--quants q4_0,q6_k] [--skip-build]"
 ---
@@ -15,9 +15,11 @@ Request: $ARGUMENTS
 
 ## What This Pipeline Does
 
-Sweeps `(model × quant × backend)` cells through llama.rn on a real device, recording prompt-processing tok/s (`pp_avg`), token-generation tok/s (`tg_avg`), wall time, peak memory, and the **effective backend** (`cpu` / `opencl` / `cpu+opencl-partial` / `unknown`) derived live from native log lines. Compares the resulting report against the device's committed baseline to flag perf regressions or silent backend fallbacks.
+Sweeps `(model × quant × backend)` cells through llama.rn on a real device, recording prompt-processing tok/s (`pp_avg`), token-generation tok/s (`tg_avg`), wall time, peak memory, and the **effective backend** (`cpu` / `opencl` / `cpu+opencl-partial` / `hexagon` / `cpu+hexagon-partial` / `metal` / `cpu+metal-partial` / `unknown`) derived live from native log lines. Compares the resulting report against the device's committed baseline to flag perf regressions or silent backend fallbacks.
 
-Android-only. iOS bench is not part of this pipeline.
+Android runs through the WDIO spec or `yarn build:bench-config --push` below. On a physical iPhone, run `yarn bench:ios --device <udid> [--app ../ios/build/PocketPal.ipa]` from the app worktree's `e2e/` (build with `yarn ios:build:ipa`; `--dry-run` first). It drives the same matrix with `xcrun devicectl` only and pulls, stamps and pass-gates the report itself (`e2e/README.md`, "iOS (physical iPhone)").
+
+**`--app` replaces the App Store PocketPal** (same bundle id `ai.pocketpal`) and wipes its data. Get the user's explicit OK before installing. Keep the iPhone unlocked and on power, and do not lock it mid-run. iOS baselines are separate from Android ones: merge and compare refuse cross-platform input.
 
 ## Tiers
 
@@ -188,11 +190,13 @@ The model file is cached on disk, so the top-up runs in minutes.
 
 ## Effective backend — what `unknown` means
 
-`effective_backend` is derived from native log lines captured during context init. The 4 states:
+`effective_backend` is derived from native log lines captured during context init (`deriveEffectiveBackend` in `src/__automation__/logSignals.ts`). The states:
 
-- `cpu` — no OpenCL init line; everything ran on CPU as requested.
+- `cpu` — no GPU or NPU weight buffer; everything ran on CPU as requested. The iOS simulator lands here (0 layers offloaded).
 - `opencl` — OpenCL init succeeded, all layers offloaded to GPU.
 - `cpu+opencl-partial` — OpenCL initialized but some layers stayed on CPU (large-buffer regression, partial offload).
+- `hexagon` / `cpu+hexagon-partial` — weights on an `HTP*` buffer, fully or partially offloaded.
+- `metal` / `cpu+metal-partial` — weights on an `MTL*` buffer (iOS), fully or partially offloaded.
 - `unknown` — logs were captured but the parser couldn't classify them. Treat as a real signal: either the log format changed (new llama.rn version) or no logs were captured (init crashed before the listener attached). Investigate; don't merge into a baseline.
 
 A GPU cell reporting `cpu` is a silent fallback — the comparison script flags this as a regression independent of pp/tg deltas.
