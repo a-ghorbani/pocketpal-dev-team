@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Buying a paid PalsHub Pal through the platform store (StoreKit 2 on iOS, Google Play Billing on Android), turning the store transaction into an installed Pal, and keeping that ownership correct across crashes, restarts, refunds, creator edits, restore and sign-in. Not covered: what a Pal is and how a PalsHub Pal becomes a local Pal (`pals-and-talents.md`, Contracts and invariants, "PalsHub install path"), the Pals grid (`pals-screen.md`), model selection (`model-loading.md`), and the account library sync (`SyncService`).
+Buying a paid PalsHub Pal through the platform store (StoreKit 2 on iOS, Google Play Billing on Android), turning the store transaction into an installed Pal, and keeping that ownership correct across crashes, restarts, refunds, withdrawals, opt-in creator updates, restore and sign-in. Not covered: what a Pal is and how a PalsHub Pal becomes a local Pal (`pals-and-talents.md`, Contracts and invariants, "PalsHub install path"), the Pals grid (`pals-screen.md`), model selection (`model-loading.md`), and the account library sync (`SyncService`).
 
 ## Code map
 
@@ -13,12 +13,13 @@ Buying a paid PalsHub Pal through the platform store (StoreKit 2 on iOS, Google 
 | `src/services/iap/NativeStore.ts` | Adapter over `react-native-iap`; the only file importing the library |
 | `src/services/iap/storeOutcomes.ts` | Library error code → `PurchaseOutcome`, including the availability-downgrade codes |
 | `src/services/iap/iapApi.ts`, `iapWire.ts` | HTTP for verify / refresh / link / binding with request chunking; `iapWire` is the one parse point for IAP wire names |
+| `src/services/iap/creatorContent.ts` | Pure creator-content projection (from the raw wire pal), `normalise` and `changedCreatorFields`; imports nothing |
 | `src/services/iap/bindingSource.ts` | `getBinding()`: account binding values for a signed-in purchase, `null` after 2 s |
 | `src/services/palshub/apiBase.ts` | `getApiBase()` (e2e-only override), `clientHeaders()` |
 | `src/services/palshub/palEvents.ts` | Fire-and-forget funnel events |
-| `src/components/PalsHub/PalPurchaseFooter/` | The sheet footer: Buy, every purchase phase, Owned routing, sign-in line and link prompt |
+| `src/components/PalsHub/PalPurchaseFooter/` | The sheet footer: Buy, every purchase phase, Owned routing, the creator-update prompt and inline confirm, sign-in line and link prompt |
 | `src/components/PalsHub/PalModelStep/` | Post-purchase model offer (`modelOffer.ts`) and Start chat |
-| `src/screens/PalsScreen/myPals.ts`, `SquarePalCard/` | One card per PalsHub id; Pending / Unlocking badges |
+| `src/screens/PalsScreen/myPals.ts`, `SquarePalCard/` | One card per PalsHub id; Pending / Unlocking badges and the pressable Update available badge |
 | `src/screens/SettingsScreen/PurchasesCard.tsx` | Settings › Purchases |
 | `src/__automation__/fakeStore.ts`, `adapters/IapAdapter.tsx` | The e2e `StorePort` and its Android command surface |
 | `App.tsx` | `purchaseStore.start()`, with the FakeStore under `__E2E__` |
@@ -29,14 +30,20 @@ Buying a paid PalsHub Pal through the platform store (StoreKit 2 on iOS, Google 
 
 **Buy** (footer): `buy_tap` event → binding when signed in → `store.purchase` → outcome. `purchased` goes to `processTransaction`; `pending` writes `pending_payment`; `already_owned` runs `installOwned` (current entitlements, no sync); `cancelled` / `error` send their event and close the sheet.
 
-**processTransaction** is serialized per product and branches on the record's current status. Open (missing, `pending_payment`, `unlocking`): write `unlocking`, verify, then write the outcome and, on iOS, finish. Settled records never re-open; they are re-verified only when the caller asks (`settledVerify`: listener, `installOwned`, restore), for refunds and content updates. A grant is installed by `drainQueue` through `palStore.installOwnedPal`, which moves the record to `active`.
+**processTransaction** is serialized per product and branches on the record's current status. Open (missing, `pending_payment`, `unlocking`): write `unlocking`, verify, then write the outcome and, on iOS, finish. Settled records never re-open; they are re-verified only when the caller asks (`settledVerify`: listener, `installOwned`, restore), for refunds, withdrawals and newer creator versions. A grant is installed by `drainQueue` through `palStore.installOwnedPal`, which moves the record to `active`: a new row gets the full version; an existing row is adopted unwritten, and a grant differing from its prior `applied` becomes the pending update.
+
+**Creator updates are opt-in.** `offerUpdate` stores a newer verify/refresh version as `pendingUpdate` (an empty diff against `applied` just advances `contentVersion`). The card badge opens the sheet; Update → Confirm runs `applyUpdate`, which writes `changedCreatorFields(applied, pending.content)` through `palStore.applyCreatorUpdate` and advances `applied`.
 
 ```
 (none) ─tx pending→ pending_payment ─tx purchased→ unlocking ─verify active→ granted ─install→ active
 unlocking ─verify fail / unavailable→ unlocking (backoff)      ─pending→ pending_payment
-          ─unfulfillable→ unfulfillable   ─revoked|removed→ removed (tombstone)   ─invalid→ record deleted
-active ─verify/refresh revoked|removed→ removed        removed ─verify active→ granted (revived)
+          ─unfulfillable→ unfulfillable   ─revoked→ removed (tombstone)   ─invalid→ record deleted
+unlocking | granted | active ─removed→ unfulfillable (terminal; local row deleted unless the library lists it)
+granted | active ─revoked→ removed (pending and grant cleared, applied kept)   removed ─verify active→ granted (revived)
+active ─newer creator version→ active + pendingUpdate ─Update confirmed→ active
 ```
+
+Precedence: `unfulfillable` > `removed` tombstone > the rest; refresh skips both.
 
 The footer phase is `flowFor(palId)`: the record status plus transient `paying`, `ready` (active reached in this sheet session), `invalid` and `restore_needed`.
 
@@ -46,16 +53,20 @@ The footer phase is `flowFor(palId)`: the record status plus transient `paying`,
 - **Status only moves forward.** No event returns a settled record (`granted | active | unfulfillable | removed`) to an open one, and a failed or `unavailable` verify never changes a settled record.
 - **Persist before finish (iOS).** The outcome (`granted`, `unfulfillable`, tombstone, or the `invalid` delete) is written before `store.finish`. Android never finishes, acknowledges or consumes: the server acknowledges, and `NativeStore.finish` is a no-op there.
 - **Only Buy starts a payment.** Recovery, restore, `installOwned` and already-owned never call `store.purchase`.
-- **Only an explicit server `revoked | removed` removes ownership**, from a verify or a refresh that parsed. A failed refresh, a Pal missing from the store list, sign-out or a library change removes nothing, and the server revokes a known entry only on its own recorded revocation for that entry's `purchase_ref`. Removal keeps the local Pal when the signed-in library lists it.
+- **Only an explicit server `revoked | removed` removes ownership**, from a verify or a refresh that parsed: `revoked` (refund) → tombstone, `removed` (operator withdrawal) → `unfulfillable` (`withdraw`). Moderation rejection, unpublishing, a failed refresh, a Pal missing from a list, sign-out or a library change removes nothing, and the server revokes a known entry only on its own recorded revocation for that entry's `purchase_ref`. Removal keeps the local Pal when the signed-in library lists it.
+- **No automatic path changes an installed store-owned Pal.** Only `applyUpdate` after a user Confirm writes an existing `local_pals` row; a withdrawal only deletes it.
+- **The diff depends only on two creator versions**: raw projections (`projectCreatorContent`, taken before `transformApiPal` fills defaults), normalised on both sides at compare time. `creatorContent.ts` imports no store, settings or defaults. No `applied` means every field changed.
+- **Declining costs nothing.** Nothing gates chat, model load or editing on `pendingUpdate`; the badge is one passive label (`updateAvailable`: active, pending, installed) with no count, escalation, timer or modal.
+- **`applyUpdate` is bound to the shown version**, serialized per product, and a no-op otherwise. `known` keeps sending the applied version, so refresh re-offers idempotently.
 - **A failed store query never refreshes.** When the entitlement query failed, recovery skips refresh and `markLedgerWritable`; `dropStalePending` takes the same captured flag.
 - **Refresh sends `known = {pal_id: {content_version, purchase_ref}}`.** `purchase_ref` is the record's stored `supportCode` verbatim, and only `active` records with a support code go in; it is never derived from a token, JWS or transaction id. The server answers a missing ref or the old `{pal_id: version}` shape with a 400, which the app treats as a failed refresh.
 - **`needsLink`** (Settings link row): signed in, some `active` record is not linked to this user; signed out, some `active` record has no `linkedUserId` at all.
 - **Legacy installs are untouchable.** A local paid Pal with `is_owned` and no ledger record (a web purchase) is owned, and the IAP flow never refreshes, mutates or deletes it.
 - **Buy renders only when** billing is `ready`, `iap_enabled[Platform.OS]` is true, the store returned a product in this storefront, and the Pal is not owned and has no ledger record of any status. Otherwise nothing renders: no disabled or error variant. The price string comes only from the store.
-- **Wire names live in `iapWire.ts`.** An unparseable body is a failed verify, never a grant. An `active` result without a system prompt is treated as failed. `unavailable` is retryable; `invalid` is terminal for that transaction this session (`invalidTxIds`, skipped by `recover`).
+- **Wire names live in `iapWire.ts`.** Verify results and refresh `changed` carry `content` and `changeNote` (optional `change_note`; a bad value is dropped, never a parse failure) beside `pal`. An unparseable body is a failed verify, never a grant. An `active` result without a system prompt is treated as failed. `unavailable` is retryable; `invalid` is terminal for that transaction this session (`invalidTxIds`, skipped by `recover`).
 - **Request limits.** Verify sends at most 10 transactions (Android) or 50 (iOS) per request and refresh at most 200 `known` entries; `iapApi` chunks and merges. Each refresh chunk carries the full transaction list.
 - **Account-free calls carry no `Authorization`:** verify, refresh and events. Link and binding do. `X-IAP-Capable: 1` and `X-Client-Platform` always travel together, on every PalsHub request (`apiRequest`, `iapApi`, `palEvents`).
-- **Tokens, JWS and binding values are never persisted or logged.** The ledger stores transaction ids and support codes only; proofs are re-read from the store when needed. Support codes are shown exactly as the server sends them.
+- **Tokens, JWS and binding values are never persisted or logged.** The ledger stores transaction ids and support codes (shown verbatim); proofs are re-read from the store.
 - **Automatic paths never prompt for an Apple ID.** `recover` and `installOwned` use current entitlements; only `restore()` calls `store.sync()`.
 - **`FakeStore` and the API-base override exist only under `__E2E__`.** Their markers (`IAP_FAKE_STORE`, `IAP_API_BASE_OVERRIDE`) are in the `ci.yml` prod-bundle grep.
 
@@ -63,13 +74,14 @@ The footer phase is `flowFor(palId)`: the record status plus transient `paying`,
 
 - **The library is event-based.** `requestPurchase` resolves before the outcome; `NativeStore.purchase` waits for the first matching update or error event. The same purchase also reaches the global listener, so every purchase is processed twice; per-product serialization makes the second a settled no-op (it may re-verify, which is idempotent).
 - **iOS dedupes transaction events per id.** A re-buy of a delivered transaction would never emit to a deduping listener and `paying` would hang, so the purchase-scoped listener passes `dedupeTransactionIOS: false`; the global `onTransaction` listener keeps deduping, because replays would re-verify settled records. As a backstop, 5 s after `requestPurchase` resolves with no event, iOS settles from the unfinished and entitlement lists for the product (same pending / 60 s already-owned mapping), else a non-downgrade `error`; recovery still picks up a real transaction.
-- **Android excludes Compose UI, Compose runtime and Gson** (`android/app/build.gradle`, app variant classpaths only, never the buildscript, where the RN plugin needs Gson). openiap-google declares them but none of its classes reference them, and it was the only requester. A future openiap that uses them needs the exclude removed.
+- **Android excludes Compose UI and Compose runtime, never Gson** (`android/app/build.gradle`, app variant classpaths only). openiap-google's `OpenIapModule` uses Gson; excluding it breaks billing at runtime (no restore row, no Buy) while builds and FakeStore e2e stay green. Compose is used only by the unreferenced `IapContext*` (plus binary-retention `StabilityInferred` annotations). Only a real-store build proves a classpath exclude.
 - **iOS already-owned is inferred.** StoreKit returns success with the original transaction; a transaction dated more than 60 s before the request is read as `already_owned`. A misread is harmless: `installOwned` re-verifies through the same pipeline.
 - **One ledger in AsyncStorage, not WatermelonDB tables.** `mobx-persist-store` writes cannot be awaited, and the persist-before-finish rule needs an awaited write.
 - **Tombstones, not deletions.** The store keeps listing a refunded product; a `removed` record stops `recover` re-driving it and hides Buy until a later explicit `active` verify revives it.
 - **Stale pending differs by platform.** Play lists pending purchases, so Android drops a `pending_payment` record at once once a successful query no longer lists it. A declined Ask to Buy emits nothing on iOS, so the record ages out after 72 h, or at once on Restore.
-- **Refresh never installs.** It updates only installed Pals with an `active` record, so a Pal the user deleted stays deleted until they tap Owned or Restore.
-- **Undeliverable copy differs by platform.** On Android the server refunds an undeliverable purchase through Google, so the footer and Settings say it was refunded (`unfulfillableRefunded`); iOS says support was notified and still finishes the transaction.
+- **Refresh never installs.** It offers updates only for installed `active` Pals; a deleted Pal stays deleted until Owned or Restore re-grants the full version.
+- **A withdrawal is terminal** so the sheet and Settings keep its copy; it also blocks re-buying on that device (`canBuy` requires no record).
+- **Undeliverable copy differs by platform.** On Android the server refunds an undeliverable or withdrawn purchase through Google, so the footer and Settings say it was refunded (`unfulfillableRefunded`); iOS shows `noLongerAvailable` plus the support code and still finishes. A changed meaning gets a new key, so stale translations never carry the old one.
 - **Closing the sheet never cancels a paid flow.** State is in the ledger; reopening shows the current phase.
 - **Availability downgrade is per session.** A store refusal (`developer-error`, `billing-unavailable`, `item-unavailable`, …) sets `unavailable` until relaunch. A sideloaded build Play refuses shows no Buy rather than errors.
 - **Binding never blocks a purchase.** A slow or failing binding request goes ahead unbound after 2 s; a signed-in purchase links silently after `active`, and a signed-out buyer gets one dismissable sign-in prompt that links on sign-in (`requestLink` + an `isAuthenticated` reaction). A 409 keeps the Pal and shows "linked to another account".
@@ -79,6 +91,6 @@ The footer phase is `flowFor(palId)`: the record status plus transient `paying`,
 
 ## Verification
 
-- Jest: `src/store/__tests__/PurchaseStore.{pipeline,recover,link}.test.ts` (with `purchaseTestHarness.ts`; state-machine cells, crash after each awaited write, write-then-finish order, Android never finishing), `src/services/iap/__tests__/`, `src/__automation__/__tests__/fakeStore.test.ts`, `src/store/__tests__/PalStore.install.test.ts`, `PalPurchaseFooter`, `PalModelStep`, `PurchasesCard`, `myPals` tests.
-- e2e: `e2e/specs/features/iap-{purchase,recovery,restore}.spec.ts` against the FakeStore and `e2e/helpers/iapMockServer.ts` (`adb reverse tcp:8787` on Android); every spec asserts the mock's traffic (headers, no auth on account-free calls, event bodies, refresh refs the mock issued). The mock issues a per-purchase support code (`E2E-<txId>`), 400s a malformed or v1 refresh body, revokes only refunds it recorded (`iapMockServer.refund`), and serves a creator update (`updatePal`) only through verify and refresh, so the creator-update check asserts the new title inside a `local-pal-card-*` element while the listing keeps the old one. Frozen testIDs: `buy-button`, `owned-button`, `purchase-retry-button`, `purchase-{pending,unlocking,ready,unfulfillable,invalid}`, `purchase-link-prompt`, `model-step-start-chat`, `pal-badge-{pending,unlocking}`, `restore-purchases-row`, `purchases-card`, `settings-{restore,link}-purchases`, `iap-command-{input,result}`.
-- By hand: a real sandbox purchase needs the deployed server; on a device without Play services, a paid Pal shows no Buy, no restore row and no error.
+- Jest: `src/store/__tests__/PurchaseStore.{pipeline,recover,link,update}.test.ts` (with `purchaseTestHarness.ts`; state-machine cells, `update` for offer / apply / adopt / removal precedence, crash after each awaited write, write-then-finish order, Android never finishing), `src/services/iap/__tests__/`, `src/__automation__/__tests__/fakeStore.test.ts`, `src/store/__tests__/PalStore.install.test.ts`, `PalPurchaseFooter`, `PalModelStep`, `PurchasesCard`, `myPals` tests.
+- e2e: `e2e/specs/features/iap-{purchase,recovery,restore}.spec.ts` against the FakeStore and `e2e/helpers/iapMockServer.ts` (`adb reverse tcp:8787` on Android); every spec asserts the mock's traffic (headers, no auth on account-free calls, event bodies, refresh refs the mock issued). The mock issues a per-purchase support code (`E2E-<txId>`), 400s a malformed or v1 refresh body, revokes only refunds it recorded (`iapMockServer.refund`), serves a creator update (`updatePal`, optional `changeNote`) only through verify and refresh, and reports a withdrawal (`withdraw`) as refresh `removed`. The opt-in spec needs badge → Update → Confirm before the new title shows inside a `local-pal-card-*` (the listing keeps the old one), so it fails when Update does nothing; the decline spec cancels, relaunches and still reaches `model-step-start-chat`. Android `byTestId` is a contains-match, so update actions use `byExactTestId`. Frozen testIDs: `buy-button`, `owned-button`, `purchase-retry-button`, `purchase-{pending,unlocking,ready,unfulfillable,invalid}`, `purchase-link-prompt`, `model-step-start-chat`, `pal-badge-{pending,unlocking,update}`, `pal-update-{prompt,button,confirm,cancel,confirm-text}`, `purchase-updates-optional`, `purchase-support-code`, `restore-purchases-row`, `purchases-card`, `settings-{restore,link}-purchases`, `iap-command-{input,result}`.
+- By hand: a real sandbox purchase needs the deployed server; on a device without Play services, a paid Pal shows no Buy, no restore row and no error. After an Android classpath change, check `restore-purchases-row` on a real-store build (`.e2e` flavour without `E2E_BUILD`) against a control with the suspect exclude, and dex-scan for excluded-group types referenced outside `IapContext*`.
