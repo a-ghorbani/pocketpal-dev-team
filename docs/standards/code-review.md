@@ -112,7 +112,7 @@ Nothing about the task belongs in source: no "we hit X", no round numbers, no st
 
 ## PocketPal-Specific Checks
 
-- **Localization**: new UI strings must not be hardcoded. Active language registry: `src/locales/index.ts`. Only `en.json` is edited directly; the rest live on Weblate.
+- **Localization**: new UI strings must not be hardcoded. Active language registry: `src/locales/index.ts`. Only `en.json` is edited directly; the rest live on Weblate. Editing a non-English locale file is a BLOCKER.
 - **Testing patterns**: project test utilities and centralized mocks; no inline store mocks or direct observable mutation outside accepted patterns.
 - **MobX patterns**: `observer`, `makeAutoObservable`, `runInAction` for async updates, computed getters, existing singleton/export conventions.
 - **Components**: preserve folder structure, TypeScript props, theming, and `testID` patterns for interactive elements.
