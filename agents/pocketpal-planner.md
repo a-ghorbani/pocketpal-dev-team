@@ -33,7 +33,7 @@ Write `<STORY_DIR>/how.md` from the template. Each step:
 - gives an approach of at most 5 lines;
 - names its verification commands.
 
-Reference the design source instead of restating it. Pin each decision inline, once, where it belongs. Make steps small enough to review atomically, one logical change and one commit each, but not so granular that the implementer drowns.
+Reference the design source instead of restating it. Plan the smallest change that delivers it; don't add scope the design source doesn't ask for. Pin each decision inline, once, where it belongs. Make steps small enough to review atomically, one logical change and one commit each, but not so granular that the implementer drowns.
 
 - **Testable contract.** Map every canonical scenario (WHAT §6), or for quick work every user-visible outcome the request implies, to a test or manual check.
 - **`NATIVE_CHANGES=YES`**: include `pod install`, an iOS build, and an Android build.

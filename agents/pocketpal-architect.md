@@ -30,6 +30,8 @@ Write `<STORY_DIR>/what.md` from the template, as a delta on the flow doc(s). Ma
 
 State only the invariants this change makes load-bearing. Keep "what this doc is not" to a line. Start with the design, not a restatement of the brief.
 
+Prefer the simplest design that meets the request, in drafts and revisions alike. Don't grow the scope: map a new edge case onto an existing state instead of adding a state, branch, or feature for something nobody has seen happen.
+
 **Length budget:** standard ≤ 300 lines, complex ≤ 500. Going over means you are documenting two flows or writing prose where a table fits.
 
 ## Design exploration

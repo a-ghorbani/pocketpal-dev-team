@@ -24,7 +24,7 @@ Read `INTENT_BRIEF`, `HOW`, `WHAT` (when present), `ARCHITECTURE_DOCS`, `context
 
 ## Review
 
-1. **Trace.** Each step either realises a design-source section or is plumbing the design implicitly requires. A step with no trace means WHAT is missing something (drift) or HOW invented scope.
+1. **Trace.** Each step either realises a design-source section or is plumbing the design implicitly requires. A step with no trace means WHAT is missing something (drift) or HOW invented scope. Prefer the simpler plan; don't ask for scope the design doesn't need.
 2. **Testable-contract coverage.** Every canonical scenario in WHAT §6 needs a test or manual check in HOW. For quick work, check against the user-visible outcomes implied by the brief's Request and Clarifications. A gap is a BLOCKER: we couldn't show we shipped what was asked.
 3. **Pattern compliance.** Spot-check 3–5 proposed edits against the codebase:
    - each file sits in the right layer (store, repository, hook, component);
