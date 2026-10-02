@@ -70,7 +70,7 @@ Screen status values are `idle`, `running:<i/n:model/quant/backend[/overrides]>`
 ## Traps and decisions
 
 - **Autostart exists because HyperOS / MediaTek devices silently drop injected taps** (`adb input tap` and WDIO `.click()`). It is true only for `autostart=1` or `true` (case-insensitive), so `autostart=0` never starts. `parseBenchmarkAutostart` is the single parser for both delivery sites, and it fires at most once per mount (`autostartFiredRef`). The `runningRef` plus status guard in `onRun` stays authoritative.
-- **Prod also registers `pocketpal://`, but only for the `hub` and `checkout` hosts.** The bare `e2e/benchmark` route resolves only in the e2e flavor, and only through `__E2E__` code.
+- **Prod also registers `pocketpal://`, but only for the `hub` host.** The bare `e2e/benchmark` route resolves only in the e2e flavor, and only through `__E2E__` code.
 - **`devices=['CPU']` alone does not keep layers off other registered backends.** With `n_gpu_layers > 0` and Hexagon registered, ggml offloaded to Hexagon on Snapdragon 8 Elite Gen 5, which is why the slot pins both.
 - **`purgeNativeAllocator` between cells.** On Android it calls `mallopt(M_PURGE_ALL)`; on iOS it is a no-op. It runs only after a cell that created a context, because Scudo otherwise hoards freed pages and long matrices get OOM-killed on low-RAM devices. The settle also covers deferred driver teardown (OpenCL, HTP FastRPC) and thermal recovery. Raise `inter_cell_settle_ms` in the pushed config for thermally stable sweeps, with no rebuild.
 - **Hexagon uses the same canonical pick as the app,** the first exact wildcard-free `HTP*` name (`model-loading.md`, Contracts and invariants). Several registered HTP sessions do not prove multi-session execution. Compare `effective_init_params` with the model/compute allocation logs.
@@ -83,6 +83,9 @@ Screen status values are `idle`, `running:<i/n:model/quant/backend[/overrides]>`
 - **A suspended iOS app stays in the process list,** so a lock or app switch mid-run ends `failed:timeout`. Operators keep the iPhone unlocked and on power; Auto-Lock can stay on (keep-awake).
 - **A config error or a production build writes no report,** so on iOS both surface as `failed:autostart`.
 - **Re-deriving `log_signals` on merge backfills new structured fields from old reports,** but only for lines `BENCH_LOG_RE` already captured. A new signal needs a widened regex and a re-run on device.
+- **The `ggml_opencl:` large-buffer anchors are prefix-agnostic,** because merge re-derives signals from old raw reports whose lines carry the pre-0.13.0-rc.5 `lm_` prefix. The legacy `lm_ggml_opencl: Initializing` and `lm_ggml_opencl: device <name>` anchors must stay prefixed: a bare `ggml_opencl: device` matches the `device FP16 support: true` line and records it as the device name.
+- **A clean compare does not prove large-buffer mode.** `large_buffer_*` is not a compare flag, so read it on GPU rows: on an Adreno A7X/A8X device one of `large_buffer_enabled` / `large_buffer_unsupported` must be true, and both false means the env var never reached native. The large-buffer lines print on every OpenCL context init, inside the capture window. The Hexagon registry line fires in `getDeviceOptions()`, before the window opens, which is why `hexagon_init` is false on every baseline row.
+- **The committed baselines (llama.rn 0.12.0-rc.9) predate the large-buffer env var** (#699). On a driver that lacks `cl_qcom_large_buffer`, `opencl` → `cpu+opencl-partial` is that change, not a regression: check `large_buffer_unsupported` first.
 - **The v1.1 bump bundled the settings sweep and Hexagon.** Both change row identity, and one migration beat two.
 
 ## Verification
