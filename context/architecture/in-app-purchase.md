@@ -9,7 +9,7 @@ Buying a paid PalsHub Pal through the platform store (StoreKit 2 on iOS, Google 
 | Path | Role |
 | --- | --- |
 | `src/store/PurchaseStore.ts` | Ledger, availability, product cache, the transaction pipeline, recovery, refresh, restore, link. Sole writer of all purchase state |
-| `src/services/iap/StorePort.ts` | The store interface (`StoreTransaction`, `PurchaseOutcome`); type only |
+| `src/services/iap/StorePort.ts` | The store interface (`StoreTransaction`, `StoreQuery`, `PurchaseOutcome`); type only |
 | `src/services/iap/NativeStore.ts` | Adapter over `react-native-iap`; the only file importing the library |
 | `src/services/iap/storeOutcomes.ts` | Library error code → `PurchaseOutcome`, including the availability-downgrade codes |
 | `src/services/iap/iapApi.ts`, `iapWire.ts` | HTTP for verify / refresh / link / binding with request chunking; `iapWire` is the one parse point for IAP wire names |
@@ -27,7 +27,7 @@ Buying a paid PalsHub Pal through the platform store (StoreKit 2 on iOS, Google 
 
 ## How it works
 
-`App.tsx` calls `purchaseStore.start()`: it subscribes the store's transaction listener and an `AppState → active` handler, waits for `palStore.ready`, then runs `recover()`. Recovery re-inits billing (availability), drains the grant queue, drives every store transaction whose record is still open through `processTransaction`, drops stale pending records, then calls refresh, but only when the entitlement query succeeded (`storePort.queryOk`, captured right after the query because later link and install queries overwrite it).
+`App.tsx` calls `purchaseStore.start()`: it subscribes the store's transaction listener and an `AppState → active` handler, waits for `palStore.ready`, then runs `recover()`. Recovery re-inits billing (availability), drains the grant queue, drives every store transaction whose record is still open through `processTransaction`, drops stale pending records, then calls refresh, but only when the entitlement query succeeded. `currentEntitlements()` returns `{ok, transactions}` (`storeTransactions()` passes the same `ok` through its merge), so each caller acts on its own query's result and an overlapping link or install query cannot change it.
 
 **Buy** (footer): `buy_tap` event → binding when signed in → `store.purchase` → outcome. `purchased` goes to `processTransaction`; `pending` writes `pending_payment`; `already_owned` runs `installOwned` (current entitlements, no sync); `cancelled` / `error` send their event and close the sheet.
 
@@ -63,7 +63,7 @@ The footer phase is `flowFor(palId)`: the record status plus transient `paying`,
 - **The diff depends only on two creator versions**: raw projections (`projectCreatorContent`, taken before `transformApiPal` fills defaults), normalised on both sides at compare time. `creatorContent.ts` imports no store, settings or defaults. No `applied` means every field changed.
 - **Declining costs nothing.** Nothing gates chat, model load or editing on `pendingUpdate`; the badge is one passive label (`updateAvailable`: active, pending, installed) with no count, escalation, timer or modal.
 - **`applyUpdate` is bound to the shown version**, serialized per product, and a no-op otherwise. The footer holds the confirming `contentVersion`, not a flag, so a newer pending version replaces the confirm step with its own prompt. `known.content_version` is `max(applied, pendingUpdate)` version: a freshness hint only (never entitlement), so a declined update is not re-sent on every refresh.
-- **A failed store query never refreshes.** When the entitlement query failed, recovery skips refresh and `markLedgerWritable`; `dropStalePending` takes the same captured flag.
+- **A failed store query never refreshes.** When the entitlement query failed, recovery skips refresh and `markLedgerWritable`; `dropStalePending` takes the same query's `ok`.
 - **Refresh sends `known = {pal_id: {content_version, purchase_ref}}`.** `purchase_ref` is the `supportCode` of the most recent verify `active` applied to the record (`writeGrant`, or the settled re-verify of an `active` record), replacing any older code, never a fallback to one. An `active` without a code still grants and acknowledges, logs one warning naming only the pal id, and leaves the code absent, so the record stays out of `known`. Only `active` records with a support code go in; it is never derived from a token, JWS or transaction id. The server answers a missing ref or the old `{pal_id: version}` shape with a 400, which the app treats as a failed refresh.
 - **`needsLink`** (Settings link row): signed in, some `active` record is not linked to this user; signed out, some `active` record has no `linkedUserId` at all.
 - **Legacy installs are untouchable.** A local paid Pal with `is_owned` and no ledger record (a web purchase) is owned, and the IAP flow never refreshes, mutates or deletes it.
