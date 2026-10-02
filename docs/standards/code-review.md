@@ -38,7 +38,7 @@ If critical context is missing, state it explicitly.
 4. Skip minor style churn unless it affects safety, readability, or consistency.
 5. Separate confirmed defects from unproven verification.
 6. Review for the next engineer too — call out hidden invariants and future traps.
-7. Prefer the simpler fix and don't grow the scope. A finding is closed by the smallest change that handles it, not by new states, branches, or features for edge cases nobody has seen happen.
+7. Prefer the simpler fix and don't grow the scope. Close a finding with the smallest change that handles it correctly; prefer an existing state or path when it does the job.
 
 ## Role Reviewers
 
