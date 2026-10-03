@@ -26,6 +26,8 @@ How a chat turn is sent, streamed, persisted and rendered: tool-call and reasoni
 | `src/components/AssistantTurnFooter/`, `PendingIndicator/` | turn chrome; the dot row under the newest turn |
 | `src/utils/reasoningCapability.ts` | `resolveReasoningCapability`; UI in `ChatInput`, `ModelSettingsSheet` |
 | `src/components/SidebarContent/` | drawer session list and pin menu |
+| `src/components/ChatSearchBar/` | find-in-page bar: the draft, the debounced commit, the Android back handler |
+| `src/utils/searchIndex.ts` | the visible-text projection behind the search count, the highlight and the jump fraction |
 
 ## How it works
 
@@ -123,7 +125,20 @@ any ─step_started (initial or follow-up)→ prefill
 
 - One `keyboardOcclusion = max(0, |keyboard.height| − insets.bottom)` drives the input translate, the suggested-prompts overlay and the list spacer (`ChatView.tsx:424`). The layout math has no `Platform.Version` fork.
 
+**Search** (PR #622 only)
+
+- Find-in-page never swaps `ChatView.messages`; the empty state and banners stay tied to the real conversation.
+- Count equals highlight: one projection counts and marks, and `TextMessage` skips link preview while a query is committed.
+- The store holds only the committed query. Keystrokes stay in `ChatSearchBar`'s draft; a 200 ms debounce commits, navigation flushes a pending commit instead of moving, unmount cancels it.
+- `ChatView` scrolls for search once per `searchNavSeq` step (every commit and next / previous), never on re-render.
+- Android back exits search only while the bar is mounted and the screen focused (`useFocusEffect`).
+
 ## Traps and decisions
+
+- **Fenced code is not searchable.** `CodeRenderer` re-reads the raw HTML, so `<pre>` is excluded from count and marks.
+- **The search jump target is an html-length estimate**, placed via `viewPosition` / `viewOffset` above the keyboard rather than by layout measurement.
+- **A 0-result commit consumes its navigation request**, so a match produced later by streaming does not scroll.
+- **Decision: find-in-page, not filtering** (#603): filtering made a zero-result search look like an empty new chat.
 
 - **Flush before structural writes.** `pushAgentStep` and `finalizeActiveStep` call `flushStreamingUpdate` first. Otherwise the previous step's last tokens land on the new step and show up duplicated under the tool block. Any new step writer must flush too.
 - **Reference-equality publishing.** An unchanged reducer returns the same reference and the hook skips the write; a deep observable proxies its values, so the setter itself can't tell.
@@ -151,3 +166,4 @@ any ─step_started (initial or follow-up)→ prefill
   - Stop mid-stream: the indicator shows "Stopping…", and the turn keeps its partial text with a normal footer (copy, plus timings when the engine returned them), not an interrupted one.
   - Fill n_ctx until the full banner appears. Raising n_ctx should clear it.
   - Android API 29: the keyboard does not hide the newest turn.
+- **Search:** `ChatSearchBar`, `searchIndex`, `ChatSessionStore` (search), `ChatView.search`, `searchJump`, `TextMessage` tests. By hand: a tall message's bottom match lands above the composer; Android back closes search, staying in chat.
