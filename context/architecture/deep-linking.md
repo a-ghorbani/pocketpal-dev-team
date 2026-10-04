@@ -4,7 +4,7 @@
 
 This doc covers two things: inbound `pocketpal://` links, and the outbound Hugging Face (HF) User-Agent attribution wire. The links are the `hub/run` "Use this model" route, the iOS Shortcuts `chat` route, and the E2E-only routes. The flat routes it navigates to belong to `app-shell.md`. Universal Links, App Links, and the HF Local-App registration (which lives in an external repo) are not implemented.
 
-**Not on `main` yet:** open PR #897 adds the `llama://` pairing route (and `llama` in the iOS scheme allow-list). The previous version of this doc described it (`git show 1ad6ce1:context/architecture/deep-linking.md`); distill it back in when it lands.
+**Not on `main` yet:** the Android User-Agent site is `DownloadEngine.kt` only once the resumable-downloads branch lands (`model-download.md`); until then `main` sets it in `DownloadWorker.kt`. Open PR #897 adds the `llama://` pairing route (and `llama` in the iOS scheme allow-list). The previous version of this doc described it (`git show 1ad6ce1:context/architecture/deep-linking.md`); distill it back in when it lands.
 
 ## Code map
 
@@ -24,7 +24,7 @@ This doc covers two things: inbound `pocketpal://` links, and the outbound Huggi
 | `src/utils/hf.ts` | `createSiblingsFromFileDetails` → `normalizeModelSiblings` → `addModelFileDownloadUrls` |
 | `src/screens/ModelsScreen/HFModelSearch/DetailsView/` | `DetailsView` / `ModelFileCard`, reused unchanged as the landing list |
 | `src/utils/hfUserAgent.ts` | `hfUserAgent()` |
-| `src/api/hf.ts`, `src/services/downloads/DownloadManager.ts`, `android/app/src/main/java/com/pocketpalai/download/DownloadWorker.kt` | the User-Agent header sites |
+| `src/api/hf.ts`, `src/services/downloads/DownloadManager.ts`, `android/app/src/main/java/com/pocketpalai/download/DownloadEngine.kt` | the User-Agent header sites |
 | `src/__automation__/deepLink.ts`, `benchmarkRoute.ts` | E2E-only routes: `memory`, `tts`, `iap` (FakeStore commands, `in-app-purchase.md`), the benchmark runner |
 
 ## How it works
@@ -62,7 +62,7 @@ There is no host-level download state. Each `ModelFileCard` owns its own progres
 - **User-Agent wire format.** The header is `User-Agent: PocketPal/<version> (ai.pocketpal)`. `<version>` comes from `DeviceInfo.getVersion()` in JS and `BuildConfig.VERSION_NAME` in Android native code. `ai.pocketpal` is a fixed HF attribution key, not the Android applicationId (`com.pocketpalai`). The header is set at:
   - the four HF API calls in `hf.ts` (`fetchModels`, `fetchModelFilesDetails`, `fetchGGUFSpecs`, `fetchModelInfo`)
   - iOS LLM downloads (`DownloadManager` RNFS `headers`)
-  - Android LLM downloads (`DownloadWorker.kt:80`)
+  - Android LLM downloads (`DownloadEngine.kt`, `Transfer.request`; the loop and its traps are in `model-download.md`)
 
   Authorization handling is separate and unchanged.
 

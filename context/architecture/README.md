@@ -29,6 +29,7 @@ One file per **flow**, bounded by a single user-facing concept. Per-component is
 | `theming.md` | design tokens, typography, DS component layer, Paper-import blocklist | `src/theme/tokens/`, `src/utils/theme.ts`, `useTheme`, `src/components/ui/`, `.eslintrc.js` blocklist |
 | `asr.md` | voice input: availability gate, Whisper model wire, push-to-talk (**PR #786 only**) | `ASRStore`, `src/services/asr/`, `usePushToTalk`, `MicButton` |
 | `tts.md` | text-to-speech: availability gate, Supertonic model wire, re-download sentinel | `TTSStore`, `src/services/tts/`, `TTSSetupSheet` |
+| `model-download.md` | Android model downloads: scheduling (UIDT on API 34+, WorkManager), the shared resumable loop, resume validation, stop semantics, JS signals (**not on `main` yet**) | `DownloadModule`, `DownloadController`, `DownloadScheduler`, `DownloadEngine`, `DownloadJobService`, `DownloadBanner` |
 | `deep-linking.md` | inbound `pocketpal://` links and the Hugging Face User-Agent attribution wire | `useDeepLinking`, `hubRunLink`, `HubRunSheetHost`, `hfResolve`, `hfUserAgent` |
 | `benchmark-matrix.md` | on-device benchmark matrix runner and its config / merge / compare toolchain | `src/__automation__/`, `e2e/helpers/bench-runner.ts`, `e2e/scripts/` |
 | `release.md` | Android native build, llama.rn payload variants (incl. Hexagon), payload gate | `scripts/verify-android-payload.js`, `scripts/android-payload-manifest.json`, `android/fastlane/`, `.github/actions/setup-hexagon-sdk/` |
