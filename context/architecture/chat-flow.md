@@ -31,7 +31,7 @@ How a chat turn is sent, streamed, persisted and rendered: tool-call and reasoni
 
 ## How it works
 
-1. `handleSendPress` adds the user row. `prepareCompletion` builds the params and **creates the empty `assistant_turn` row before the run starts**.
+1. `handleSendPress` takes the generation lease (`model-loading.md`), waiting behind "Stopping…" while a stopped run drains, then reads the model and session and adds the user row. `prepareCompletion` builds the params and **creates the empty `assistant_turn` row before the run starts**.
 2. The hook runs `for await` over `runAgent`. Each event goes through `agentStateReducer`, then `applyEventToStore`.
 3. `applyEventToStore` routes events to store writes:
    - `step_started` → `pushAgentStep`
@@ -39,7 +39,7 @@ How a chat turn is sent, streamed, persisted and rendered: tool-call and reasoni
    - `step_finished` → `appendToolCall`, then `finalizeActiveStep`
    - `tool_call_finished` → `appendToolOutcome`
    - `run_finished` → `updateMessage`, then `recordCompletionSnapshot`
-4. `run_failed` is rethrown into the catch path. The catch path resets `agentUiState` to idle, then either:
+4. `run_failed` is rethrown into the catch path. The catch path runs UI stop, then either:
    - tags a turn that has partial content as `{interrupted, copyable, completionResult}`, or
    - deletes the empty turn and adds a system message (for "Context is full", it records a full snapshot instead).
 5. `ChatView` renders one `Message` per row. `PendingIndicatorView` lives in the header of the inverted list, which puts it at the visual bottom.
@@ -67,8 +67,9 @@ any ─step_started (initial or follow-up)→ prefill
   - The catch path writes `interrupted`, `copyable`, `completionResult` and `truncationLikely`.
   - The empty turn has no `copyable`.
 - `lastCompletionResult` has one writer, `recordCompletionSnapshot`, called right after `metadata.completionResult` is written. That same action clears `dismissedBannerVariants` and updates `consecutiveFullFailures`. `setActiveSession` hydrates the snapshot from the newest turn. `resetActiveSession` and `removeMessagesFromId` (edit or regenerate) clear it.
-- Only `handleStopPress` sets `isStopping`, and it is cleared when the loop exits. Stop intent is the `AbortSignal`, and the runner's listener calls `engine.stopCompletion()`.
-- **Keep-awake has four call sites in `useChatSession` and nowhere else**: taken in `handleSendPress`, released in the send path's `finally`, released in `handleStopPress`, and the gate pair — released in `confirmToolCall` when a confirmation opens, re-taken in `resolveToolConfirmation` when it is answered. A confirmation can sit unanswered indefinitely and nothing is generating meanwhile, so holding the screen awake through it is wasted battery. The re-take is guarded on `isGenerating && !isStopping`, so an answer arriving after Stop cannot take back a screen Stop already released. `clearPendingToolConfirmation` needs no release: it runs from that same `finally`, beside the release, and resolves the pending promise directly rather than through `resolveToolConfirmation`, so it can never trigger a re-take.
+- **`isStopping` means a send is waiting for the previous run to drain.** Only the send path writes it, around `acquireGeneration`; each send clears it when its own acquire resolves. Stop intent is the lease's `AbortSignal`: `handleStopPress` calls `lease.abort()` and the TTS stop, nothing else.
+- **UI stop clears the run UI at the abort, not at the drain.** `inferencing`, `isStreaming`, `isGenerating`, `agentUiState` (idle), `toolCallTokenCount` and keep-awake are cleared at the first of: the signal's `abort` event, finding it already aborted, or the send path's `finally`. A release-initiated abort gets the same UI. Run UI is set only while the signal is not aborted. After UI stop the loop writes persistence only, keyed by the run's own `messageId` / `sessionId`; `lease.end()` is the send path's last statement.
+- **Keep-awake has two call sites in `useChatSession` and nowhere else**: taken when the send path sets run UI, released by UI stop.
 - **The pending tool confirmation is hook-local React state, not a store field**, so `applyEventToStore` stays the only store writer during a run. `useChatSession` sets it from `confirmToolCall` and clears it on resolve, in the send path's `finally`, and on unmount (resolving `false`), so a pending confirmation never outlives its run. Answers are keyed by `callId` and the first one for an id wins: any other id, or a second answer for a settled id, is a no-op. That is what makes a late `onDismiss` from the previous call's close animation harmless while the next call is already pending, because the shared `Sheet` reports a programmatic close as a dismiss. `ChatScreen` keys the sheet by `callId` so each call gets a fresh instance, and dismissing is a decline.
 - `contextInitParams.n_ctx` is a single global, written only by `setNContext` (Settings, `IncreaseContextSheet`). Sessions cannot override it.
 - `persistReasoning` sets `newChatThinkingOverride` / `newChatReasoningEffort` only when there is no session. Creating, resetting or switching a session clears them, and a staged override makes the new session `'custom'`.
@@ -99,7 +100,7 @@ any ─step_started (initial or follow-up)→ prefill
 **Pending indicator**
 
 - The indicator belongs to `ChatView` and renders below the newest turn, never inside it. It is visible iff the status is prefill, generating_tool_call or executing_tool, or `isStopping` is set (`ChatView.tsx:822`). Because every `step_started` returns to `prefill`, it covers both dead zones: while the tool runs and before the follow-up's first token.
-- The suffix reads "Stopping…" while stopping. Otherwise it shows a label only while `pendingTalentNames` is non-empty, the token count from 10 tokens, and the elapsed time from 1 s.
+- The suffix reads "Stopping…" while a send waits for a drain; the Stop tap itself shows none. Otherwise it shows a label only while `pendingTalentNames` is non-empty, the token count from 10 tokens, and the elapsed time from 1 s.
 - The reducer keeps the first talent names it sees and never clears them on a content token, because later deltas drop the function name.
 
 **Context banner**
@@ -145,6 +146,7 @@ any ─step_started (initial or follow-up)→ prefill
 - **Isolated indicator.** The tool-token count is bucketed and `PendingIndicatorView` is its own observer. Without both, the FlatList header remounts on every token, which kills the dot animation and the timer.
 - **100 ms yield.** Without it, Stop taps wait behind microtask resumption for seconds.
 - **String-coupled native errors.** The catch path regex-matches the llama.rn errors "Context is full", "Failed to parse tool call arguments as JSON" and "failed to create MTP draft context"; a reword silently shows the raw error instead. Re-check on every llama.rn upgrade.
+- **The user row is written after acquire.** Writing it first would put it into the prompt's `currentMessages` twice and stamp the pre-switch `contextId`; so during a drain wait the composer is empty and only "Stopping…" shows.
 - **A user Stop is not a failure.** Both engines resolve an aborted completion, so the run ends through `run_finished` with clean-finish metadata; `interrupted` and the empty-turn delete happen only when the engine rejects (`useChatSession.ts:774`).
 - **Prompt overflow throws before any token.** The empty turn is deleted, and the full snapshot is kept only in memory, so a session switch loses it.
 - **`used` counts the whole prompt, and unknown is not zero.** A llama.cpp server's `timings.prompt_n` excludes the prefix it served from KV cache, so the remote prompt total is `prompt_n + cache_n`, each key guarded on its own — now in `readFinish` (`src/api/servers/index.ts`), one function every server type shares because field presence decides. With normalised timings the sum runs on numbers, so a non-finite `cache_n` counts as absent instead of concatenating into a string token count. An old build omits `cache_n` and falls back to `prompt_n`. llama.rn's local `tokens_evaluated` is already the whole prompt. With no prompt count, `used` is absent (`useChatSession.ts:251`), and the resolver shows no full or warning banner.
@@ -159,11 +161,11 @@ any ─step_started (initial or follow-up)→ prefill
 
 ## Verification
 
-- **Unit:** the `__tests__/` folders next to each code-map entry; key ones are `Message.assistantTurn` (block order, footer), `ChatView.assistantTurn` (indicator), `ChatView.keyboard`, `BannerRow`, `bannerVariantResolver`, `useChatSession.*`, `ChatSessionStore.assistantTurn`.
+- **Unit:** the `__tests__/` folders next to each code-map entry; key ones are `Message.assistantTurn` (block order, footer), `ChatView.assistantTurn` (indicator), `ChatView.keyboard`, `BannerRow`, `bannerVariantResolver`, `useChatSession.*` (`useChatSession.stop` for Stop, drain and release-initiated stop), `ChatSessionStore.assistantTurn`.
 - **E2E** (`e2e/specs/features/`): `talent-tool-use`, `thinking`, `thinking-pal-override`, `graded-effort-override`, `remote-reasoning`, `context-banner`.
 - **By hand:**
   - A `render_html` turn: the indicator covers both dead zones, and the turn has one footer.
-  - Stop mid-stream: the indicator shows "Stopping…", and the turn keeps its partial text with a normal footer (copy, plus timings when the engine returned them), not an interrupted one.
+  - Stop mid-stream: Send returns at once with no indicator, and the turn keeps its partial text with a normal footer (copy, plus timings when the engine returned them), not an interrupted one. Send again at once: "Stopping…" shows only until the previous run drains, then the user row and the normal indicator appear together.
   - Fill n_ctx until the full banner appears. Raising n_ctx should clear it.
   - Android API 29: the keyboard does not hide the newest turn.
 - **Search:** `ChatSearchBar`, `searchIndex`, `ChatSessionStore` (search), `ChatView.search`, `searchJump`, `TextMessage` tests. By hand: a tall message's bottom match lands above the composer; Android back closes search, staying in chat.

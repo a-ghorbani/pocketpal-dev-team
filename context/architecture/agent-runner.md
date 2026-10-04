@@ -13,15 +13,16 @@
 | `src/services/agent/agentStateReducer.ts` | pure `AgentEvent` to `AgentUiState` reducer (consumer side) |
 | `src/services/agent/triggerMarkers.ts` | per-context cache of tool-call trigger markers from `grammar_triggers` |
 | `src/services/agent/index.ts` | public surface |
-| `src/hooks/useChatSession.ts` | sole consumer: builds options, iterates events, owns the `AbortController` |
+| `src/hooks/useChatSession.ts` | sole consumer: builds options, iterates events, passes its generation lease's signal (`model-loading.md`) |
+| `src/utils/stopUntilSettled.ts` | the level-triggered stop the runner runs per completion |
 | `src/api/completionEngines.ts` | `CompletionEngine` implementations the runner calls |
 
 ## How it works
 
-`useChatSession.handleSendPress` builds `AgentRunOptions`: `allowedTalentNames` from `pal.pact.talents`, `talentLookup` as `talentRegistry.get`, `triggerMarkers` from `triggerCacheRef.current.getMarkers(...)`, and a fresh `AbortController` signal. It then consumes `runAgent(opts)` with `for await`, running `agentStateReducer` then `applyEventToStore` per event, and rethrows on `run_failed`.
+`useChatSession.handleSendPress` builds `AgentRunOptions`: `allowedTalentNames` from `pal.pact.talents`, `talentLookup` as `talentRegistry.get`, `triggerMarkers` from `triggerCacheRef.current.getMarkers(...)`, and the signal of the generation lease it holds for the run. It then consumes `runAgent(opts)` with `for await`, running `agentStateReducer` then `applyEventToStore` per event, and rethrows on `run_failed`.
 
 Each loop turn:
-1. emit `step_started`;
+1. emit `step_started`; if the signal is aborted by now, emit `step_finished` with no calls and end with `run_finished`;
 2. call `engine.completion` with a stream callback that pushes `token` and, at most once per step, `marker_seen` into the `EventQueue`;
 3. drain the queue until the promise settles;
 4. emit `step_finished` carrying the normalized tool calls;
@@ -42,17 +43,19 @@ A step with no tool calls ends the run with `run_finished`. When `turn` reaches 
 - **An engine declaring neither gate runs the pre-change path** — `execute(args)` with one argument, no race and no timer — so built-ins behave exactly as before. A test asserts the call arity, because the deadline branch always passes a `ctx`.
 - **The whitelist check runs before the registry lookup.** A talent registered globally is still refused for a Pal whose PACT omits it.
 - **Tool-call ids are never null downstream, and never repeat within a batch.** `normalizeToolCallIds` fills a missing id — or one an earlier call in the same batch already used — with `call_<seed>_<idx>`, where the seed is the run's `Date.now()` plus the turn. Uniqueness matters because the confirmation sheet settles a pending call by id: with a repeat, a late `onDismiss` from the previous call's close animation would answer a different call than the one it closed. The same list rides `step_finished.toolCalls` and the outcomes' `callId`, so `step.toolCalls[i].id === outcome.callId` holds by construction. Strict Jinja templates reject `tool_call_id: null` on the next turn.
-- **The runner owns the Stop → `engine.stopCompletion` translation.** It calls it from the `onAbort` listener, removed in `finally`. `handleStopPress` sets `isStopping` and calls `abort()`, never `stopCompletion`. The one other mid-run caller is a context release (`ModelStore._releaseContextInternal`), which stops the completion before freeing the context.
+- **The runner owns the Stop → `engine.stopCompletion` translation, and it is level-triggered.** While a completion it started is unsettled and the signal is aborted, `stopUntilSettled` calls `stopCompletion` at once and every 100 ms until the completion settles. Stop and a context release both just abort the lease (`handleStopPress`, `ModelStore._releaseContextInternal`).
+- **The runner never ends while a completion it started is unsettled.** If the consumer stops iterating or a yield throws, `finally` stops and awaits it, so the holder's `lease.end()`, and the release waiting on it, follow the engine.
 - **Zero React / MobX / store imports in the runner.** Everything arrives through `AgentRunOptions`. It never persists, renders, or holds UI status.
 - **`AgentRunResult.steps` is always `[]`.** The consumer reconstructs steps from events. `hitMaxTurns` is `turn >= maxTurns` at exit.
-- **The iterator is single-consumer.** `EventQueue` has one waiter slot. There is no concurrent-run guard inside the runner; the hook and the send-button gate (`isStopping` / inferencing) are the only concurrency owners.
+- **The iterator is single-consumer.** `EventQueue` has one waiter slot. There is no concurrent-run guard inside the runner; the generation lease serialises runs (`model-loading.md`).
 - **`DEFAULT_MAX_TURNS` (5) is exported on purpose.** `useChatSession` passes it as `maxToolTurns` to `collectSystemPromptFragments`, and the search grounding fragment advertises `maxToolTurns - 1` tool calls (`WebSearchEngine.systemPromptFragment`). Changing the cap changes the prompt.
 
 ## Traps and decisions
 
 - **Abort does not interrupt a running tool unless the engine declares `timeoutMs`.** For an engine without it, once `engine.execute` is awaited it runs to completion, `tool_call_finished` is emitted, and the loop breaks at the turn boundary on `signal.aborted`; timeouts there belong to the talent/provider (for example `withTimeout` in `src/services/search/providers/http.ts`). An engine that declares a deadline opts into cooperative cancellation: it receives `ctx.signal`, Stop resolves the call immediately rather than after the deadline, and a late settle is ignored. Network tools need this because a run must not hold "Stopping…" for the length of a request.
-- **Aborted runs end in `run_finished` (status `done`), not `failed`,** so the hook writes the same metadata as a clean finish. The `interrupted` tag and the empty-turn delete belong to the hook's catch path, reached only when the engine rejects (see `chat-flow.md`, How it works).
+- **Aborted runs end in `run_finished`, not `run_failed`,** so the hook writes the same metadata as a clean finish; the run UI was already reset to idle at the abort (`chat-flow.md`, UI stop). The `interrupted` tag and the empty-turn delete belong to the hook's catch path, reached only when the engine rejects (see `chat-flow.md`, How it works).
 - **`token.delta.content` / `reasoningContent` are cumulative for the step, not increments,** despite the name: both engines pass accumulated text, as llama.rn's callback does (`openai.ts` "Pass accumulated content"). A consumer must replace, or diff against the previous value (as the TTS path does).
+- **A single stop can be lost.** llama.rn's JS `completion` awaits `getFormattedChat` before its native call, whose `rewind()` clears the interrupt flag; `OpenAICompletionEngine` creates its controller inside `completion`. A stop sent in that window does nothing, hence the repeat.
 - **Stream chunks after abort are dropped twice.** `llama.rn`'s `stopCompletion` is non-blocking and native keeps calling back for seconds. The runner's stream callback ignores chunks once `signal.aborted`, and the hook's loop also skips queued `token` events. Lifecycle events still flow.
 - **The next-turn assistant message uses `result.content`, never `result.text`.** `text` contains the raw tool-call markup and arguments. Replaying it would render the call twice, double the prompt, and break the KV-cache prefix match.
 - **Forced final turn.** Tools are stripped, marker scanning is off, and any `tool_calls` the model still emits are ignored. An abort during the last tool round skips it. This design makes the run end with an answer instead of an unanswered tool request.
@@ -66,4 +69,4 @@ A step with no tool calls ends the run with `run_finished`. When `turn` reaches 
 - Unit: `src/services/agent/__tests__/` (`AgentRunner.test.ts` covers event order, abort, forced final, the no-store-imports check, and the gates — approve, decline, fail-closed, abort while pending, deadline, Stop mid-execute, and the untouched ungated path; `agentStateReducer.test.ts`; `triggerMarkers.test.ts`).
 - Hook integration: `src/hooks/__tests__/useChatSession*.test.ts`.
 - e2e: `e2e/specs/features/talent-tool-use.spec.ts` (Pal with `render_html`; tool call and follow-up on device).
-- By hand: ask a Pal with `calculate` for arithmetic and tap Stop mid-stream. The run should end `done`, not `failed`, with the partial text kept and no follow-up turn.
+- By hand: ask a Pal with `calculate` for arithmetic and tap Stop mid-stream. Send returns at once, the partial text stays with a normal footer, and no follow-up turn runs.

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This doc covers how the preset model list comes from device rules, how capabilities (vision, MTP) are read, and how a local model is loaded natively: the error lifecycle, Android Hexagon device resolution, and speculative decoding. Remote-server capability discovery is in `remote-servers.md`. llama.rn build modes and the shipped native payload are in `release.md`. The benchmark's own native loading is in `benchmark-matrix.md`.
+This doc covers how the preset model list comes from device rules, how capabilities (vision, MTP) are read, how a local model is loaded natively (the error lifecycle, Android Hexagon device resolution, speculative decoding), and how a release waits for the running generation. Remote-server capability discovery is in `remote-servers.md`. llama.rn build modes and the shipped native payload are in `release.md`. The benchmark's own native loading is in `benchmark-matrix.md`.
 
 ## Code map
 
@@ -15,6 +15,9 @@ This doc covers how the preset model list comes from device rules, how capabilit
 | `src/utils/mtp.ts` | `isMTPCapable`, `nEmbdOut`, `isDraftOnlyModel`, `probeRemoteMTPCapability` |
 | `src/utils/ggufHeader.ts` | in-repo range-fetching GGUF header reader for the pre-download MTP probe |
 | `src/utils/modelCaps.ts` | `resolveModelCaps`, the single capability read-point |
+| `src/store/generationLease.ts` | `GenerationSlot` (FIFO lease slot) and the `GenerationLease` type; `ModelStore` composes it (`acquireGeneration`, `tryAcquireGeneration`, `abortActiveGeneration`, `isGenerationBusy`) |
+| `src/utils/stopUntilSettled.ts` | level-triggered stop every lease holder runs while its engine call is unsettled |
+| `patches/llama.rn+0.13.0-rc.5.patch` | native context ownership and the llama abort callback; build and payload contract in `release.md` |
 | `src/utils/deviceSelection.ts` | `resolveDeviceSelection`, `getDeviceOptions`, the canonical Hexagon pick |
 | `src/utils/index.ts` | `hfAsModel` (HF file to `Model`) |
 | `src/utils/contextInitParamsVersions.ts` | persisted `contextInitParams` migrations |
@@ -31,6 +34,8 @@ Load path:
 - `selectModel` sends a local model to `initContext`.
 - Phase 1 runs outside the mutex: `resolveMultimodalConfig`, `resolveDraftConfig`, and the `checkMemoryAndConfirm` alert, then a last-one-wins `pendingModelId` check.
 - Phase 2 runs inside the mutex in `proceedWithInitialization`: release the old context, `getEffectiveContextInitParams(filePath, draftConfig)`, a single `initLlama`, and a verify-and-write of `isMultimodalActive`.
+
+Generation lease: a chat run holds one for its whole `runAgent` run, a VideoPal frame for its completion (`tryAcquireGeneration`, never waits). `acquireGeneration` waits for earlier leases, then the context-op mutex tail, then grants on the current engine (null if none or releasing). Every release (`_releaseContextInternal`) aborts the lease and awaits `end()` before `releaseMultimodal` and `context.release()`. Native release flags the context, unregisters it, and destroys it once sole owner.
 
 ## Contracts and invariants
 
@@ -60,6 +65,9 @@ Load path:
 - **Single writers for draft state.** `speculativeEnabled`, `selectedDraftModelId` and `spec_draft_*` are written only by the `modelStore.set*` setters. The `2.2 → 2.3` params migration sets `speculativeEnabled: false`.
 - **Every ggml env var the app sets is one the vendored ggml `getenv`s.** A name nothing reads is a silent no-op that no test catches; the upgrade re-check is in `release.md`, Verification.
 - **llama.rn is the app's only ggml-bearing native dependency.** Its ggml is unprefixed, so a second ggml copy would collide at link or bind time. On iOS, `rnllama.framework` hides `ggml_*` / `gguf_*`, so `ios/PocketPal/AppIntents/LlamaContextWrapper.mm` may reference only exported symbols (`common_*`, `llama_*`, `rnllama::`), header inlines included.
+- **One lease per `ModelStore`; no chat or VideoPal completion outside a held, unaborted lease; no `context.release()` while one is held.** A stale `end()` cannot clear a newer lease.
+- **A lease holder never awaits `contextOperationMutex`:** release holds it while awaiting the drain. Acquirers may.
+- **Natively, a registered context is reachable only through `shared_ptr`**, taken at task start and held until the task returns; slot-manager callbacks hold a `weak_ptr` (the context owns them).
 - **A paired draft is resident alongside the target and projector.** The memory check sums all three, with the draft's weights plus its KV cache. `_downloadDraftModelIfNeeded` is best-effort and uses the same draft-selection order.
 
 ## Traps and decisions
@@ -67,6 +75,10 @@ Load path:
 - **A width mismatch is an uncatchable SIGABRT.** `GGML_ASSERT` fires in `init_mtp`. The JS width check is the only guard, so an unknown width means not paired. Sending `spec_type` to a non-MTP target is a native error, not a no-op, which is why the app resolves to off before emitting.
 - **MTP capability reads cached `ggufMetadata.nextn_predict_layers`,** and width reads cached `n_embd` / `embedding_length_out`. A model whose metadata is missing resolves as not capable or not paired. For example, e2e pre-seeded files skip metadata fetch, so pairing silently degrades there. A converter that omits the KV false-negatives safely to off.
 - **`auto` flash attention resolves per backend after init params are committed.** On Android CPU it resolves off, and llama.cpp refuses a quantized V cache without flash attention, so q8_0-with-`auto` (llama.rn's example) is Apple-safe only.
+- **No timeout on the drain or native release:** llama.rn's 5 s wait-then-delete was the crash. A wedged backend (Hexagon Q2_K) hangs release and the next send's "Stopping…"; no watchdog exists.
+- **Only CPU honours the abort callback per node** (Android drains in about 1 s). OpenCL, Hexagon and prebuilt iOS stop between decode batches, so stop and release wait one batch.
+- **Acquire chains on the mutex after the drain**, so a send queued during a switch reaches the new model.
+- **Structured output and Test Completion take no lease;** native ownership alone keeps release safe for them. App Intents' context is outside the registry.
 - **The pre-download probe is tri-state (`capable | not-capable | unknown`) and uses an in-repo reader.** `@huggingface/gguf` needed `TextDecoder`, which Hermes lacks: it threw on device while jest stayed green, and a `catch → false` hid that. `ggufHeader.ts` seeks past values, hand-decodes short keys, and throws to `unknown` on any anomaly. The HF API's `expand[]=gguf` omits the arch-namespaced KVs and tensor names this probe needs.
 - **Draft-only artifacts** (arch suffix `assistant` / `mtp`, or the filename convention pre-download) are not chat models. `hfAsModel` does not treat them as vision LLMs even beside an mmproj, and `healDraftVisionClassification` cleans legacy records.
 - **Projector quant is an authoring responsibility.** The rule's `mmproj` is used as named, not through `getRecommendedProjectionModel`.
@@ -78,7 +90,8 @@ Load path:
 
 ## Verification
 
-- Unit: `src/services/deviceRules/__tests__/`, `src/store/__tests__/ModelStore.test.ts` (failure sets error once, `initLlama` once), `src/utils/__tests__/{deviceSelection,ggufHeader,mtp,modelCaps}.test.ts`.
+- Unit: `src/services/deviceRules/__tests__/`, `src/store/__tests__/ModelStore.test.ts` (failure sets error once, `initLlama` once), `src/utils/__tests__/{deviceSelection,ggufHeader,mtp,modelCaps}.test.ts`, `src/store/__tests__/{generationLease,ModelStore.generationLease}.test.ts`.
+- Release safety is proven only on a device: Home and unload mid-prefill, 1 and 4 threads, ~1,800-token prompt; no crash, about 1 s on Android CPU.
 - e2e: `e2e/specs/features/speculative.spec.ts`, `speculative-paired.spec.ts`, `speculative-visual.spec.ts`, `download-cancel.spec.ts`.
 - **Speculative engagement is provable only by `draft_tokens > 0`.** `AssistantTurnFooter` then renders `message-draft-tokens`. A no-error run proves nothing, because an inert load also succeeds. For the off case, check that the element is absent. For a width-mismatched paired draft, the check is that the process survives and the target loads. Load with an adequate `n_ctx` first, or the increase-context sheet starves generation.
 - **The displayed tokens/sec is llama.rn's native timing,** which is speculative-correct in current llama.rn. It shows the rate is reported, not that speculative decoding is faster. That needs one model measured both ways on a physical device.
