@@ -16,7 +16,7 @@ Buying a paid PalsHub Pal through the platform store (StoreKit 2 on iOS, Play Bi
 | `src/services/iap/creatorContent.ts` | Pure creator-content projection and field diff |
 | `src/services/iap/accountLink.ts` | `ACCOUNT_LINK_ENABLED` (off at launch) |
 | `src/services/palshub/apiBase.ts`, `palEvents.ts` | API base and client headers; funnel events |
-| `src/components/PalsHub/PalPurchaseFooter/` | Sheet footer: Buy, purchase phases, Open/Install, update prompt |
+| `src/components/PalsHub/PalPurchaseFooter/` | Sheet footer: Buy (with the iOS US licence line), purchase phases, Open/Install, update prompt |
 | `src/components/PalsHub/PalModelStep/` | Post-purchase model offer and Start chat |
 | `src/screens/PalsScreen/myPals.ts`, `components/SquarePalCard/` | Owned sections and the Pending / Unlocking / Update badges |
 | `src/screens/SettingsScreen/PurchasesCard.tsx` | Settings › Purchases |
@@ -58,6 +58,7 @@ removed ─verify active→ granted (re-purchase)
 - **Request caps.** Verify and refresh send at most 10 (Android) / 50 (iOS) transactions and 200 `known` entries per request; `iapApi` chunks so each item is sent once, and merges. A revocation wins only for the same support code, so a refunded old purchase never removes a re-purchase.
 - **A failed store query never refreshes or clears records.**
 - **Buy renders only when** billing is ready, the Pal is IAP-enabled for this platform, the store returned a product, and there is no ledger record. Otherwise nothing renders. The price comes only from the store.
+- **iOS US licence line.** Apple's DPLA (Att. 2 §3.2) requires US-storefront one-time IAP to say, before Buy, that the user buys a licence, with links to the terms incl. the Apple Media Services Terms. `purchaseStore.showsLicenseNotice` is true on iOS when the storefront is `USA` or unknown (unknown is the safe side); the footer renders the line above Buy with links to palshub.ai Terms of Sale and Apple's terms. Android and other storefronts show nothing.
 - **Purchase errors never change availability.** Availability comes from billing init alone.
 - **Headers.** `X-IAP-Capable: 1` and `X-Client-Platform` go on every PalsHub request. Verify, refresh and events carry no `Authorization`.
 - **Secrets.** Purchase tokens, JWS and binding values are never persisted or logged.
@@ -75,6 +76,7 @@ removed ─verify active→ granted (re-purchase)
 - **Tombstones, not deletes.** The store keeps listing a refunded product; the `removed` record stops recovery re-driving it.
 - **Stale pending differs by platform.** Android drops it once a successful query no longer lists it, and clears `held_invalid` the same way. iOS ages it out after 72 h or on Restore, because a declined Ask to Buy emits nothing.
 - **Account linking is off at launch.** The server has no link or binding endpoints, so purchases go unbound and the link UI is hidden.
+- **The storefront is read once per process**, after the first successful billing init, and never awaited. OpenIAP's `getStorefront` emits a purchase error when it fails, and the Apple pay sheet itself triggers a foreground `recover()` while a purchase listener is live, so re-reading on foreground could settle an in-flight purchase as an error. A storefront switch mid-session takes effect on the next launch.
 - **iOS needs glog's textual module map** (`ios/Podfile` `post_install`). Without it, NitroModules fails to build.
 - **Labels follow the store apps.** The price alone on Buy; a progress indicator with no text while paying or unlocking; `Pending`; `Open` / `Install`; `Purchased`.
 - **iOS e2e can't see container testIDs.** XCUITest reports a plain container View as not visible, so specs wait on a visible leaf (`PalBuyPage.waitForReady`), not `purchase-ready`.
