@@ -12,7 +12,8 @@ On-device tap-to-record speech-to-text for the chat composer: availability gate,
 | --- | --- |
 | `src/store/ASRStore.ts` | `asrStore`: the gate (`asrAvailable`), `selectedTier`, per-tier download state, `captureState` / `lastError` / `inputLevels`, AppState release |
 | `src/services/asr/constants.ts` | `ASR_TIERS` (URL, filename, exact bytes), `ASR_MODEL_VERSION`, VAD floor and frame, `ASR_MAX_RECORD_MS`, `ASR_CHUNK_BYTES`, `ASR_LEVEL_HISTORY`, `ASR_DISK_HEADROOM_FACTOR`, `ASR_INSUFFICIENT_STORAGE` |
-| `src/services/asr/engines/whisper/index.ts` | `whisperAsrEngine`: per-tier `isInstalled` / `downloadModel` / `reclaimLegacySpace`, a lazy `initWhisper` context, `transcribe`, `cancelTranscription`, `release` |
+| `src/services/asr/engines/whisper/index.ts` | `whisperAsrEngine`: per-tier `isInstalled` / `downloadModel` / `reclaimLegacySpace`, a deduplicated `initWhisper` context (`prepare`), `transcribe` (with `prompt`), `cancelTranscription`, `release` |
+| `src/services/asr/speechSegmenter.ts` | `SpeechSegmenter`: cuts the live PCM stream at pauses (`ASR_SEGMENT_PAUSE_MS`) or `ASR_MAX_SEGMENT_MS`, trims silence before speech to `ASR_SEGMENT_LEAD_IN_MS` |
 | `src/services/asr/energyVad.ts` | `energyVad` (voiced-frame gate), `inputLevel` (chunk loudness for the waveform), `int16PcmToFloat32` |
 | `src/hooks/useVoiceCapture.ts` | the capture lifecycle (`start` / `stop` / `cancel`): permission, `AudioRecord` PCM stream, levels, VAD, transcribe, release. Mounted once, in `ChatInput` |
 | `src/utils/asrMicPermission.ts` | `ensureMicPermission` (returns granted, denied or blocked; Android blocked-without-dialog timeout), `openMicSettings` |
@@ -32,7 +33,7 @@ On-device tap-to-record speech-to-text for the chat composer: availability gate,
 The capture state machine (`captureState`, driven by `useVoiceCapture`):
 
 ```
-idle ─tap mic→ requesting_perm ─granted→ recording ─stop / 30 s cap→ transcribing ─text→ idle (appended)
+idle ─tap mic→ requesting_perm ─granted→ recording ─stop / 3 min cap→ transcribing ─text→ idle (appended)
                requesting_perm ─denied / blocked→ error         requesting_perm ─AudioRecord.init throws→ error(transcribe_failed)
                recording ─stop, VAD fails→ idle (silently)       transcribing ─empty text→ idle (silently)
                recording ─cancel / app backgrounded→ idle (buffer discarded)
@@ -41,7 +42,7 @@ idle ─tap mic→ requesting_perm ─granted→ recording ─stop / 30 s cap→
 error ─tap mic→ requesting_perm        (error is a re-armable resting state)
 ```
 
-While recording, each 50 ms chunk (`ASR_CHUNK_BYTES`) is buffered and its `inputLevel` pushed to `asrStore.inputLevels` (last `ASR_LEVEL_HISTORY`), which only `VoiceRecordingBar`'s bars observe. On stop the hook concatenates the int16 PCM → `int16PcmToFloat32` → `energyVad` → `whisperAsrEngine.transcribe()` (the raw int16 bytes as base64, `selectedTier`, `language: 'auto'`) → `onTranscript` (ChatView's `appendTranscript`).
+On permission the hook queues `whisperAsrEngine.prepare(tier)`, so the model loads while the user speaks. Each 50 ms chunk (`ASR_CHUNK_BYTES`) goes to a `SpeechSegmenter` and its `inputLevel` to `asrStore.inputLevels` (last `ASR_LEVEL_HISTORY`), which only `VoiceRecordingBar`'s bars observe; the bar also shows the elapsed time from `recordingStartedAt`. When the segmenter cuts a segment, the hook queues its transcription: `energyVad` gate → `transcribe()` (raw int16 bytes as base64, `selectedTier`, `language: 'auto'`, and the last `ASR_PROMPT_CHARS` of earlier segments as `prompt`). On stop the remaining audio is queued the same way, the state shows `transcribing` until the queue drains, and the segment texts are joined and passed to `onTranscript` (ChatView's `appendTranscript`).
 
 `ASRStore.downloadModel(tier)`: `reclaimLegacySpace(tier)` → preflight at `estimatedBytes * ASR_DISK_HEADROOM_FACTOR` → engine download → `setSelectedTier(tier)`.
 
@@ -59,11 +60,14 @@ While recording, each 50 ms chunk (`ASR_CHUNK_BYTES`) is buffered and its `input
 - **Offline.** Capture and transcription make no network calls; the only one is the model download.
 - **The model never enters `ModelStore`** (no preset, fit check, auto-load, `ModelCard`); ASR readiness is independent of the LLM.
 - **Capture and context are always released.** The recorder: on stop, cancel, error, `ASR_MAX_RECORD_MS`, background (buffer discarded), unmount. The ~400 MB whisper context: after every transcription (success or failure) and on `'background'` (never `'inactive'`), so it never sits beside the LLM; re-init is lazy.
-- **`captureState` / `lastError` / `inputLevels`** are written by `useVoiceCapture`, plus the snackbar's `resetCapture` on dismiss. Async work from a cancelled capture (a pending permission prompt or transcription) is dropped by a per-capture session counter, never written back.
+- **Engine work is serial.** `prepare`, every segment `transcribe` and `release` go through one promise queue in the hook, so a release never cuts across a load or a decode. The engine also deduplicates a load in flight, and a load that finishes after `release()` frees its context (a generation counter).
+- **A failed segment fails the capture.** The remaining segments are skipped and stop shows `transcribe_failed`; partial text is not appended.
+- **`captureState` / `lastError` / `inputLevels` / `recordingStartedAt`** are written by `useVoiceCapture`, plus the snackbar's `resetCapture` on dismiss. Async work from a cancelled capture (a pending permission prompt or transcription) is dropped by a per-capture session counter, never written back.
 
 ## Traps and decisions
 
 - **Whisper hallucinates text on silence.** That is why the energy gate is required. It deliberately isn't whisper.rn's `initWhisperVad()`, which crashes (whisper.rn issue #308).
+- **Segment at pauses, not fixed windows.** whisper.rn ships a realtime transcriber that slices at pauses, but it finds them with the Silero VAD context that crashes (whisper.rn #308), so the hook slices with the energy gate it already has.
 - **Gate per frame, not per buffer.** Whole-buffer RMS let the silence before and after speech pull quiet, clear speech under the floor (a phone speaker at arm's length measured 0.0091 against 0.01), so it was rejected.
 - **whisper.rn's own doc comment says `transcribeData` takes float32.** It doesn't; sending float32 bytes produced noise and an empty transcript every time.
 - **Re-entrant starts are ignored** while a capture is starting, live or transcribing, because a second start would leak the listener and the timer.
