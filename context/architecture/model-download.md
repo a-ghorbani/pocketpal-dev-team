@@ -23,7 +23,7 @@ Native paths are under `android/app/src/main/java/com/pocketpalai/download/` (Ko
 | `src/services/downloads/DownloadManager.ts` | JS job map (`isDownloading`), native event handling, asks `POST_NOTIFICATIONS` before an API 34+ start |
 | `src/utils/androidPermission.ts` | `ensureNotificationPermission`: asks at most once per app session |
 | `src/store/ModelStore.ts` | download callbacks, `downloadError`, `retryDownload` |
-| `src/components/DownloadOverlay/DownloadBanner.tsx` | progress row, and the failure row (status first, pal or model name below) with Retry |
+| `src/components/DownloadOverlay/DownloadBanner.tsx` | progress row, and the failure row (status alone on line 1; pal or model name and the +N badge on line 2) with Retry |
 
 ## How it works
 
@@ -47,7 +47,7 @@ Row status: insert/upsert → QUEUED → RUNNING → COMPLETED | FAILED; system 
 - **COMPLETED requires** `.part` length == `totalBytes` (when known) and a successful rename.
 - **`onDownloadFailed` fires only for a FAILED row.** Cancel and system stops never produce it (`download-cancel.spec.ts` asserts no error dialog).
 - **Every FAILED reaches JS once, even across process death.** Any write to FAILED sets `failureUnreported`; requeue or any status write away from FAILED clears it, and so does the module after emitting `onDownloadFailed`. `getActiveDownloads` returns those rows, so a failure in a process without JS (a WorkManager rerun) shows on next open.
-- **A FAILED row's `downloadedBytes` is what `.part` still holds** (0 when the engine deleted it). JS `onError` sets `progress` to that kept value on Android and to 0 on iOS.
+- **A FAILED row's `downloadedBytes` is what `.part` still holds** (0 when the engine deleted it): every engine FAILED write (error, user stop, stall bound) goes through `DownloadDao.fail`. JS `onError` sets `progress` to that kept value on Android and to 0 on iOS.
 - **Single writers:** the engine owns RUNNING/QUEUED-on-stop/COMPLETED/FAILED, CANCELLED for a superseded row, and `downloadedBytes`/`totalBytes`/`etag`/`stalledRuns` during a run; `DownloadController` owns QUEUED on start/resume/retry (`requeue` also zeroes `stalledRuns`), PAUSED, CANCELLED, `url`, `authToken`, and on a url change `resetResource` zeroes `etag`/`totalBytes`/`downloadedBytes`. JS never deletes `.part`.
 - **No FGS type:** no `foregroundServiceType`, no typed `FOREGROUND_SERVICE_*` permission, no `setForeground`/`startForeground`. WorkManager's inherited plain `FOREGROUND_SERVICE` and untyped `SystemForegroundService` stay.
 - **JS "is downloading" is `modelStore.isDownloading(id)`**, never `progress > 0`. `ModelFileCard` fills from `progress` only while downloading or downloaded, and `ProjectionModelSelector` shows its spinner only while downloading.
@@ -67,6 +67,7 @@ Row status: insert/upsert → QUEUED → RUNNING → COMPLETED | FAILED; system 
 - **UIDT is refused when the app is not visible**, so a resume after restart typically falls back to WorkManager and stays there.
 - **The notification is requested on API 34+ start but never required**, at most once per app session so a model and its chained projection or draft downloads prompt once; a denied UIDT still runs and shows in Task Manager.
 - **`.part` writes are buffered (64 KB) and flushed on each progress tick and at EOF**, so during a stall up to one buffer sits in memory and a process kill loses only that.
+- **A storage error stays permanent through close.** `openPart` returns the raw file stream and the engine owns the buffer: after a write or flush error it closes only the raw stream (the buffer is dropped, so nothing is written after a recorded failure), and the normal close is itself a storage check. Letting `use` close the buffer re-flushes, throws, and `attempt` maps that IOException to a transient retry that never gives up (each retry buffers bytes, so `lastByteAt` advances).
 - **`networkType` from JS is stored but not applied** (WorkManager always uses `CONNECTED`, UIDT `NETWORK_TYPE_ANY`).
 
 ## Verification
