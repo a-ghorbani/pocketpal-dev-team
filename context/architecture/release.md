@@ -19,7 +19,7 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 | `android/app/build.gradle`, `android/gradle.properties` | ABI filters, flavors; the root properties file must not carry `rnllamaBuildFromSource`. No Play Billing pin: Billing (9.x) arrives through `react-native-iap`'s `openiap-google`. |
 | `node_modules/llama.rn/android/` | Upstream: its own `gradle.properties` (`rnllamaBuildFromSource=true`), `build.gradle` (mode, variants, `syncRNLlamaHtpAssets`), CMake variant list, and `RNLlama.java` (the load ladder, `HTP_LIBS`, `isHexagonSupported`). |
 | `node_modules/llama.rn/{cmake,vendor}/` | Upstream: `cmake/rnllama-sources.cmake` (source lists) and `vendor/llama.cpp`, unrenamed upstream llama.cpp pinned in `vendor/VERSIONS`. |
-| `patches/llama.rn+<version>.patch` | Our llama.rn source patch (context ownership in `cpp/jsi/`, abort callback and decode-abort handling in `cpp/rn-*`), applied by `scripts/postinstall.sh` (`patch-package`) on every `yarn install`. Runtime contract in `model-loading.md`. |
+| `patches/llama.rn+<version>.patch` | Our llama.rn source patch (context ownership in `cpp/jsi/`, abort callback and decode-abort handling in `cpp/rn-*`, and in `src/index.ts` a stop re-applied after the native completion call), applied by `scripts/postinstall.sh` (`patch-package`) on every `yarn install`. Runtime contract in `model-loading.md`. |
 
 ## How it works
 
@@ -42,7 +42,7 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 - **Consume llama.rn npm releases, not git refs.** A git install lacks `bin/`, `jniLibs`, `lib/`, and the QAIC `vendor/llama.cpp/ggml/src/ggml-hexagon/htp/v73` artifacts.
 
 **The llama.rn patch**
-- **It ships only where llama.rn compiles from source.** Android CI, e2e and release do, and `yarn install` re-applies the patch even on a `node_modules` cache hit. iOS stays on the prebuilt `rnllama.xcframework`, where only `cpp/jsi/` (compiled into the app) is patched: ownership ships, the abort callback does not. JSI code that touches a core member added by the patch sits under `#ifndef RNLLAMA_USE_FRAMEWORK_HEADERS` (the podspec's prebuilt mode) so the prebuilt build still compiles.
+- **It ships only where llama.rn compiles from source.** Android CI, e2e and release do, and `yarn install` re-applies the patch even on a `node_modules` cache hit. iOS stays on the prebuilt `rnllama.xcframework`, where only `cpp/jsi/` (compiled into the app) is patched: ownership ships, the abort callback does not. The `src/index.ts` hunk is in the JS bundle on both platforms and carries no native marker. JSI code that touches a core member added by the patch sits under `#ifndef RNLLAMA_USE_FRAMEWORK_HEADERS` (the podspec's prebuilt mode) so the prebuilt build still compiles.
 - **The patch is proven on the artifact, not trusted.** It exports `rnllama_patch_abort_v1` (core, every `librnllama_*.so`) and `rnllama_jsi_patch_ownership_v1` (every `librnllama_jni*.so`); the manifest demands them with a `why` explaining the miss. An unpatched or prebuilt (`-PrnllamaBuildFromSource=false`) artifact fails the gate. Bump the suffix whenever the patch's contract changes.
 - **`patches/**` is in every `node_modules` and `.cxx` cache key in `ci.yml`**, so a patch edit never meets stale patched or compiled sources.
 - **A llama.rn bump makes `patch-package` fail loudly or needs a re-port.** Re-port against the new sources (the patch names its version), keep the markers, and re-run the device release matrix (`model-loading.md`, Verification).
