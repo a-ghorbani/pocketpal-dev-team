@@ -12,10 +12,10 @@ How a chat turn is sent, streamed, persisted and rendered: tool-call and reasoni
 | --- | --- |
 | `src/hooks/useChatSession.ts` | send / stop, `prepareCompletion`, `applyEventToStore`, `deriveSnapshotFromResult`, catch path |
 | `src/services/agent/agentStateReducer.ts` | pure reducer from `AgentEvent` to `agentUiState` |
-| `src/store/ChatSessionStore.ts` | sessions, messages, step writers, run UI state, banner state, `groupedSessions` |
+| `src/store/ChatSessionStore.ts` | sessions, messages, step writers, run UI state, banner state, `groupedSessions`; composer drafts (`sessionDrafts`, `NEW_CHAT_DRAFT_KEY`, `restoreUnsentText`) |
 | `src/utils/chat.ts` | `stepToApiMessages` (turn to flat OpenAI messages), `derivedText`, `removeThinkingParts` |
 | `src/screens/ChatScreen/ChatScreen.tsx` | wires the hook into `ChatView`; reasoning pill cycle (`persistReasoning`) |
-| `src/components/ChatView/ChatView.tsx` | inverted list, `isPending`, keyboard, snackbars |
+| `src/components/ChatView/ChatView.tsx` | inverted list, `isPending`, keyboard, snackbars, the send funnel (`wrappedOnSendPress`) and the draft save / restore on a chat switch |
 | `src/components/ChatView/BannerRow.tsx` | the single input-slot banner; does the cross-store reads |
 | `src/utils/bannerVariantResolver.ts` | pure `resolveBannerVariant`, thresholds, `CONTEXT_LADDER` |
 | `src/components/IncreaseContextSheet/`, `src/hooks/usePalLoadHint.ts` | increase-context slider, fit check and reload; the heavy-talent snackbar |
@@ -31,7 +31,7 @@ How a chat turn is sent, streamed, persisted and rendered: tool-call and reasoni
 
 ## How it works
 
-1. `handleSendPress` takes the generation lease (`model-loading.md`), waiting behind "Stopping…" while a stopped run drains, then reads the model and session and adds the user row. `prepareCompletion` builds the params and **creates the empty `assistant_turn` row before the run starts**.
+1. `handleSendPress` records the open chat, then takes the generation lease (`model-loading.md`), waiting behind "Stopping…" while a stopped run drains. If the open chat changed meanwhile, it ends the lease, writes nothing, and puts the text back as the original chat's draft. Otherwise it reads the model and session and adds the user row. `prepareCompletion` builds the params and **creates the empty `assistant_turn` row before the run starts**.
 2. The hook runs `for await` over `runAgent`. Each event goes through `agentStateReducer`, then `applyEventToStore`.
 3. `applyEventToStore` routes events to store writes:
    - `step_started` → `pushAgentStep`
@@ -67,12 +67,13 @@ any ─step_started (initial or follow-up)→ prefill
   - The catch path writes `interrupted`, `copyable`, `completionResult` and `truncationLikely`.
   - The empty turn has no `copyable`.
 - `lastCompletionResult` has one writer, `recordCompletionSnapshot`, called right after `metadata.completionResult` is written. That same action clears `dismissedBannerVariants` and updates `consecutiveFullFailures`. `setActiveSession` hydrates the snapshot from the newest turn. `resetActiveSession` and `removeMessagesFromId` (edit or regenerate) clear it.
-- **`isStopping` means a send is waiting for the previous run to drain.** Only the send path writes it, around `acquireGeneration`; each send clears it when its own acquire resolves. Stop intent is the lease's `AbortSignal`: `handleStopPress` calls `lease.abort()` and the TTS stop, nothing else.
+- **`isStopping` means a send is waiting for the previous run to drain.** Only the send path writes it, around `acquireGeneration`; each send clears it when its own acquire resolves. Stop intent is the lease's `AbortSignal`: `handleStopPress` calls `lease.abort()` and the TTS stop, nothing else. While it is set, Send (`disabled`, `accessibilityState.disabled`), Regenerate, Regenerate with and Edit are disabled and ChatView's send funnel returns keeping the input, so at most one send waits. "Stopping…" also shows when Regenerate or Edit queue behind a live, unstopped run; that path is not gated.
 - **UI stop clears the run UI at the abort, not at the drain.** `inferencing`, `isStreaming`, `isGenerating`, `agentUiState` (idle), `toolCallTokenCount` and keep-awake are cleared at the first of: the signal's `abort` event, finding it already aborted, or the send path's `finally`. A release-initiated abort gets the same UI. Run UI is set only while the signal is not aborted. After UI stop the loop writes persistence only, keyed by the run's own `messageId` / `sessionId`; `lease.end()` is the send path's last statement.
 - **Keep-awake has two call sites in `useChatSession` and nowhere else**: taken when the send path sets run UI, released by UI stop.
 - **The pending tool confirmation is hook-local React state, not a store field**, so `applyEventToStore` stays the only store writer during a run. `useChatSession` sets it from `confirmToolCall` and clears it on resolve, in the send path's `finally`, and on unmount (resolving `false`), so a pending confirmation never outlives its run. Answers are keyed by `callId` and the first one for an id wins: any other id, or a second answer for a settled id, is a no-op. That is what makes a late `onDismiss` from the previous call's close animation harmless while the next call is already pending, because the shared `Sheet` reports a programmatic close as a dismiss. `ChatScreen` keys the sheet by `callId` so each call gets a fresh instance, and dismissing is a decline.
 - `contextInitParams.n_ctx` is a single global, written only by `setNContext` (Settings, `IncreaseContextSheet`). Sessions cannot override it.
 - `persistReasoning` sets `newChatThinkingOverride` / `newChatReasoningEffort` only when there is no session. Creating, resetting or switching a session clears them, and a staged override makes the new session `'custom'`.
+- **`sessionDrafts` writers:** ChatView on a chat switch (only when the composer changed since it last synced, joining) and on send (clears the open key, the new-chat key included); `deleteSession`; a cancelled send (`restoreUnsentText`: restored text first, nothing for a deleted chat).
 - `ChatSessionStore` never reads `ModelStore`. `BannerRow`, `ChatView` and `usePalLoadHint` do the cross-store reads.
 
 **Rendering**
@@ -146,7 +147,8 @@ any ─step_started (initial or follow-up)→ prefill
 - **Isolated indicator.** The tool-token count is bucketed and `PendingIndicatorView` is its own observer. Without both, the FlatList header remounts on every token, which kills the dot animation and the timer.
 - **100 ms yield.** Without it, Stop taps wait behind microtask resumption for seconds. It is a `setTimeout` raced against the lease signal: JS timers do not fire while the app is backgrounded, and a background auto-release waits for this run's `lease.end()`, so an abort must end the yield itself.
 - **String-coupled native errors.** The catch path regex-matches the llama.rn errors "Context is full", "Failed to parse tool call arguments as JSON" and "failed to create MTP draft context"; a reword silently shows the raw error instead. Re-check on every llama.rn upgrade.
-- **The user row is written after acquire.** Writing it first would put it into the prompt's `currentMessages` twice and stamp the pre-switch `contextId`; so during a drain wait the composer is empty and only "Stopping…" shows.
+- **The user row is written after acquire.** Writing it first would put it into the prompt's `currentMessages` twice and stamp the pre-switch `contextId`; so during a drain wait the composer is empty and only "Stopping…" shows. A chat switch during the wait cancels the send: its text (not its images) becomes the original chat's draft. Delivering would start a run for a chat that is not open, with the global run UI shown in another.
+- **The composer's leave-save can erase a draft.** ChatView saves the draft of the chat it leaves in an effect after the switch, and an empty save deletes. It writes only when the composer changed since it last synced (restore or send), joining if the store moved meanwhile; otherwise a cancelled send's restored text would be erased.
 - **A user Stop is not a failure.** Both engines resolve an aborted completion, so the run ends through `run_finished` with clean-finish metadata; `interrupted` and the empty-turn delete happen only when the engine rejects (`useChatSession.ts:774`).
 - **Prompt overflow throws before any token.** The empty turn is deleted, and the full snapshot is kept only in memory, so a session switch loses it.
 - **`used` counts the whole prompt, and unknown is not zero.** A llama.cpp server's `timings.prompt_n` excludes the prefix it served from KV cache, so the remote prompt total is `prompt_n + cache_n`, each key guarded on its own — now in `readFinish` (`src/api/servers/index.ts`), one function every server type shares because field presence decides. With normalised timings the sum runs on numbers, so a non-finite `cache_n` counts as absent instead of concatenating into a string token count. An old build omits `cache_n` and falls back to `prompt_n`. llama.rn's local `tokens_evaluated` is already the whole prompt. With no prompt count, `used` is absent (`useChatSession.ts:251`), and the resolver shows no full or warning banner.
@@ -165,7 +167,7 @@ any ─step_started (initial or follow-up)→ prefill
 - **E2E** (`e2e/specs/features/`): `talent-tool-use`, `thinking`, `thinking-pal-override`, `graded-effort-override`, `remote-reasoning`, `context-banner`.
 - **By hand:**
   - A `render_html` turn: the indicator covers both dead zones, and the turn has one footer.
-  - Stop mid-stream: Send returns at once with no indicator, and the turn keeps its partial text with a normal footer (copy, plus timings when the engine returned them), not an interrupted one. Send again at once: "Stopping…" shows only until the previous run drains, then the user row and the normal indicator appear together.
+  - Stop mid-stream: Send returns at once with no indicator, and the turn keeps its partial text with a normal footer (copy, plus timings when the engine returned them), not an interrupted one. Send again at once: "Stopping…" shows only until the previous run drains, then the user row and the normal indicator appear together. Send reads disabled to TalkBack / VoiceOver during the wait. Switch chat while "Stopping…" shows: nothing lands in either chat; the text is in the original chat's composer on return.
   - Fill n_ctx until the full banner appears. Raising n_ctx should clear it.
   - Android API 29: the keyboard does not hide the newest turn.
 - **Search:** `ChatSearchBar`, `searchIndex`, `ChatSessionStore` (search), `ChatView.search`, `searchJump`, `TextMessage` tests. By hand: a tall message's bottom match lands above the composer; Android back closes search, staying in chat.
