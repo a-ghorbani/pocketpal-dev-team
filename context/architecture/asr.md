@@ -13,7 +13,7 @@ On-device tap-to-record speech-to-text for the chat composer: availability gate,
 | `src/store/ASRStore.ts` | `asrStore`: the gate (`asrAvailable`), `selectedTier`, per-tier download state, `captureState` / `lastError` / `inputLevels`, AppState release |
 | `src/services/asr/constants.ts` | `ASR_TIERS` (URL, filename, exact bytes), `ASR_MODEL_VERSION`, VAD floor and frame, `ASR_MAX_RECORD_MS`, `ASR_CHUNK_BYTES`, `ASR_LEVEL_HISTORY`, `ASR_DISK_HEADROOM_FACTOR`, `ASR_INSUFFICIENT_STORAGE` |
 | `src/services/asr/engines/whisper/index.ts` | `whisperAsrEngine`: per-tier `isInstalled` / `downloadModel` / `reclaimLegacySpace`, a deduplicated `initWhisper` context (`prepare`), `transcribe` (with `prompt`), `cancelTranscription`, `release` |
-| `src/services/asr/speechSegmenter.ts` | `SpeechSegmenter`: cuts the live PCM stream at pauses (`ASR_SEGMENT_PAUSE_MS`) or `ASR_MAX_SEGMENT_MS`, trims silence before speech to `ASR_SEGMENT_LEAD_IN_MS` |
+| `src/services/asr/speechSegmenter.ts` | `SpeechSegmenter`: cuts the live PCM stream at a pause (`ASR_SEGMENT_PAUSE_MS`) once a segment reaches `ASR_MIN_SEGMENT_MS`, or at `ASR_MAX_SEGMENT_MS`, trims silence before speech to `ASR_SEGMENT_LEAD_IN_MS` |
 | `src/services/asr/energyVad.ts` | `energyVad` (voiced-frame gate), `inputLevel` (chunk loudness for the waveform), `int16PcmToFloat32` |
 | `src/hooks/useVoiceCapture.ts` | the capture lifecycle (`start` / `stop` / `cancel`): permission, `AudioRecord` PCM stream, levels, VAD, transcribe, release. Mounted once, in `ChatInput` |
 | `src/utils/asrMicPermission.ts` | `ensureMicPermission` (returns granted, denied or blocked; Android blocked-without-dialog timeout), `openMicSettings` |
@@ -68,6 +68,7 @@ On permission the hook queues `whisperAsrEngine.prepare(tier)`, so the model loa
 
 - **Whisper hallucinates text on silence.** That is why the energy gate is required. It deliberately isn't whisper.rn's `initWhisperVad()`, which crashes (whisper.rn issue #308).
 - **Segment at pauses, not fixed windows.** whisper.rn ships a realtime transcriber that slices at pauses, but it finds them with the Silero VAD context that crashes (whisper.rn #308), so the hook slices with the energy gate it already has.
+- **Segments are at least 15 s.** Whisper decodes a fixed 30 s window per call, so a 2 s segment costs as much as a 25 s one. Cutting at every pause made a 13 s clip with two pauses take 17.8 s from stop to text on a mid-range Android phone (POCO), against 7.9 s for one call. Pause cuts only pay off once dictation passes ~15 s; whisper.rn's `audioCtx` (a smaller encoder window) is the untried lever for short clips.
 - **Gate per frame, not per buffer.** Whole-buffer RMS let the silence before and after speech pull quiet, clear speech under the floor (a phone speaker at arm's length measured 0.0091 against 0.01), so it was rejected.
 - **whisper.rn's own doc comment says `transcribeData` takes float32.** It doesn't; sending float32 bytes produced noise and an empty transcript every time.
 - **Re-entrant starts are ignored** while a capture is starting, live or transcribing, because a second start would leak the listener and the timer.
