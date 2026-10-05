@@ -193,14 +193,25 @@ for (const w of structuralWarnings) {
 }
 // WRONG findings → overwrite if a concrete fix is given, else a flag comment.
 // On a held unit the fix is only proposed: the translator's thread decides.
+// A finding whose `current` is not the whole string at head (a reviewer quoting
+// an excerpt "…like this…") would overwrite the full text with that excerpt.
+const headValue = (lang, key) => {
+  const f = join(headDir, `${lang}.json`);
+  return existsSync(f) ? getAt(JSON.parse(readFileSync(f, 'utf-8')), key) : undefined;
+};
 const heldWrong = [];
 const heldAwkward = [];
+const excerpts = [];
 for (const w of wrong) {
-  if (w.new && !isHeld(w.lang, w.key)) {
+  const exact = w.new && w.current === headValue(w.lang, w.key);
+  if (w.new && !exact) excerpts.push(w);
+  if (exact && !isHeld(w.lang, w.key)) {
     plan.overwrites.push({lang: w.lang, key: w.key, current: w.current, new: w.new, comment: w.note});
   } else if (w.new) {
     heldWrong.push(w);
-    const why = feedbackKnown ? 'a translator has commented on this unit, so it is not applied' : 'feedback.json missing, so nothing is applied blind';
+    const why = !exact ? 'the finding quotes only part of the string, so it is not applied'
+      : feedbackKnown ? 'a translator has commented on this unit, so it is not applied'
+      : 'feedback.json missing, so nothing is applied blind';
     plan.comments.push({lang: w.lang, key: w.key, comment: `[review-l10n] flagged WRONG (${why}): ${w.note || ''} Proposed: ${w.new}`});
   } else {
     plan.comments.push({lang: w.lang, key: w.key, comment: `[review-l10n] flagged WRONG: ${w.note || ''}`});
@@ -248,6 +259,7 @@ const decisionObj = {
     wrong: wrong.length,
     awkward: awkward.length,
     heldWrong: heldWrong.length,
+    excerpts: excerpts.length,
     heldAwkward: heldAwkward.length,
     unsourced: unsourced.length,
     deferredActive: deferredActive.length,
@@ -257,7 +269,7 @@ const decisionObj = {
     comments: plan.comments.length,
   },
   hardBlockers, hardReasons, structuralWarnings,
-  wrong, awkward, ignoredUnwired, heldWrong, heldAwkward, unsourced, deferredActive, capped,
+  wrong, awkward, ignoredUnwired, heldWrong, excerpts, heldAwkward, unsourced, deferredActive, capped,
 };
 
 writeFileSync(join(outDir, 'decision.json'), JSON.stringify(decisionObj, null, 2));
@@ -273,6 +285,9 @@ if (skippedLangs.length) {
 }
 console.log(`hard blockers=${hardBlockers.length} | structural warnings (unwired)=${structuralWarnings.length} | semantic: wrong=${wrong.length} awkward=${awkward.length}`);
 console.log(`translator feedback: ${feedbackKnown ? `${heldUnits.size} held unit(s)` : 'MISSING — every overwrite downgraded to a comment'}`);
+if (excerpts.length) {
+  console.log(`  ${excerpts.length} WRONG fix(es) quote only part of the string, posted as comments: ${excerpts.map(w => `${w.lang}/${w.key}`).join(', ')}`);
+}
 if (heldWrong.length || heldAwkward.length) {
   console.log(`  held back: ${heldWrong.length} WRONG fix(es) posted as comments, ${heldAwkward.length} AWKWARD suggestion(s) dropped — the feedback reviewer owns those threads`);
 }

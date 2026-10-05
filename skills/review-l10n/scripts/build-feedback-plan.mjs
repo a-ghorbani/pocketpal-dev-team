@@ -82,7 +82,7 @@ for (const it of items) {
     if (JSON.stringify(ph(u.source)) !== JSON.stringify(ph(next))) {
       problems.push(`${id}: adopt placeholder mismatch en[${ph(u.source)}] new[${ph(next)}]`); continue;
     }
-    plan.overwrites.push({lang: it.lang, key: it.key, current: u.target, new: next, state: 20, comment: marked});
+    plan.overwrites.push({lang: it.lang, key: it.key, current: u.target, new: next, state: 20, adopt: true, comment: marked});
   } else {
     plan.replies.push({lang: it.lang, key: it.key, comment: marked, action: it.action});
   }

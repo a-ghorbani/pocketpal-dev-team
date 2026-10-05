@@ -7,7 +7,7 @@
 //   "weblate": {"project": "pocketpal-ai", "component": "translations",
 //               "base_url": "https://hosted.weblate.org"},
 //   "default_state": 10,            // 10=needs-editing, 20=translated, 30=approved
-//   "overwrites":  [{lang, key, current, new, state?, comment?}],
+//   "overwrites":  [{lang, key, current, new, state?, comment?, adopt?}],
 //   "suggestions": [{lang, key, current, proposal, comment?}],
 //   "comments":    [{lang, key, comment}],
 //   "replies":     [{lang, key, comment}]   // answers to translator threads (feedback plan)
@@ -15,6 +15,12 @@
 //
 // Usage:
 //   apply-plan.mjs <plan.json> [--dry-run] [--only=overwrites|suggestions|comments|replies]
+//
+// An overwrite only lands on machine text that still reads as reviewed: the live unit
+// must be below state 20 (our drafts are written at 10) and its target must equal
+// `current`. Anything else is a human's translation, or changed since the review,
+// so the fix goes out as a flag comment instead. `adopt` (the translator's own
+// wording, from build-feedback-plan) skips only the state check.
 //
 // Every comment goes out with the [review-l10n] marker so the next run can tell
 // its own comments from a translator's. Throttled to 1 req/sec; fails fast on
@@ -66,12 +72,25 @@ for (const s of ['overwrites', 'suggestions', 'comments', 'replies']) {
 console.log('');
 
 async function findUnit(lang, key) {
-  if (!lookups) return {id: 'DRYRUN', web_url: `${wl.baseUrl}/translate/${wl.project}/${wl.component}/${toWeblateLang(lang)}/?q=context:${key}`};
+  if (!lookups) return {id: 'DRYRUN', state: 0, target: [''], web_url: `${wl.baseUrl}/translate/${wl.project}/${wl.component}/${toWeblateLang(lang)}/?q=context:${key}`};
   return wl.findUnit(lang, key);
+}
+
+function overwriteRefusal(item, u) {
+  if (!lookups) return null;
+  const live = u.target?.[0] ?? '';
+  if ((item.current ?? '') !== live) return 'the live text differs from the reviewed text';
+  if (!item.adopt && u.state >= 20) return `a person translated or approved this (state ${u.state})`;
+  return null;
 }
 
 async function overwrite(item) {
   const u = await findUnit(item.lang, item.key);
+  const refusal = overwriteRefusal(item, u);
+  if (refusal) {
+    await wl.postComment(u.id, `flagged (not applied: ${refusal}): ${item.comment || ''} Proposed: ${item.new}`);
+    return {id: u.id, url: u.web_url, held: refusal};
+  }
   await wl.patchTarget(u.id, item.new, item.state ?? defaultState);
   if (item.comment) await wl.postComment(u.id, item.comment);
   return {id: u.id, url: u.web_url};
@@ -93,7 +112,7 @@ async function comment(item) {
   return {id: u.id, url: u.web_url};
 }
 
-const tally = {ok: 0, fail: 0};
+const tally = {ok: 0, fail: 0, held: 0};
 async function run(label, items, fn) {
   if (only && only !== label) return;
   if (!items || items.length === 0) return;
@@ -102,6 +121,11 @@ async function run(label, items, fn) {
     const tag = `${item.lang}/${item.key}`;
     try {
       const r = await fn(item);
+      if (r.held) {
+        tally.held++;
+        console.log(`  HELD ${tag.padEnd(60)} unit=${r.id} → comment only: ${r.held}`);
+        continue;
+      }
       tally.ok++;
       console.log(`  ok   ${tag.padEnd(60)} unit=${r.id} ${r.url || ''}`);
     } catch (e) {
@@ -118,5 +142,5 @@ await run('comments',    plan.comments,    comment);
 await run('replies',     plan.replies,     comment);
 
 console.log('');
-console.log(`done: ${tally.ok} ok, ${tally.fail} failed${dryRun ? ' (DRY RUN — no writes)' : ''}`);
+console.log(`done: ${tally.ok} ok, ${tally.held} overwrite(s) held as comments, ${tally.fail} failed${dryRun ? ' (DRY RUN — no writes)' : ''}`);
 process.exit(tally.fail > 0 ? 1 : 0);

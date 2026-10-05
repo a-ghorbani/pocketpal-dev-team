@@ -64,9 +64,26 @@ suggestion is pending; it is **open** when the latest translator word has no bot
 maintainer reply after it. Maintainer comments are context, not a hold: before
 2026-09-04 the skill posted its overwrite notes unmarked under the maintainer's account.
 
+Most translator work is silent, though: edits, often uploaded as a file offline, with no
+comment, and the uploader never sees our notes. So `fetch-feedback.mjs` also reads each
+language's change log (`GET /api/translations/<p>/<c>/<lang>/changes/?timestamp_after=`)
+and counts a person's edits as activity. Comments alone missed every active translator
+except one (PR #944: 233 Russian edits read as "no active translator").
+
 **Rules.**
+- **The machine overwrites only machine text.** `apply-plan.mjs` checks the live unit
+  at write time and refuses an overwrite when the unit is at state ≥ 20 (a person
+  translated or approved it; our drafts are written at 10), or when its live target
+  differs from the plan's `current` (it changed since the review, or the finding
+  quoted an excerpt). The fix then goes out as a flag comment. Only an `adopt` of the
+  translator's own wording skips the state check. This guard covers every path:
+  `--auto`, an interactive "fix the wrong ones", and fills. Report HELD lines as held,
+  never as applied.
 - A held unit is never overwritten by the gate or the fill. A WRONG fix on it becomes a
   flag comment; an AWKWARD suggestion on it is dropped.
+- A finding that repeats an earlier review note on the same unit (listed in
+  `feedback-<lang>.md`) means the translator already overruled it once. The comment
+  says so and asks; it does not restate the note as if it were new.
 - The translator's judgment wins by default. The feedback reviewer disagrees only for
   an app-context reason (the string is a chip and must stay short; a term is used
   consistently under another key) and even then it *proposes* and leaves the decision
@@ -366,7 +383,7 @@ node skills/review-l10n/scripts/apply-plan.mjs "${SCRATCH}/plan.json" [--dry-run
 The script:
 - Loads `WLT_TOKEN` from `<repo-root>/.env` (falls back to env var if already set). Fails fast with a clear message if absent.
 - Resolves each `{lang, key}` to a Weblate unit via the units API (`?q=context:<key>`).
-- For overwrites: `PATCH /api/units/<id>/ {target, state: item.state ?? default_state}`.
+- For overwrites: `PATCH /api/units/<id>/ {target, state: item.state ?? default_state}`, but only when the live unit is below state 20 and its target equals `current`; otherwise a flag comment carries the proposal (`HELD` in the output).
 - For suggestions: a `[review-l10n]` comment carrying the proposal (hosted.weblate.org has no suggestion-create API); the target is untouched.
 - For comments and replies: `POST /api/units/<id>/comments/ {comment, scope: "translation"}`, always prefixed `[review-l10n]`.
 - Throttles to ≤ 1 req/sec to be polite to hosted.weblate.org.
@@ -390,6 +407,7 @@ End with a short summary:
 - Don't ask the user to paste the token in chat. Direct them to `.env` instead.
 - Don't merge or close the original auto-merge PR as part of this skill — that's a separate decision.
 - Don't overwrite, re-suggest on, or machine-fill a unit a translator has commented on or suggested for. Answer the thread instead (`build-feedback-plan.mjs`).
+- Don't overwrite a person's translation (state ≥ 20) at all, commented or not. Flag it. `apply-plan.mjs` enforces this; never route a write around it.
 - Don't post a Weblate comment without the `[review-l10n]` marker — the next run would read it as a human's.
 - Don't assert a grammar or spelling norm from model memory. Fetch the reference, cite the URL in `source`, or downgrade the finding to `style`.
 - Don't send style suggestions to a language with an active translator. WRONG only there.

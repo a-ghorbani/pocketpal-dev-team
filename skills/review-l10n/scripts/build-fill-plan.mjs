@@ -72,7 +72,7 @@ for (const lang of langs) {
       problems.push(`${lang}/${it.key}: placeholder mismatch en[${ph(en)}] new[${ph(it.new)}]`); continue;
     }
     seen.add(it.key);
-    plan.overwrites.push({lang, key: it.key, new: it.new});
+    plan.overwrites.push({lang, key: it.key, current: '', new: it.new});
   }
   const miss = [...want.keys()].filter(k => !seen.has(k));
   if (miss.length) problems.push(`${lang}: ${miss.length} keys not covered: ${miss.slice(0, 5).join(', ')}${miss.length > 5 ? '…' : ''}`);

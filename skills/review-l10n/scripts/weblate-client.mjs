@@ -36,6 +36,12 @@ export function markComment(text) {
 // PocketPal repo codes vs hosted.weblate.org slugs. Keep in sync with src/locales/index.ts.
 export const LANG_REMAP = {zh: 'zh_Hans'};
 const LANG_UNMAP = Object.fromEntries(Object.entries(LANG_REMAP).map(([a, b]) => [b, a]));
+// Weblate's own housekeeping accounts (repo webhooks, commit/merge bots, anonymous
+// suggestions) are not people; their edits are neither ours nor a translator's.
+export function isSystemAccount(name) {
+  return !name || name === 'anonymous' || /^(webhook|weblate):/.test(name);
+}
+
 export function toWeblateLang(lang) { return LANG_REMAP[lang] || lang; }
 export function toRepoLang(wlLang) { return LANG_UNMAP[wlLang] || wlLang; }
 
@@ -144,6 +150,12 @@ export function makeClient({token, dryRun = false, throttleMs = 1000, baseUrl = 
     yield* paginate(`${translationBase(lang)}/units/?q=${q}&page_size=100`);
   }
 
+  // Every change to a language since a timestamp, with its author: the only way to
+  // see a translator who edits (often by offline file upload) without commenting.
+  async function* translationChanges(lang, sinceIso) {
+    yield* paginate(`${translationBase(lang)}/changes/?timestamp_after=${encodeURIComponent(sinceIso)}&page_size=100`);
+  }
+
   const unitComments = id => api('GET', `${baseUrl}/api/units/${id}/comments/`).then(r => r?.results || []);
   const unitSuggestions = id => api('GET', `${baseUrl}/api/units/${id}/suggestions/`).then(r => r?.results || []);
 
@@ -161,6 +173,6 @@ export function makeClient({token, dryRun = false, throttleMs = 1000, baseUrl = 
     } catch { return null; }
   }
 
-  return {api, paginate, findUnit, listLanguages, feedbackUnits, unitComments, unitSuggestions,
+  return {api, paginate, findUnit, listLanguages, feedbackUnits, translationChanges, unitComments, unitSuggestions,
           postComment, patchTarget, whoAmI, baseUrl, project, component, dryRun};
 }

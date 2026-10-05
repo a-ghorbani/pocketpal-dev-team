@@ -10,7 +10,8 @@
 // feedback.json:
 // {
 //   fetched_at, owner, langs,
-//   active_translators: {lang: {authors:[...], last:"<iso>"}},   // translator activity in the last 90 days
+//   active_translators: {lang: {authors:[...], last:"<iso>", edits:N}},   // translator comments, suggestions
+//                       // or target edits in the last 90 days
 //   units: [{lang, key, unit_id, web_url, state, source, target, last_updated,
 //            comments:    [{author, role:"bot"|"maintainer"|"translator", ts, text}],
 //            suggestions: [{author, ts, target, votes}],
@@ -23,7 +24,7 @@
 // the skill posted its overwrite notes unmarked under that account.
 import {writeFileSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
-import {loadToken, makeClient, isBotComment, usernameFromUrl, toRepoLang} from './weblate-client.mjs';
+import {loadToken, makeClient, isBotComment, isSystemAccount, usernameFromUrl, toRepoLang} from './weblate-client.mjs';
 
 function arg(n, d) { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : d; }
 
@@ -83,14 +84,31 @@ for (const lang of langs) {
 const ACTIVE_DAYS = 90;
 const cutoff = new Date(Date.now() - ACTIVE_DAYS * 86400e3).toISOString();
 const activeTranslators = {};
+const noteActivity = (lang, author, ts) => {
+  const a = (activeTranslators[lang] ||= {authors: [], last: '', edits: 0});
+  if (!a.authors.includes(author)) a.authors.push(author);
+  if (ts > a.last) a.last = ts;
+  return a;
+};
+// Most translator work is silent: edits, often uploaded as a file offline, with no
+// comment. Counting only comments once rated a 233-edit sweep as "no active translator".
+for (const lang of langs) {
+  try {
+    for await (const c of wl.translationChanges(lang, cutoff)) {
+      const author = usernameFromUrl(c.author || c.user);
+      if (!c.unit || isSystemAccount(author) || author === owner) continue;
+      noteActivity(lang, author, c.timestamp).edits++;
+    }
+  } catch (e) {
+    if (e.status !== 404) throw e;
+  }
+}
 for (const u of units) {
   const events = [...u.comments.filter(c => c.role === 'translator').map(c => ({author: c.author, ts: c.ts})),
                   ...u.suggestions.filter(s => s.author !== 'anonymous').map(s => ({author: s.author, ts: s.ts}))];
   for (const e of events) {
     if (e.ts < cutoff) continue;
-    const a = (activeTranslators[u.lang] ||= {authors: [], last: ''});
-    if (!a.authors.includes(e.author)) a.authors.push(e.author);
-    if (e.ts > a.last) a.last = e.ts;
+    noteActivity(u.lang, e.author, e.ts);
   }
 }
 
@@ -100,7 +118,7 @@ writeFileSync(outPath, JSON.stringify(feedback, null, 2));
 const held = units.filter(u => u.human);
 const open = units.filter(u => u.open);
 console.log(`feedback: ${units.length} unit(s) with comments/suggestions, ${held.length} held by translator input, ${open.length} open thread(s) awaiting a reply`);
-const activeList = Object.entries(activeTranslators).map(([l, a]) => `${l} (${a.authors.join(', ')}, last ${a.last.slice(0, 10)})`);
+const activeList = Object.entries(activeTranslators).map(([l, a]) => `${l} (${a.authors.join(', ')}, last ${a.last.slice(0, 10)}, ${a.edits} edit(s))`);
 console.log(`active translators (last ${ACTIVE_DAYS} days): ${activeList.join('; ') || 'none'} — those languages get meaning-level review only`);
 const byLang = {};
 for (const u of open) (byLang[u.lang] ||= []).push(u);
@@ -109,14 +127,15 @@ for (const [lang, us] of Object.entries(byLang)) console.log(`  open ${lang}: ${
 if (mdDir) {
   mkdirSync(mdDir, {recursive: true});
   const perLang = {};
-  for (const u of held) (perLang[u.lang] ||= []).push(u);
+  for (const u of units) (perLang[u.lang] ||= []).push(u);
   for (const [lang, us] of Object.entries(perLang)) {
     const lines = [`# Human feedback on Weblate — ${lang}`, '',
-      `${us.length} unit(s) carry a translator comment or a pending suggestion. ` +
-      `Units marked OPEN have translator input newer than any reply. Comments by "${owner}" ` +
-      `are the maintainer's; before 2026-09-04 they were this skill's own unmarked overwrite notes.`, ''];
+      `${us.filter(u => u.human).length} unit(s) carry a translator comment or a pending suggestion (HELD). ` +
+      `Units marked OPEN have translator input newer than any reply. The rest carry only earlier review notes: ` +
+      `if a finding repeats one, the translator has already overruled it once — say so, don't restate it. ` +
+      `Comments by "${owner}" are the maintainer's; before 2026-09-04 they were this skill's own unmarked overwrite notes.`, ''];
     for (const u of us) {
-      lines.push(`## ${u.key}${u.open ? '  [OPEN]' : ''}`);
+      lines.push(`## ${u.key}${u.open ? '  [OPEN]' : u.human ? '  [HELD]' : ''}`);
       lines.push(`- unit: ${u.unit_id} · state: ${u.state} · ${u.web_url}`);
       lines.push(`- en: ${JSON.stringify(u.source)}`);
       lines.push(`- current: ${JSON.stringify(u.target)}`);
