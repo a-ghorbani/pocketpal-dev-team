@@ -1,5 +1,7 @@
 # Custom HTTP Tools
 
+> **Status: not on `main`.** This code lives only on the branch of draft PR #921. The paths below exist there, not on `main`.
+
 ## Purpose
 
 User-authored HTTP tools: the persisted definition, how a request is built and a response trimmed, where secrets live, and the manager and editor UI. The runner gates that make them safe to call belong to `agent-runner.md`; how they reach the registry and a Pal belongs to `pals-and-talents.md`; the confirmation sheet and the expandable chip belong to `chat-flow.md`; the Settings entry point belongs to `settings.md`.
