@@ -1,5 +1,7 @@
 # Model Loading
 
+> **Partly not on `main`:** the generation lease (`generationLease.ts`, `acquireGeneration`, every lease rule) and the llama.rn patch ship with open PR #955.
+
 ## Purpose
 
 This doc covers how the preset model list comes from device rules, how capabilities (vision, MTP) are read, how a local model is loaded natively (the error lifecycle, Android Hexagon device resolution, speculative decoding), and how a release waits for the running generation. Remote-server capability discovery is in `remote-servers.md`. llama.rn build modes and the shipped native payload are in `release.md`. The benchmark's own native loading is in `benchmark-matrix.md`.
