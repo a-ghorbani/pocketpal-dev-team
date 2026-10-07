@@ -71,8 +71,8 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 
 ## Verification
 
-- `yarn test scripts/__tests__/` after `yarn install` (the ladder and SDK tests read `node_modules/llama.rn`). `yarn install` must print `llama.rn@<version> ✔` from patch-package.
-- Local gate: `node scripts/verify-android-payload.js --apk <apk> [--aab <aab>]`. A sound artifact shows 12 arm64 + 4 x86_64 `librnllama*` libraries, 4 assets, both Hexagon symbols and every library's patch marker `present`. A backend-less build fails only those two symbols.
+- `yarn test scripts/__tests__/` after `yarn install` (the ladder and SDK tests read `node_modules/llama.rn`). (PR #955 only) `yarn install` must print `llama.rn@<version> ✔` from patch-package.
+- Local gate: `node scripts/verify-android-payload.js --apk <apk> [--aab <aab>]`. A sound artifact shows 12 arm64 + 4 x86_64 `librnllama*` libraries, 4 assets, both Hexagon symbols and (PR #955 only) every library's patch marker `present`. A backend-less build fails only those two symbols.
 - On a llama.rn upgrade, re-check the println wording, the CMake call sites, `HTP_LIBS`, and the SDK paths CMake references. Also re-check:
   - the manifest's symbol names against the vendored header: `grep -n ggml_backend_hexagon_reg node_modules/llama.rn/vendor/llama.cpp/ggml/include/ggml-hexagon.h`;
   - every env var `MainApplication.kt` sets against the vendored ggml's `getenv` names (a name nothing reads is a silent no-op): `for v in $(grep -o 'setenv("[A-Z_]*"' android/app/src/main/java/com/pocketpalai/MainApplication.kt | cut -d'"' -f2); do grep -rq "getenv(\"$v\")" node_modules/llama.rn/vendor/llama.cpp/ggml/src && echo "ok $v" || echo "DEAD $v"; done`.
