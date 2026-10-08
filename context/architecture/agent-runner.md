@@ -21,7 +21,7 @@
 `useChatSession.handleSendPress` builds `AgentRunOptions`: `allowedTalentNames` from `pal.pact.talents`, `talentLookup` as `talentRegistry.get`, `triggerMarkers` from `triggerCacheRef.current.getMarkers(...)`, and the signal of its per-run `abortRef` controller (*(PR #955 only)* the signal of the generation lease it holds for the run). It then consumes `runAgent(opts)` with `for await`, running `agentStateReducer` then `applyEventToStore` per event, and rethrows on `run_failed`.
 
 Each loop turn:
-1. if the signal is aborted, leave the loop before `step_started` and end with `run_finished`; else emit `step_started` (*(PR #955 only)* `step_started` first, then on an aborted signal `step_finished` with no calls);
+1. if the signal is aborted, leave the loop before `step_started` and end with `run_finished`; else emit `step_started` (*(PR #955 only)* no check before it: `step_started` always comes first, then on an aborted signal `step_finished` with no calls and no completion, so a Stop before the completion starts persists the same one empty step as a Stop in prefill and the next prompt still alternates user/assistant, which Gemma templates require);
 2. call `engine.completion` with a stream callback that pushes `token` and, at most once per step, `marker_seen` into the `EventQueue`;
 3. drain the queue until the promise settles;
 4. emit `step_finished` carrying the normalized tool calls;
