@@ -165,7 +165,7 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 - A verdict comes only from a successful read with `seq > postedAfterSeq`, run by a reaction that fires only when a read installs a new `seq`, so a prune or a failed read settles nothing.
 - `RouterStore` writes no `ServerStore` field. At most one SSE app-wide; in the background no stream, poll or ticker, and the bounds' clock freezes; back in the foreground, servers with work in flight are read before the stream may reopen.
 - An unsent turn (Stop, Cancel, a model switch or server edit before the request) is undone: its user row and empty reply go, and the text returns to the composer. Only Cancel ends the load. A failure keeps the message and adds one system message: the app's sentence, then the bounded server words. The engine has no readiness timeout; the store's bounds apply.
-- Server words enter only through `serverReason` (200 code points, whitespace collapsed) and render only on the picker row and, set apart, in the failure message. Only a 404 on `/models/sse` marks a build streamless, for the session; numeric wire fields are read with `typeof`.
+- Server words enter only through `serverReason` (200 code points, whitespace collapsed) and render only on the picker row and, set apart, in a load-failed message. Only a 404 on `/models/sse` marks a build streamless, for the session; numeric wire fields are read with `typeof`.
 
 ## Traps and decisions
 
