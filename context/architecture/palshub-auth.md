@@ -1,6 +1,6 @@
 # PalsHub Auth
 
-(**unmerged PR only**: Sign in with Apple is not on `main` yet; the rest describes `main`.)
+(**PR #967 only**: Sign in with Apple is not on `main` yet; the rest describes `main`.)
 
 ## Purpose
 
@@ -45,7 +45,7 @@ Each sign-in method gets an id token or credentials from its provider and hands 
 - **Apple sign-in never shows a raw Supabase or Apple message.** `appleSignInErrorMessage` maps errors by auth-js type guards and status, never by string matching: `isAuthRetryableFetchError` or status ≥ 500 → "Couldn't reach the server"; `isAuthApiError` 4xx (provider off, bad token, nonce) → "isn't available right now"; Apple `'1000'` (UNKNOWN: iOS returns it when the user closes the "Sign in to your Apple Account" prompt on a device with no account) → "Sign in to your Apple Account in Settings"; anything else, including a missing id token → "Sign in with Apple failed". The raw error goes to `console.error` only. The reason: a retryable fetch error's `message` is the serialized `Response`, with headers and the backend URL. The Google path still surfaces `error.message`.
 - **Cancel** (`'1001'`) shows "Sign-in was cancelled" (as Google does) and logs with `console.warn`, not `console.error`: it is a user choice, not a fault.
 - **No client-side timeout** on the Apple path: an unresponsive auth server leaves the sheet loading until the request itself fails (supabase-js sets no timeout).
-- **Account linking is server policy.** Supabase links an Apple identity to an existing user only when both emails match and are verified. A Hide My Email relay address never matches, so it creates a separate user with an empty library and no purchases. The app builds no linking.
+- **Account linking is server policy.** Supabase links an Apple identity to an existing user only when both emails match and are verified. A Hide My Email relay address never matches, so it creates a separate user with an empty library and no purchases. The app builds no linking. Observed on a local Supabase: an existing confirmed email-signup user whose email equals the Apple token's verified email is linked (one user, identities `apple` and `email`, existing `full_name` kept); a different Apple email creates a separate user.
 - **`ProfileSheet` shows `user_metadata.name` or email,** not `profiles.full_name`. An Apple user therefore sees their email, which is the relay address for Hide My Email.
 - **Apple token revocation on account deletion** (App Review 5.1.1(v)) is the PalsHub backend's duty, not the app's.
 - **Library choice**: `@invertase/react-native-apple-authentication` (exact pin) hashes the nonce natively, so the app needs no JS crypto. It imports `prop-types` without declaring it, so `prop-types` is a direct dependency to survive hoisting changes.
