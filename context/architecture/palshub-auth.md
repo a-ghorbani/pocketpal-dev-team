@@ -1,6 +1,6 @@
 # PalsHub Auth
 
-(**Account deletion is in an unmerged app PR only**; the rest describes `main`.)
+(**Account deletion is PR #970 only**; the rest describes `main`.)
 
 ## Purpose
 
