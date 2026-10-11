@@ -4,6 +4,8 @@
 
 How PocketPal's Android artifacts get their llama.rn native payload (build mode, compiled variants, the Hexagon/NPU backend), and the payload gate that runs before any Android artifact is uploaded. What the gate checks is enforced by its script and fails loudly; this doc holds what CI cannot tell you. Not covered: signing, version bumping, TestFlight and Play metadata, and iOS (it vendors the prebuilt `ios/rnllama.xcframework`). `model-loading.md` owns runtime Hexagon device selection and the llama.rn version rationale.
 
+> **Partly not on `main`:** the llama.rn 0.13.0-rc.7 notes (`ContextClaim` re-port, `rn-decision.cpp`, `ggml-cpu/tiled`) ship with open PR #969; `main` pins 0.13.0-rc.5.
+
 **Not on `main` yet:** open PR #869 adds publish-ordering tests, 16 KB alignment checks, and top-level payload assets. The previous version of this doc described them (`git show 1ad6ce1:context/architecture/release.md`); distill them back in when it lands.
 
 ## Code map
