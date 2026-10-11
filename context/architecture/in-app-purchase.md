@@ -54,7 +54,7 @@ unlocking ─Android, successful query no longer lists it→ deleted
 - **Persist before finish.** The outcome is written before `finishTransaction` (non-consumable, never consumed).
 - **Android acknowledges only delivered purchases.** `finishTransaction` is the Play acknowledgement, so it runs only after a verify `active`, and on recovery for a delivered purchase Play still reports unacknowledged. Never for pending, failed, `removed`, `unfulfillable`, `revoked` or `invalid`: Play refunds an unacknowledged purchase after 3 days. iOS finishes every settled outcome.
 - **Only Buy starts a payment.** Recovery, restore and Owned never call `store.purchase`.
-- **Only an explicit server verdict removes ownership.** `revoked` → tombstone, `removed` → `unfulfillable`. Moderation rejection, a failed refresh, sign-out or a Pal missing from a list removes nothing.
+- **Only an explicit server verdict removes ownership.** `revoked` → tombstone, `removed` → `unfulfillable`. Moderation rejection, a failed refresh, sign-out or account deletion, or a Pal missing from a list removes nothing.
 - **Nothing automatic overwrites an installed Pal.** Only `applyUpdate` after Confirm writes an existing row, and it is bound to the shown version.
 - **`content_version` is opaque.** It is the server's Pal `updated_at` string, stored and sent back verbatim. The device never orders versions; equality only. Verify carries it on the result; a refresh `changed` pal carries it as its raw `updated_at`.
 - **Refresh body** is `{platform, transactions, known: {pal_id: {content_version, purchase_ref}}}` under a strict server parser: no extra fields. `content_version` is the pending version if any, else the applied one; with none it is `UNKNOWN_CONTENT_VERSION` (`'0'`), because an empty or missing value 400s the whole request. `purchase_ref` is the support code from the latest verify `active`; records without one stay out of `known`.
@@ -66,6 +66,7 @@ unlocking ─Android, successful query no longer lists it→ deleted
 - **Headers.** `X-IAP-Capable: 1` and `X-Client-Platform` go on every PalsHub request. Verify, refresh and events carry no `Authorization`.
 - **Secrets.** Purchase tokens, JWS and binding values are never persisted or logged.
 - **Web purchases are untouchable.** A local owned Pal with no ledger record is never refreshed, changed or deleted by this flow.
+- **Account deletion ends library-only ownership** *(unmerged PR only)*. It clears `palStore.userLibrary` (`clearAccountPals`), so a library Pal that is not installed stops counting in `isOwned` and `keptByLibrary`, and the next account never inherits it. Ledger ownership stays, and so does an installed paid Pal's `isLegacyInstall` ownership (the rule above). Deletion never touches the ledger or `local_pals` (`palshub-auth.md`).
 - **FakeStore and the API-base override exist only under `__E2E__`**; CI greps the prod bundle for their markers.
 
 ## Traps and decisions
@@ -88,6 +89,6 @@ unlocking ─Android, successful query no longer lists it→ deleted
 
 ## Verification
 
-- Jest: `src/store/__tests__/PurchaseStore.{pipeline,recover,link,update}.test.ts`, `src/services/iap/__tests__/` (including the exact refresh body), `PalStore.install.test.ts`, and the footer, model step and Purchases card tests.
+- Jest: `src/store/__tests__/PurchaseStore.{pipeline,recover,link,update,accountDeletion}.test.ts`, `src/services/iap/__tests__/` (including the exact refresh body), `PalStore.install.test.ts`, and the footer, model step and Purchases card tests.
 - e2e: `e2e/specs/features/iap-{purchase,recovery,restore}.spec.ts`, run against the FakeStore and `e2e/helpers/iapMockServer.ts` (`adb reverse tcp:8787` on Android).
 - By hand (Android): a prod build, sideloaded, signed in with a licence tester, against production. Buy with "always approves", the slow card (pending) and "always declines" (Buy must stay), reinstall + Restore, and a Play Console refund (the Pal locks on the next refresh, Buy returns, and buying again ends on Open). After a classpath change, check that Buy and the restore row appear on a real-store build.
