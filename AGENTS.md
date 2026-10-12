@@ -11,6 +11,7 @@ These hold for every agent and every task. Most are hook-enforced.
   - App work happens in `worktrees/<TASK-or-PR>/` on a non-`main` branch.
   - Create worktrees only from the submodule, via `tools/create-worktree.sh`.
   - Remove them only with `./tools/remove-worktree.sh <name> --yes`, and only when the user asks. Never use raw `git worktree remove`/`prune`, `rm -r`, or `rmdir`.
+  - Exception: a worktree in the ios-router ledger was created at an agent's request, not the user's; the router or its worker may remove it once that work is finished (`skills/ios-router`).
   - Stop and report when you're inside the submodule, on `main`/`master`, or missing the `WORKTREE`, `BRANCH`, or story context your task needs.
 - **Secrets.** Agents never read `.env`, `.env.*`, keystores, or key files (hook-guarded). Config reaches worktrees only through `tools/sync-worktree-config.sh` / `tools/create-worktree.sh`; never bulk-copy it.
 - **App code reaches `main` only through a reviewed PR.** Push the feature branch; never push, fast-forward, or merge a branch onto the app's `main` yourself (hook-enforced, any refspec).
