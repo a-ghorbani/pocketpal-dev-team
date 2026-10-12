@@ -15,7 +15,8 @@
       "Agent",
       "Skill",
       "Edit",
-      "Write"
+      "Write",
+      "Bash(tmux send-keys -t *)"
     ],
     "ask": [
       "Bash(git reset:*)",

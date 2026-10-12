@@ -17,7 +17,7 @@ Other agents ask this session for work that needs this Mac: an iOS simulator run
 
 ## Names
 
-Derive a key: `PR-<n>` for a PR, otherwise a slug of the branch (≤ 36 chars, no `/` or spaces). Add `-2`, `-3`, … if it's taken. Use the key for everything: worktree `<key>-ios`, tmux session `ios-<key>`, worker address `<key>:ios-tester`.
+Derive a key: `PR-<n>` for a PR, otherwise a slug of the branch (≤ 36 chars, no `/` or spaces). Add `-2`, `-3`, … if it's taken. Use the key for everything: worktree `<key>-ios`, tmux session `ios-<key>`, worker address `<key>:ios-tester`. Extra worktrees for the same job (e.g. a `main` build to compare against) are `<key>-ios-<suffix>` and go in the same ledger entry.
 
 ## Ledger
 
@@ -34,11 +34,14 @@ Keep one file per worker in `~/.local/state/pocketpal-dev-team/ios-router/<key>-
 2. Start the worker from the repo root. tmux doesn't inherit this shell's environment, so pass it explicitly:
 
    ```bash
-   tmux new-session -d -s ios-<key> -c "$(git rev-parse --show-toplevel)" "env CLAUDE_CONFIG_DIR='$CLAUDE_CONFIG_DIR' AGISTRY_CHANNEL_ACTIVE=1 claude --permission-mode auto --dangerously-load-development-channels server:agistry-channel 'Read <brief path> and follow it.'"
+   tmux new-session -d -s ios-<key> -c "$(git rev-parse --show-toplevel)" "env CLAUDE_CONFIG_DIR='$CLAUDE_CONFIG_DIR' AGISTRY_CHANNEL_ACTIVE=1 claude 'Read <brief path> and follow it.' --permission-mode auto --dangerously-load-development-channels server:agistry-channel"
    ```
 
-3. Confirm it joined (`agistry who <key>`). If it's stuck on a prompt (`tmux capture-pane -pt ios-<key>`), tell the user instead of pressing through it.
-4. Tell the requester the worker's address, that you are now out of the loop, and to talk to the worker directly from here on, coming back to you only if the worker is unreachable.
+   Keep the prompt before `--dangerously-load-development-channels`: that flag takes several values and would swallow it.
+
+3. Within ~10 s the worker shows the "Loading development channels" warning with `Channels: server:agistry-channel` and option 1 "I am using this for local development" selected. Only when `tmux capture-pane -pt ios-<key>` shows exactly that, send `tmux send-keys -t ios-<key> Enter`. Any other prompt, or other channels listed: tell the user instead of pressing through it.
+4. Confirm it joined (`agistry who <key>`).
+5. Tell the requester the worker's address, that you are now out of the loop, and to talk to the worker directly from here on, coming back to you only if the worker is unreachable.
 
 ## Worker brief
 
