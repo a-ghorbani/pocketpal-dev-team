@@ -47,7 +47,7 @@ Each sign-in method gets an id token or credentials from its provider and hands 
 - **Deletion: never another person's Apple code.** The code is sent only when `appleUser` equals the account's Apple subject (`identity_data.sub`, else the identity `id`), or when only `app_metadata.providers` names Apple so there is nothing to compare. Otherwise the body is `{}`.
 - **Deletion: secrets stay out of logs and UI.** The Apple code, bearer and server bodies are never logged (status and error `name` only).
 - **`deleteAccount()` never throws** and never writes `authService.error` or `isLoading` itself, so `AuthSheet` never shows a deletion error.
-- **One deletion in flight.** The button is disabled while `deleteAccount()` runs; the service itself has no guard.
+- **One deletion in flight.** The button is disabled from the confirmed Delete until `deleteAccount()` settles; the service itself has no guard. A second request would get 410 (deleted) and a harmless second clean-up.
 
 ## Traps and decisions
 
