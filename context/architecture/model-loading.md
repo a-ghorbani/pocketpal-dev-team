@@ -1,6 +1,6 @@
 # Model Loading
 
-> **Partly not on `main`:** the generation lease (`generationLease.ts`, `acquireGeneration`, every lease rule) and the llama.rn patch ship with open PR #955. llama.rn 0.13.0-rc.7 (the atomic `ContextClaim` busy rules, Benchmark/chat busy rejection, pure-SWA checkpoints) ships with open PR #969; `main` pins 0.13.0-rc.5.
+> **Partly not on `main`:** the generation lease (`generationLease.ts`, `acquireGeneration`, every lease rule) and the llama.rn patch ship with open PR #955. `main` now pins llama.rn 0.13.0-rc.7, so #955 must regenerate its patch against rc.7 before it lands.
 
 ## Purpose
 
