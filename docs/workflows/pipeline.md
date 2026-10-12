@@ -137,6 +137,8 @@ intake ── intent-brief.md  (builds a self-contained brief; emits `NEEDS_INPU
 
 The delivery loop is coordinated by the top-level `/start-task` session. It starts the implementation pipeline, invokes the independent review pipeline after a draft PR exists, normalizes `REQUEST_CHANGES` into a review-feedback artifact, and routes fixes through the PR-fix pipeline. The independent reviewer remains separate from the implementation agents.
 
+**Finalization after the human merges.** Once the PR is merged, the `/start-task` session finishes the task without asking again: drop any "not on `main`" banners for the PR from `context/architecture/` (path-scoped commit), add a closing note to the story, tell sessions whose PRs depend on the change, and remove the task's worktrees (`<TASK-ID>`, `PR-<n>`, `PR-<n>-e2e`) with `./tools/remove-worktree.sh <name> --yes`. Check each worktree is clean first; stop and report one that has uncommitted or unpushed work.
+
 ## Stage outputs
 
 | Stage | Agent | Output |
