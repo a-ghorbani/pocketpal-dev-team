@@ -90,7 +90,7 @@ any ─step_started (initial or follow-up)→ prefill
 - Copy (`derivedText`) joins step contents only, with no reasoning and no tool JSON. It joins `visibleStepContent` per step, so copy, the Play button, the session title and export `text` drop the echo; export `metadata.steps` keeps the raw steps. Auto-speak streams separately, under Speech.
 - `Message` must stay an `observer`. Streaming swaps `steps[last]` under a stable row reference, which a memo would miss.
 
-**Speech (auto-speak)** *(PR pending)*
+**Speech (auto-speak)** *(PR #976)*
 
 - **What auto-speak forwards concatenates to `derivedText(turn)`**, up to whitespace: it never reads text the chat hides, and it reads every visible step. Only `forwardTokenToTts` and `releaseHeldStepToTts` in `useChatSession.ts` decide what reaches `onAssistantMessageChunk`; `TTSStore` knows nothing of steps or tool calls.
 - **The diff baseline is per step.** `token` content is cumulative per step, so `step_started` resets `prevContent` / `prevReasoning`. Without the reset, every later step stays silent until it outgrows the previous one.
@@ -163,7 +163,7 @@ any ─step_started (initial or follow-up)→ prefill
 - **`used` counts the whole prompt, and unknown is not zero.** A llama.cpp server's `timings.prompt_n` excludes the prefix it served from KV cache, so the remote prompt total is `prompt_n + cache_n`, each key guarded on its own — now in `readFinish` (`src/api/servers/index.ts`), one function every server type shares because field presence decides. With normalised timings the sum runs on numbers, so a non-finite `cache_n` counts as absent instead of concatenating into a string token count. An old build omits `cache_n` and falls back to `prompt_n`. llama.rn's local `tokens_evaluated` is already the whole prompt. With no prompt count, `used` is absent (`useChatSession.ts:251`), and the resolver shows no full or warning banner.
 - **Catch-path `used` reads the resolved window.** The abort and context-full sites pin `used` to `activeModelCaps.effectiveContextLength`, not `activeContextSettings.n_ctx`, which is never set for a remote model; a `0` there would fail the freshness gate and hide every remote full. When the window is unknown, `used` is absent.
 - **`include_thinking_in_context: false` strips only inline `<think>` tags from prior `content`.** `stepToApiMessages` still sends `step.reasoningContent` as `reasoning_content`.
-- **A fence- or JSON-first step speaks only when it ends, in a run with tools.** *(PR pending)* Mid-stream it cannot be told from a tool-call echo, so it is held. This is accepted: streaming it would read the echo aloud.
+- **A fence- or JSON-first step speaks only when it ends, in a run with tools.** *(PR #976)* Mid-stream it cannot be told from a tool-call echo, so it is held. This is accepted: streaming it would read the echo aloud.
 - **Timings and snapshot come from the run's last completion** (`finalResult`), not an aggregate over steps.
 - **Session-list keys are localized labels.** `groupedSessions` keys each group by its label and inserts pinned first. If two labels translate the same, a group vanishes silently. Only `locales.test.ts` guards this.
 - **Pinning is best-effort on purpose.** Failures are only logged (a pin is easy to retry; a row that doesn't move is honest feedback), and the store mirrors the pin only after `setSessionPinned` resolves. Export leaves out `pinned` and `settingsSource`, which are local state.
