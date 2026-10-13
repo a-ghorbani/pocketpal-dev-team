@@ -29,7 +29,7 @@ Text-to-speech: the availability gate, on-demand neural-engine model downloads (
 
 The gate is the getter `isTTSAvailable`: an explicit `userTTSOverride` (`true` / `false`) wins, and `null` falls back to `deviceMeetsMemory`.
 
-Playback entry points: `play()` (replay), `preview()` (audition), and `onAssistantMessageStart()` which opens a `StreamingHandle` fed by `onAssistantMessageChunk()`; `onAssistantMessageComplete()` finalises it or falls back to `play()`. Engines run through `ttsRuntime.acquire()`, which swaps the loaded engine via `loadInto()`.
+Playback entry points: `play()` (replay), `preview()` (audition), and `onAssistantMessageStart()` which opens a `StreamingHandle` fed by `onAssistantMessageChunk()`; `onAssistantMessageComplete()` finalises it or falls back to `play()`. Engines run through `ttsRuntime.acquire()`, which swaps the loaded engine via `loadInto()`. What the hook forwards to `onAssistantMessageChunk` during an agent turn is defined in `chat-flow.md`, under Speech.
 
 `downloadNeuralEngine(id)`: `reclaimLegacySpace()` (if implemented) → free-disk preflight at `estimatedBytes * 1.2` → `engine.downloadModel()` → auto-select a voice, preferring the one stashed in `pendingVoiceRestore`.
 
