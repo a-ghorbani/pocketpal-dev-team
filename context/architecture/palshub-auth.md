@@ -1,7 +1,5 @@
 # PalsHub Auth
 
-(**Account deletion is PR #970 only**; the rest describes `main`.)
-
 ## Purpose
 
 Signing in to PalsHub (Supabase auth) from the app: email/password, Google, and Sign in with Apple on iOS, the profile row the app reads and writes, sign-out, and in-app account deletion. Not covered: what a signed-in user can do with Pals (`pals-and-talents.md`), purchase binding to an account (`in-app-purchase.md`), the Settings surface that opens the sheet (`settings.md`), and the Google URL scheme (`deep-linking.md`).

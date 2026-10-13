@@ -21,7 +21,7 @@ The launcher root, Preferences / App Settings sub-screens and account routes exi
 | `src/components/SearchProviderKeySheet/`, `src/components/HFTokenSheet/` | Key entry sheets for search providers and Hugging Face |
 | `src/store/UIStore.ts`, `ModelStore.ts`, `HFStore.ts`, `TTSStore.ts` | The stores every control writes to |
 | `src/screens/SettingsScreen/PurchasesCard.tsx` | Settings › Purchases: store-owned Pals with status and support code, Restore, link; drives the screen's `AuthSheet` |
-| `src/screens/SettingsScreen/AccountCard.tsx` | (PR #970 only) Settings › Account, right after Purchases, signed in only: Delete account (`palshub-auth.md`) |
+| `src/screens/SettingsScreen/AccountCard.tsx` | Settings › Account, right after Purchases, signed in only: Delete account (`palshub-auth.md`) |
 | `App.tsx` | Mounts `SettingsScreen` as the `ROUTES.SETTINGS` drawer screen |
 | `e2e/pages/SettingsPage.ts`, `e2e/helpers/selectors.ts` (`settings`) | The e2e page object and its selectors |
 
@@ -42,7 +42,7 @@ On mount the screen calls `checkGpuSupport()` and `getDeviceOptions()`. `inferBa
   - HF token → `hfStore.setToken / clearToken` (from `HFTokenSheet`); `useHfToken` → `hfStore.setUseHfToken`
   - search prefs → `searchProviderStore.setActiveProvider / setResultCount / setConsent`; keys → `setKey / clearKey`
   - purchases → only `purchaseStore.restore` / `requestLink` / `link` (`in-app-purchase.md`). The card lists `active | granted | unfulfillable` records, never account-only Pals, and hides when billing is unavailable and nothing was bought.
-  - *(PR #970 only)* account → only `deleteAccount()` (`palshub-auth.md`).
+  - account → only `deleteAccount()` (`palshub-auth.md`).
   - *(PR #921 only)* custom tools → **nothing**. The card only reads the count and navigates to `ROUTES.CUSTOM_TOOLS`; every write belongs to the manager and editor (`custom-tools.md`). The route is hidden from the drawer sidebar (`drawerItemStyle: {display:'none'}`), so the card is the only way in.
 - **`uiStore.setLanguage` is the only writer of `_language`**, and `LanguageSelector` is its only caller.
 - **testIDs are frozen.** e2e resolves:
@@ -52,7 +52,7 @@ On mount the screen calls `checkGpuSupport()` and `getDeviceOptions()`. `inferBa
   - `language-selector-button`, `language-sheet`, `language-search`, `language-option-<lang>`
   - *(PR #921 only)* `custom-tools-card`, `custom-tools-open-button` (additive)
   - `purchases-card`, `settings-restore-purchases`, `settings-link-purchases` (additive; the link row hides when signed in and everything is linked)
-  - *(PR #970 only)* `account-card`, `settings-delete-account` (additive; hidden while signed out)
+  - `account-card`, `settings-delete-account` (additive; hidden while signed out)
 
   A rename or move lands with `e2e/helpers/selectors.ts` and the affected specs in the same change. New testIDs are additive.
 - **The device option reads back from persisted names.** On Android `getCurrentDeviceId()` maps any name starting with `HTP` to `hexagon`, so a saved wildcard still shows as Hexagon.

@@ -66,7 +66,7 @@ unlocking ─Android, successful query no longer lists it→ deleted
 - **Headers.** `X-IAP-Capable: 1` and `X-Client-Platform` go on every PalsHub request. Verify, refresh and events carry no `Authorization`.
 - **Secrets.** Purchase tokens, JWS and binding values are never persisted or logged.
 - **Web purchases are untouchable.** A local owned Pal with no ledger record is never refreshed, changed or deleted by this flow.
-- **Account deletion ends library-only ownership** *(PR #970 only)*. It clears `palStore.userLibrary` (`clearAccountPals`), so a library Pal that is not installed stops counting in `isOwned` and `keptByLibrary`, and the next account never inherits it. Ledger ownership stays, and so does an installed paid Pal's `isLegacyInstall` ownership (the rule above). Deletion never touches the ledger or `local_pals` (`palshub-auth.md`).
+- **Account deletion ends library-only ownership**. It clears `palStore.userLibrary` (`clearAccountPals`), so a library Pal that is not installed stops counting in `isOwned` and `keptByLibrary`, and the next account never inherits it. Ledger ownership stays, and so does an installed paid Pal's `isLegacyInstall` ownership (the rule above). Deletion never touches the ledger or `local_pals` (`palshub-auth.md`).
 - **FakeStore and the API-base override exist only under `__E2E__`**; CI greps the prod bundle for their markers.
 
 ## Traps and decisions
