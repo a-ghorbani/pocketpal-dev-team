@@ -191,15 +191,15 @@ python3 ios/ios_report.py                       # triage table; soak_report.py f
   - commands are copied into the app container's `Documents/crash-command.json`;
   - `Documents/crash-repro.log` is pulled about once a second into the seed's log file, so `soak.py` parses it unchanged;
   - crash reports are diffed per seed. `cpu_resource` / `diskwrites` reports are resource diagnostics, not crashes.
-- **Adapter edits needed on iOS (not in `app/harness.patch`).** The adapter reads `RNFS.ExternalDirectoryPath`, which iOS does not have. The iOS build needs three edits:
-  - read commands and model files from `RNFS.DocumentDirectoryPath`;
-  - append every `[CRASH_REPRO]` line to `Documents/crash-repro.log`, in the logcat line shape that `EVENT_RE` matches;
-  - (the "v2" build) forward native log lines.
+- **The adapter on iOS.** `app/harness.patch` covers both platforms. On iOS (`Platform.OS === 'ios'`) the adapter:
+  - reads commands and model files from `RNFS.DocumentDirectoryPath` instead of `ExternalDirectoryPath`;
+  - appends every `[CRASH_REPRO]` line to `Documents/crash-repro.log`, in the logcat line shape that `EVENT_RE` matches;
+  - forwards native lines that match `NATIVE_RE` (checkpoint, abort, draft, SWA, media identity) as `native` events, through llama.rn's `addNativeLogListener`.
 
-  These edits were made on the Mac during the #955 iOS run and are not in this repo. Port them into the patch on the next iOS run.
+  On Android none of this runs, and native lines come from logcat. A command file read mid-write is retried on the next poll on both platforms.
 - **Native logs.** On iOS, rnllama's `LOG_INFO` goes to stdout, so `ios_setup` launches the app with `devicectl device process launch --console --terminate-existing` and scans that stream for checkpoint, abort and SWA lines (`seed-N-stdout.txt`).
 - **Background and resume.** Home is simulated by launching `com.apple.Preferences`. Resume relaunches the bundle **without** `--terminate-existing`; with that flag it is a cold start, not a resume.
-- **Pre-start Stop window.** A tap cannot reach the pre-start Stop window (Stop between Send and `completion:start`) on iOS. Use the adapter's armed Stop (`stop-before-start --stop-ms 0`).
+- **Pre-start Stop window.** On iOS the send path reaches native `completion:start` without yielding to JS timers. So even the adapter's Stop at `--stop-ms 0` lands after the start, and the pre-start window (Stop between Send and `completion:start`) cannot be reached there. Test that window on Android.
 - **Backends.** Metal is `--backend gpu` (devices `MTL0`). Drafts and other uiautomator steps are not ported; `--drafts` steps record `draft_error`.
 
 ## The oracle

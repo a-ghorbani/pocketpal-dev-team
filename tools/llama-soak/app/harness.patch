@@ -132,13 +132,14 @@ index 11b5b020..d9b79acf 100644
  
 diff --git a/src/__automation__/CrashReproAdapter.tsx b/src/__automation__/CrashReproAdapter.tsx
 new file mode 100644
-index 00000000..bcabf465
+index 0000000..437f7a1
 --- /dev/null
 +++ b/src/__automation__/CrashReproAdapter.tsx
-@@ -0,0 +1,600 @@
+@@ -0,0 +1,653 @@
 +import {useEffect} from 'react';
-+import {DeviceEventEmitter} from 'react-native';
++import {DeviceEventEmitter, Platform} from 'react-native';
 +import {reaction, runInAction} from 'mobx';
++import {addNativeLogListener, toggleNativeLog} from 'llama.rn';
 +import type {LlamaContext} from 'llama.rn';
 +
 +import {chatSessionStore, modelStore, palStore} from '../store';
@@ -151,9 +152,51 @@ index 00000000..bcabf465
 +import {derivedText, user} from '../utils/chat';
 +
 +// E2E-only device harness for the release/stop matrix and the soak. Not committed.
-+// Commands arrive as <ExternalDirectoryPath>/crash-command.json, written by run.py.
++// Commands arrive as <DIR>/crash-command.json, written by run.py (Android) or
++// ios/ios_run.py (iOS). DIR is ExternalDirectoryPath on Android, Documents on iOS.
 +
 +const RNFS = require('@dr.pogodin/react-native-fs');
++const IOS = Platform.OS === 'ios';
++const DIR: string = IOS
++  ? RNFS.DocumentDirectoryPath
++  : RNFS.ExternalDirectoryPath;
++
++// iOS has no logcat: mirror [CRASH_REPRO] lines into <DIR>/crash-repro.log in
++// logcat's ReactNativeJS shape, so the drivers' parser is unchanged.
++let logBuffer: string[] = [];
++if (__E2E__ && IOS && !(global as any).__crashReproConsole) {
++  (global as any).__crashReproConsole = true;
++  const rawConsoleLog = console.log.bind(console);
++  console.log = (...args: any[]) => {
++    rawConsoleLog(...args);
++    if (args[0] === '[CRASH_REPRO]') {
++      logBuffer.push(
++        args
++          .map(a =>
++            typeof a === 'string'
++              ? `'${a
++                  .replace(/\\/g, '\\\\')
++                  .replace(/'/g, "\\'")
++                  .replace(/\n/g, '\\n')}'`
++              : String(a),
++          )
++          .join(', '),
++      );
++    }
++  };
++  setInterval(() => {
++    if (!logBuffer.length) {
++      return;
++    }
++    const chunk = logBuffer.join('\n') + '\n';
++    logBuffer = [];
++    RNFS.appendFile(`${DIR}/crash-repro.log`, chunk, 'utf8').catch(() => {});
++  }, 200);
++}
++
++// iOS native lines the soak classifies (Android reads them from logcat).
++const NATIVE_RE =
++  /checkpoint|Decoding interrupted|Decoding Interrupted|SWA cache lost|Failed to evaluate chunks|failed to eval|ctx_dft|llama_process returned|failed to decode draft|Context is busy|Media identity diverged/;
 +
 +const SLEEP_TALENT = 'e2e_sleep';
 +const TOOL_PAL_NAME = 'Crash Repro Tool Pal';
@@ -394,7 +437,7 @@ index 00000000..bcabf465
 +};
 +
 +const registerFile = async (filename: string) => {
-+  const file = `${RNFS.ExternalDirectoryPath}/${filename}`;
++  const file = `${DIR}/${filename}`;
 +  if (!modelStore.models.some(m => m.fullPath === file)) {
 +    await modelStore.addLocalModel(file);
 +  }
@@ -417,10 +460,7 @@ index 00000000..bcabf465
 +      model.defaultProjectionModel = projection.id;
 +    });
 +  }
-+  await modelStore.initContext(
-+    model,
-+    mmproj ? `${RNFS.ExternalDirectoryPath}/${mmproj}` : undefined,
-+  );
++  await modelStore.initContext(model, mmproj ? `${DIR}/${mmproj}` : undefined);
 +  const ctx = modelStore.context;
 +  if (!ctx) {
 +    throw new Error('No context after load');
@@ -490,6 +530,16 @@ index 00000000..bcabf465
 +
 +export const CrashReproAdapter = () => {
 +  useEffect(() => {
++    const nativeLog = IOS
++      ? addNativeLogListener((level, text) => {
++          if (NATIVE_RE.test(text)) {
++            log('native', `${level} ${text.trim()}`);
++          }
++        })
++      : undefined;
++    if (IOS) {
++      toggleNativeLog(true).catch(error => log('native:error', String(error)));
++    }
 +    // Wrap every context the app creates, including its own auto-reload after
 +    // a background release, before the next completion can run on it.
 +    const dispose = reaction(
@@ -510,11 +560,17 @@ index 00000000..bcabf465
 +      }
 +      busy = true;
 +      try {
-+        const path = `${RNFS.ExternalDirectoryPath}/crash-command.json`;
++        const path = `${DIR}/crash-command.json`;
 +        if (!(await RNFS.exists(path))) {
 +          return;
 +        }
-+        const cmd = JSON.parse(await RNFS.readFile(path, 'utf8'));
++        let cmd: any;
++        try {
++          cmd = JSON.parse(await RNFS.readFile(path, 'utf8'));
++        } catch {
++          // The driver may still be writing the file; read it on the next poll.
++          return;
++        }
 +        if (cmd.id === lastId) {
 +          return;
 +        }
@@ -567,9 +623,7 @@ index 00000000..bcabf465
 +            armStop(cmd);
 +            DeviceEventEmitter.emit('crash-repro-send', {
 +              text: cmd.prompt,
-+              imageUris: cmd.image
-+                ? [`file://${RNFS.ExternalDirectoryPath}/${cmd.image}`]
-+                : undefined,
++              imageUris: cmd.image ? [`file://${DIR}/${cmd.image}`] : undefined,
 +            });
 +            break;
 +          case 'stop':
@@ -672,9 +726,7 @@ index 00000000..bcabf465
 +            modelStore
 +              .startImageCompletion({
 +                prompt: cmd.prompt ?? 'Describe the image in one sentence.',
-+                image_path: `file://${RNFS.ExternalDirectoryPath}/${
-+                  cmd.image ?? 'test-image.jpg'
-+                }`,
++                image_path: `file://${DIR}/${cmd.image ?? 'test-image.jpg'}`,
 +                onToken: () => {
 +                  if (!firstToken) {
 +                    firstToken = true;
@@ -732,6 +784,7 @@ index 00000000..bcabf465
 +    return () => {
 +      clearInterval(timer);
 +      dispose();
++      nativeLog?.remove();
 +    };
 +  }, []);
 +  return null;
