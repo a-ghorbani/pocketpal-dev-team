@@ -1,0 +1,21 @@
+diff --git a/android/app/build.gradle b/android/app/build.gradle
+index 2a4aa019..c1da634b 100644
+--- a/android/app/build.gradle
++++ b/android/app/build.gradle
+@@ -15,6 +15,7 @@ apply from: "../../node_modules/react-native-config/android/dotenv.gradle"
+  * By default you don't need to apply any configuration, just uncomment the lines you need.
+  */
+ react {
++    hermesCommand = "$rootDir/../node_modules/react-native/sdks/hermesc/linux64-bin/hermesc"
+     /* Folders */
+     //   The root of your project, i.e. where "package.json" lives. Default is '../..'
+     // root = file("../../")
+@@ -93,7 +94,7 @@ android {
+         versionCode 150
+         versionName "1.19.1"
+         ndk {
+-            abiFilters "arm64-v8a", "x86_64"
++            abiFilters "arm64-v8a"
+         }
+     }
+     externalNativeBuild {

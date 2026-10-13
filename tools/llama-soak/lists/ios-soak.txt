@@ -1,0 +1,10 @@
+# iOS random soak seeds, Metal (gpu) and CPU, plus one CPU control: ios/ios-queue.sh lists/ios-soak.txt
+soak --seed 101 --steps 30 --model-a smollm2-1.7b-instruct-q4_k_m.gguf --model-b gemma-3-1b-it-q4_0.gguf --backend gpu --tag smol-gpu --step-timeout 600
+soak --seed 101 --steps 30 --model-a smollm2-1.7b-instruct-q4_k_m.gguf --model-b gemma-3-1b-it-q4_0.gguf --backend cpu --tag smol-cpu --step-timeout 600
+soak --seed 101 --steps 30 --model-a gemma-3-1b-it-q4_0.gguf --model-b LFM2.5-1.2B-Instruct-Q4_0.gguf --backend gpu --tag gemma-gpu --step-timeout 600
+soak --seed 101 --steps 30 --model-a gemma-3-1b-it-q4_0.gguf --model-b LFM2.5-1.2B-Instruct-Q4_0.gguf --backend cpu --tag gemma-cpu --step-timeout 600
+soak --seed 101 --steps 30 --model-a LFM2.5-1.2B-Instruct-Q4_0.gguf --model-b smollm2-1.7b-instruct-q4_k_m.gguf --backend gpu --tag lfm12-gpu --step-timeout 600
+soak --seed 101 --steps 30 --model-a LFM2.5-1.2B-Instruct-Q4_0.gguf --model-b smollm2-1.7b-instruct-q4_k_m.gguf --backend cpu --tag lfm12-cpu --step-timeout 600
+soak --seed 101 --steps 30 --model-a LFM2.5-VL-450M-Q8_0.gguf --mmproj-a mmproj-LFM2.5-VL-450M-Q8_0.gguf --image soak-image.jpg --model-b gemma-3-1b-it-q4_0.gguf --backend gpu --tag lfmvl-gpu --step-timeout 600
+soak --seed 101 --steps 30 --model-a LFM2.5-VL-450M-Q8_0.gguf --mmproj-a mmproj-LFM2.5-VL-450M-Q8_0.gguf --image soak-image.jpg --model-b gemma-3-1b-it-q4_0.gguf --backend cpu --tag lfmvl-cpu --step-timeout 600
+soak --seed 201 --steps 20 --model-a smollm2-1.7b-instruct-q4_k_m.gguf --model-b gemma-3-1b-it-q4_0.gguf --backend cpu --tag smol-cpu-control --control --oracle-rate 1.0 --step-timeout 600

@@ -1,0 +1,27 @@
+# Regression cells (fixed scenarios, one cold-replay oracle each). Run on an exact-oracle phone (Android CPU, Q4_0).
+# ./queue.sh <serial> lists/android-regression.txt <apk-sha>; on a second phone, use its own LLAMA_SOAK_OUT.
+--scenario stop-before-start --model-a gemma-3-1b-it-q4_0.gguf --seed 1 --tag gemma3-1b-stop-before-start
+--scenario stop-before-start --model-a gemma-3-1b-it-q4_0.gguf --seed 2 --tag gemma3-1b-stop-before-start
+--scenario stop-before-start --model-a gemma-3-1b-it-q4_0.gguf --seed 3 --tag gemma3-1b-stop-before-start
+--scenario stop-in-prefill --model-a gemma-3-1b-it-q4_0.gguf --seed 1 --tag gemma3-1b-stop-in-prefill
+--scenario cold-stop-same --model-a LFM2.5-1.2B-Instruct-Q4_0.gguf --seed 1 --tag lfm25-cold-stop-same
+--scenario cold-stop-diff --model-a LFM2.5-1.2B-Instruct-Q4_0.gguf --seed 1 --tag lfm25-cold-stop-diff
+--scenario cold-same-nostop --model-a LFM2.5-1.2B-Instruct-Q4_0.gguf --seed 1 --tag lfm25-cold-same-nostop
+--scenario cold-stop-same --model-a smollm2-1.7b-instruct-q4_k_m.gguf --seed 1 --tag smollm2-cold-stop-same
+--scenario cold-stop-diff --model-a smollm2-1.7b-instruct-q4_k_m.gguf --seed 1 --tag smollm2-cold-stop-diff
+--scenario stop-gen-then-send --model-a Qwen3.5-0.8B-Q4_0.gguf --speculative --seed 1 --tag qwen35-mtp-stop-gen-then-send
+--scenario stop-gen-then-send --model-a Qwen3.5-0.8B-Q4_0.gguf --speculative --seed 2 --tag qwen35-mtp-stop-gen-then-send
+--scenario stop-in-prefill --model-a Qwen3.5-0.8B-Q4_0.gguf --speculative --seed 1 --tag qwen35-mtp-stop-in-prefill
+--scenario stop-in-prefill --model-a Qwen3.5-0.8B-Q4_0.gguf --speculative --seed 2 --tag qwen35-mtp-stop-in-prefill
+--scenario gen-then-send --model-a Qwen3.5-0.8B-Q4_0.gguf --speculative --seed 1 --tag qwen35-mtp-gen-then-send
+--scenario image-stop-ingest --model-a Qwen3.5-2B-Q4_0.gguf --mmproj-a mmproj-F32.gguf --seed 1 --tag qwen35-2b-image-stop-ingest
+--scenario image-stop-gen --model-a Qwen3.5-2B-Q4_0.gguf --mmproj-a mmproj-F32.gguf --seed 1 --tag qwen35-2b-image-stop-gen
+--scenario image-then-send --model-a Qwen3.5-2B-Q4_0.gguf --mmproj-a mmproj-F32.gguf --seed 1 --tag qwen35-2b-image-then-send
+--scenario tool-stop-exec --model-a LFM2.5-1.2B-Instruct-Q4_0.gguf --seed 1 --tag lfm25-tool-stop-exec
+--scenario tool-stop-gap --model-a LFM2.5-1.2B-Instruct-Q4_0.gguf --seed 1 --tag lfm25-tool-stop-gap
+--scenario tool-stop-followup --model-a LFM2.5-1.2B-Instruct-Q4_0.gguf --seed 1 --tag lfm25-tool-stop-followup
+--scenario tool-nostop --model-a LFM2.5-1.2B-Instruct-Q4_0.gguf --seed 1 --tag lfm25-tool-nostop
+--scenario tool-stop-exec --model-a Qwen3.5-0.8B-Q4_0.gguf --speculative --seed 1 --tag qwen35-mtp-tool-stop-exec
+--scenario tool-stop-followup --model-a Qwen3.5-0.8B-Q4_0.gguf --speculative --seed 1 --tag qwen35-mtp-tool-stop-followup
+--scenario swa-new-chat --model-a gemma-3-1b-it-q4_0.gguf --seed 1 --tag gemma3-1b-swa-new-chat
+--scenario cold-stop-same --model-a gemma-3-1b-it-q4_0.gguf --seed 1 --tag gemma3-1b-cold-stop-same

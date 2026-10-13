@@ -1,0 +1,738 @@
+diff --git a/src/__automation__/AutomationBridge.tsx b/src/__automation__/AutomationBridge.tsx
+index 67310a24..714b75ea 100644
+--- a/src/__automation__/AutomationBridge.tsx
++++ b/src/__automation__/AutomationBridge.tsx
+@@ -4,6 +4,7 @@ import {IapAdapter} from './adapters/IapAdapter';
+ import {MemoryAdapter} from './adapters/MemoryAdapter';
+ import {OnboardingBypass} from './adapters/OnboardingBypass';
+ import {TTSAdapter} from './adapters/TTSAdapter';
++import {CrashReproAdapter} from './CrashReproAdapter';
+ 
+ /**
+  * Single mount point for all E2E automation surfaces.
+@@ -28,6 +29,7 @@ export const AutomationBridge: React.FC = () => {
+       <TTSAdapter />
+       <IapAdapter />
+       <OnboardingBypass />
++      <CrashReproAdapter />
+     </>
+   );
+ };
+diff --git a/src/components/ChatView/ChatView.tsx b/src/components/ChatView/ChatView.tsx
+index 93e84e74..ac615f42 100644
+--- a/src/components/ChatView/ChatView.tsx
++++ b/src/components/ChatView/ChatView.tsx
+@@ -10,6 +10,7 @@ import {
+   View,
+   TouchableOpacity,
+   Keyboard,
++  DeviceEventEmitter,
+ } from 'react-native';
+ 
+ import dayjs from 'dayjs';
+@@ -550,6 +551,52 @@ export const ChatView = observer(
+         setInputImages,
+       });
+ 
++    React.useEffect(() => {
++      if (!__E2E__) {
++        return;
++      }
++      const log = (event: string, detail: unknown = '') =>
++        console.log('[CRASH_REPRO]', Date.now(), event, JSON.stringify(detail));
++      const regenerate = DeviceEventEmitter.addListener(
++        'crash-repro-regenerate',
++        () => {
++          const target = messages.find(
++            m =>
++              (m.type === 'text' || m.type === 'assistant_turn') &&
++              m.author.id !== user.id,
++          );
++          log('regenerate', {found: !!target});
++          if (target) {
++            handleTryAgain(target as any).then(
++              () => log('regenerate:done'),
++              error => log('regenerate:error', String(error)),
++            );
++          }
++        },
++      );
++      const edit = DeviceEventEmitter.addListener(
++        'crash-repro-edit',
++        ({text}: {text: string}) => {
++          const target = messages.find(
++            m => m.type === 'text' && m.author.id === user.id,
++          );
++          log('edit', {found: !!target});
++          if (target) {
++            handleEdit(target as any).then(() =>
++              wrappedOnSendPress({type: 'text', text}).then(
++                () => log('edit:done'),
++                error => log('edit:error', String(error)),
++              ),
++            );
++          }
++        },
++      );
++      return () => {
++        regenerate.remove();
++        edit.remove();
++      };
++    }, [messages, user.id, handleTryAgain, handleEdit, wrappedOnSendPress]);
++
+     // ============ AUTO-SCROLL ON NEW USER MESSAGE ============
+     // Scroll to bottom when user sends a new message
+     React.useEffect(() => {
+diff --git a/src/screens/ChatScreen/ChatScreen.tsx b/src/screens/ChatScreen/ChatScreen.tsx
+index 11b5b020..d9b79acf 100644
+--- a/src/screens/ChatScreen/ChatScreen.tsx
++++ b/src/screens/ChatScreen/ChatScreen.tsx
+@@ -1,4 +1,5 @@
+ import React, {useRef, ReactNode, useState} from 'react';
++import {DeviceEventEmitter} from 'react-native';
+ 
+ import {observer} from 'mobx-react';
+ import {runInAction} from 'mobx';
+@@ -78,6 +79,36 @@ export const ChatScreen: React.FC = observer(() => {
+     assistant,
+   );
+ 
++  React.useEffect(() => {
++    if (!__E2E__) {
++      return;
++    }
++    const subscription = DeviceEventEmitter.addListener(
++      'crash-repro-send',
++      ({text, imageUris}: {text: string; imageUris?: string[]}) => {
++        console.log('[CRASH_REPRO]', Date.now(), 'chat-send', text.length);
++        handleSendPress({type: 'text', text, imageUris}).then(
++          () => console.log('[CRASH_REPRO]', Date.now(), 'chat-send:done'),
++          error =>
++            console.log(
++              '[CRASH_REPRO]',
++              Date.now(),
++              'chat-send:error',
++              String(error),
++            ),
++        );
++      },
++    );
++    const stop = DeviceEventEmitter.addListener('crash-repro-stop', () => {
++      console.log('[CRASH_REPRO]', Date.now(), 'stop:pressed', '""');
++      handleStopPress();
++    });
++    return () => {
++      subscription.remove();
++      stop.remove();
++    };
++  }, [handleSendPress, handleStopPress]);
++
+   // Handle deep linking for message prefill
+   const {pendingMessage, clearPendingMessage} = usePendingMessage();
+ 
+diff --git a/src/__automation__/CrashReproAdapter.tsx b/src/__automation__/CrashReproAdapter.tsx
+new file mode 100644
+index 00000000..bcabf465
+--- /dev/null
++++ b/src/__automation__/CrashReproAdapter.tsx
+@@ -0,0 +1,600 @@
++import {useEffect} from 'react';
++import {DeviceEventEmitter} from 'react-native';
++import {reaction, runInAction} from 'mobx';
++import type {LlamaContext} from 'llama.rn';
++
++import {chatSessionStore, modelStore, palStore} from '../store';
++import {registerDefaultTalents, talentRegistry} from '../services/talents';
++import type {TalentEngine, TalentResult} from '../services/talents/types';
++import {
++  getDeviceOptions,
++  resolveDeviceSelection,
++} from '../utils/deviceSelection';
++import {derivedText, user} from '../utils/chat';
++
++// E2E-only device harness for the release/stop matrix and the soak. Not committed.
++// Commands arrive as <ExternalDirectoryPath>/crash-command.json, written by run.py.
++
++const RNFS = require('@dr.pogodin/react-native-fs');
++
++const SLEEP_TALENT = 'e2e_sleep';
++const TOOL_PAL_NAME = 'Crash Repro Tool Pal';
++
++type Backend = 'cpu' | 'gpu' | 'hexagon';
++
++const log = (event: string, detail: unknown = '') =>
++  console.log('[CRASH_REPRO]', Date.now(), event, JSON.stringify(detail));
++
++// Two FNV-1a passes with different bases over UTF-16 code units: a 64-bit
++// fingerprint of the full text, so the oracle compares whole replies.
++const hash = (text: string) => {
++  let a = 0x811c9dc5;
++  let b = 0x050c5d1f;
++  for (let i = 0; i < text.length; i++) {
++    const c = text.charCodeAt(i);
++    a = Math.imul(a ^ c, 0x01000193);
++    b = Math.imul(b ^ c, 0x01000193) ^ (b >>> 15);
++  }
++  return (
++    (a >>> 0).toString(16).padStart(8, '0') +
++    (b >>> 0).toString(16).padStart(8, '0')
++  );
++};
++
++const digest = (text: string | undefined | null) => {
++  const value = text ?? '';
++  // `full` stays under the ~4 KB logcat entry limit even for 3-byte characters.
++  return {
++    hash: hash(value),
++    len: value.length,
++    full: value.slice(0, 1000),
++  };
++};
++
++let deterministic = false;
++let nPredict: number | undefined;
++let lastParams: any = null;
++let lastModelPath: string | null = null;
++let lastMmproj: string | undefined;
++let sleepMs = 15000;
++let heldLease: {end(): void} | null = null;
++let currentBackend: Backend = 'cpu';
++// Stop trigger armed by `send`/`send-tool`/`regenerate`/`edit` (`stopOn`, `stopAfterMs`).
++// `thenSend` emits a send in the same tick as the Stop (a user typing at once).
++let armedStop: {on: string; afterMs: number; thenSend?: string} | null = null;
++
++const fireStop = (reason: string) => {
++  if (!armedStop || armedStop.on !== reason) {
++    return;
++  }
++  const {afterMs, thenSend} = armedStop;
++  armedStop = null;
++  setTimeout(() => {
++    log('stop:fired', {on: reason, afterMs, thenSend: !!thenSend});
++    DeviceEventEmitter.emit('crash-repro-stop');
++    if (thenSend) {
++      DeviceEventEmitter.emit('crash-repro-send', {text: thenSend});
++    }
++  }, afterMs);
++};
++
++const armStop = (cmd: any) => {
++  armedStop =
++    cmd.stopOn !== undefined
++      ? {
++          on: cmd.stopOn,
++          afterMs: cmd.stopAfterMs ?? 0,
++          thenSend: cmd.thenSend,
++        }
++      : null;
++  if (armedStop) {
++    log('stop:armed', armedStop);
++  }
++  fireStop('send');
++};
++
++class SleepTalent implements TalentEngine {
++  readonly name = SLEEP_TALENT;
++
++  async execute(): Promise<TalentResult> {
++    log('tool:start', {sleepMs});
++    fireStop('tool-start');
++    await new Promise(resolve => setTimeout(resolve, sleepMs));
++    log('tool:end');
++    return {
++      type: 'text',
++      summary: 'The wait is over. The code word is ORCHID.',
++    };
++  }
++
++  toToolDefinition() {
++    return {
++      type: 'function' as const,
++      function: {
++        name: SLEEP_TALENT,
++        description:
++          'Waits for the reference data to become ready and returns the code word. Call it before answering.',
++        parameters: {type: 'object', properties: {}},
++      },
++    };
++  }
++}
++
++const countImages = (params: any) =>
++  (params.messages ?? []).reduce(
++    (n: number, m: any) =>
++      n +
++      (Array.isArray(m.content)
++        ? m.content.filter((c: any) => c?.type === 'image_url').length
++        : 0),
++    0,
++  );
++
++const paramsHash = (params: any) =>
++  hash(
++    JSON.stringify({
++      messages: params.messages,
++      prompt: params.prompt,
++      tools: params.tools,
++      n_predict: params.n_predict,
++    }),
++  );
++
++const wrap = (ctx: LlamaContext) => {
++  const target = ctx as any;
++  if (target.__crashReproWrapped) {
++    return;
++  }
++  target.__crashReproWrapped = true;
++
++  const completion = ctx.completion.bind(ctx);
++  target.completion = async (params: any, callback?: any) => {
++    const effective = deterministic
++      ? {
++          ...params,
++          temperature: 0,
++          seed: 42,
++          ...(nPredict ? {n_predict: nPredict} : {}),
++        }
++      : params;
++    lastParams = effective;
++    const images = countImages(effective);
++    log('completion:start', {
++      ctx: ctx.id,
++      session: chatSessionStore.activeSessionId,
++      messages: effective.messages?.length ?? 0,
++      images,
++      tools: effective.tools?.length ?? 0,
++      params: paramsHash(effective),
++    });
++    fireStop('completion-start');
++    let firstToken = false;
++    const onData = (data: any) => {
++      if (!firstToken) {
++        firstToken = true;
++        log('completion:first-token');
++        fireStop('first-token');
++      }
++      return callback?.(data);
++    };
++    try {
++      const result = await completion(effective, onData);
++      log('completion:settled', {
++        ctx: ctx.id,
++        interrupted: result.interrupted,
++        draft_tokens: (result as any).draft_tokens,
++        draft_tokens_accepted: (result as any).draft_tokens_accepted,
++        prompt_n: result.timings?.prompt_n,
++        tokens_evaluated: result.tokens_evaluated,
++        tokens_cached: result.tokens_cached,
++        tokens_predicted: result.tokens_predicted,
++        stopped_eos: (result as any).stopped_eos,
++        stopped_limit: (result as any).stopped_limit,
++        tool_calls: (result as any).tool_calls?.length ?? 0,
++        params: paramsHash(effective),
++        text: digest(result.text),
++      });
++      return result;
++    } catch (error) {
++      log('completion:error', String(error));
++      throw error;
++    }
++  };
++
++  for (const method of ['stopCompletion', 'release'] as const) {
++    const original = (ctx as any)[method].bind(ctx);
++    target[method] = async (...args: any[]) => {
++      log(`${method}:start`, {ctx: ctx.id});
++      try {
++        return await original(...args);
++      } finally {
++        log(`${method}:settled`, {ctx: ctx.id});
++      }
++    };
++  }
++};
++
++const ctxInfo = (ctx: LlamaContext | undefined) =>
++  ctx
++    ? {
++        id: ctx.id,
++        gpu: ctx.gpu,
++        reasonNoGPU: ctx.reasonNoGPU,
++        devices: (ctx as any).devices,
++        androidLib: (ctx as any).androidLib,
++      }
++    : null;
++
++// Mirrors SettingsScreen.handleDeviceSelect plus the option's n_gpu_layers
++// (the Settings slider), from the same getDeviceOptions() list the UI shows.
++const applyBackend = async (backend: Backend) => {
++  if (backend === 'cpu') {
++    modelStore.setDevices(['CPU']);
++    modelStore.setNGPULayers(0);
++    modelStore.setNoGpuDevices(true);
++    currentBackend = backend;
++    return {devices: ['CPU'], n_gpu_layers: 0};
++  }
++  const options = await getDeviceOptions();
++  const option = options.find(o => o.id === backend);
++  if (!option) {
++    throw new Error(
++      `Backend ${backend} unavailable; options: ${options
++        .map(o => `${o.id}:${o.devices?.join('+')}`)
++        .join(', ')}`,
++    );
++  }
++  modelStore.setDevices(option.devices);
++  modelStore.setNGPULayers(option.n_gpu_layers);
++  modelStore.setNoGpuDevices(false);
++  const flashAttn = modelStore.contextInitParams.flash_attn_type ?? 'off';
++  if (!option.valid_flash_attn_types.includes(flashAttn)) {
++    modelStore.setFlashAttnType(option.default_flash_attn_type);
++  }
++  currentBackend = backend;
++  return {devices: option.devices, n_gpu_layers: option.n_gpu_layers};
++};
++
++const registerFile = async (filename: string) => {
++  const file = `${RNFS.ExternalDirectoryPath}/${filename}`;
++  if (!modelStore.models.some(m => m.fullPath === file)) {
++    await modelStore.addLocalModel(file);
++  }
++  const model = modelStore.models.find(m => m.fullPath === file);
++  if (!model) {
++    throw new Error(`Model not registered: ${file}`);
++  }
++  return model;
++};
++
++const loadModel = async (filename: string, mmproj?: string) => {
++  const model = await registerFile(filename);
++  if (mmproj) {
++    // Register the projector too, so the app's own auto-reload (after a
++    // background release) resolves it the way a downloaded vision model does.
++    const projection = await registerFile(mmproj);
++    runInAction(() => {
++      model.supportsMultimodal = true;
++      model.visionEnabled = true;
++      model.defaultProjectionModel = projection.id;
++    });
++  }
++  await modelStore.initContext(
++    model,
++    mmproj ? `${RNFS.ExternalDirectoryPath}/${mmproj}` : undefined,
++  );
++  const ctx = modelStore.context;
++  if (!ctx) {
++    throw new Error('No context after load');
++  }
++  wrap(ctx);
++  lastModelPath = filename;
++  lastMmproj = mmproj;
++  return model;
++};
++
++const ensureToolPal = async () => {
++  registerDefaultTalents();
++  if (!talentRegistry.get(SLEEP_TALENT)) {
++    talentRegistry.register(new SleepTalent());
++  }
++  let pal = palStore.pals.find(p => p.name === TOOL_PAL_NAME);
++  if (!pal) {
++    pal = await palStore.createPal({
++      type: 'local',
++      name: TOOL_PAL_NAME,
++      description: 'E2E harness pal with a slow tool',
++      systemPrompt:
++        'You are a test assistant. Before answering any question you must call the e2e_sleep tool exactly once, then answer in one short sentence.',
++      isSystemPromptChanged: false,
++      useAIPrompt: false,
++      parameterSchema: [],
++      parameters: {},
++      source: 'local',
++      capabilities: {},
++      pact: {talents: [{name: SLEEP_TALENT, necessity: 'required'}]},
++    } as any);
++  }
++  if (!chatSessionStore.activeSessionId) {
++    await chatSessionStore.createNewSession('crash-repro');
++  }
++  await chatSessionStore.setActivePal(pal.id);
++  log('tool-pal:active', {palId: pal.id});
++};
++
++const sessionSummary = (s: any) => {
++  const last = s.messages[0];
++  return {
++    id: s.id,
++    messages: s.messages.length,
++    draft: chatSessionStore.getDraft(s.id),
++    last: last
++      ? {
++          author: last.author?.id === user.id ? 'u' : 'a',
++          type: last.type,
++          hash: hash(derivedText(last)),
++        }
++      : null,
++  };
++};
++
++const status = () => ({
++  ctx: ctxInfo(modelStore.context),
++  loading: modelStore.isContextLoading,
++  activeModel: modelStore.activeModel?.filename ?? null,
++  generating: chatSessionStore.isGenerating,
++  stopping: chatSessionStore.isStopping,
++  editMode: chatSessionStore.isEditMode,
++  streaming: modelStore.isStreaming,
++  active: chatSessionStore.activeSessionId,
++  backend: currentBackend,
++});
++
++export const CrashReproAdapter = () => {
++  useEffect(() => {
++    // Wrap every context the app creates, including its own auto-reload after
++    // a background release, before the next completion can run on it.
++    const dispose = reaction(
++      () => modelStore.context,
++      ctx => {
++        if (ctx && !(ctx as any).__crashReproWrapped) {
++          wrap(ctx);
++          log('wrapped', ctxInfo(ctx));
++        }
++      },
++      {fireImmediately: true},
++    );
++    let busy = false;
++    let lastId = '';
++    const timer = setInterval(async () => {
++      if (busy) {
++        return;
++      }
++      busy = true;
++      try {
++        const path = `${RNFS.ExternalDirectoryPath}/crash-command.json`;
++        if (!(await RNFS.exists(path))) {
++          return;
++        }
++        const cmd = JSON.parse(await RNFS.readFile(path, 'utf8'));
++        if (cmd.id === lastId) {
++          return;
++        }
++        lastId = cmd.id;
++        log('command', {...cmd, prompt: cmd.prompt?.length});
++        switch (cmd.action) {
++          case 'load': {
++            deterministic = !!cmd.deterministic;
++            nPredict = cmd.n_predict;
++            if (modelStore.context) {
++              // initContext skips an already-loaded model, so a backend change
++              // needs the context gone first.
++              await modelStore.releaseContext();
++            }
++            const requested = await applyBackend(cmd.backend ?? 'cpu');
++            modelStore.setNThreads(cmd.threads ?? 4);
++            modelStore.setSpeculativeEnabled(!!cmd.speculative);
++            // A separate draft model (Settings > draft model): paired when its
++            // output width matches the target's embedding width.
++            modelStore.setSelectedDraftModel(
++              cmd.draft ? (await registerFile(cmd.draft)).id : undefined,
++            );
++            runInAction(() => {
++              modelStore.contextInitParams.n_ctx = cmd.n_ctx ?? 4096;
++              modelStore.contextInitParams.n_batch = cmd.n_batch ?? 512;
++              modelStore.contextInitParams.n_ubatch = cmd.n_ubatch ?? 512;
++              modelStore.useAutoRelease = true;
++            });
++            await loadModel(cmd.filename, cmd.mmproj);
++            log('loaded', {
++              ...modelStore.activeContextSettings,
++              draftMode: modelStore.effectiveDraftMode,
++              mmproj: cmd.mmproj ?? null,
++              backend: currentBackend,
++              requested,
++              resolved: await resolveDeviceSelection(requested),
++              ctx: ctxInfo(modelStore.context),
++              n_predict: nPredict ?? null,
++            });
++            break;
++          }
++          case 'switch':
++            await loadModel(cmd.filename, cmd.mmproj);
++            log('switched', {
++              filename: cmd.filename,
++              ctx: ctxInfo(modelStore.context),
++            });
++            break;
++          case 'send':
++            armStop(cmd);
++            DeviceEventEmitter.emit('crash-repro-send', {
++              text: cmd.prompt,
++              imageUris: cmd.image
++                ? [`file://${RNFS.ExternalDirectoryPath}/${cmd.image}`]
++                : undefined,
++            });
++            break;
++          case 'stop':
++            DeviceEventEmitter.emit('crash-repro-stop');
++            break;
++          case 'regenerate':
++            armStop(cmd);
++            DeviceEventEmitter.emit('crash-repro-regenerate');
++            break;
++          case 'edit':
++            armStop(cmd);
++            DeviceEventEmitter.emit('crash-repro-edit', {text: cmd.prompt});
++            break;
++          case 'status':
++            log('status', status());
++            break;
++          case 'hold': {
++            const lease = await modelStore.acquireGeneration();
++            heldLease = lease;
++            log('hold:granted', {granted: !!lease});
++            break;
++          }
++          case 'unhold':
++            heldLease?.end();
++            heldLease = null;
++            log('unhold:done');
++            break;
++          case 'session':
++            if (cmd.to === 'new') {
++              chatSessionStore.resetActiveSession();
++            } else {
++              await chatSessionStore.setActiveSession(cmd.to);
++            }
++            log('session:done', {active: chatSessionStore.activeSessionId});
++            break;
++          case 'wipe-sessions': {
++            chatSessionStore.resetActiveSession();
++            const ids = chatSessionStore.sessions.map(s => s.id);
++            for (const id of ids) {
++              await chatSessionStore.deleteSession(id);
++            }
++            log('wipe-sessions:done', {deleted: ids.length});
++            break;
++          }
++          case 'chat-state': {
++            const active = chatSessionStore.activeSessionId;
++            const wanted: string[] | undefined = cmd.ids;
++            const sessions = chatSessionStore.sessions.filter(s =>
++              wanted ? wanted.includes(s.id) || s.id === active : true,
++            );
++            log('chat-state', {
++              sessions: sessions.slice(0, 16).map(sessionSummary),
++              draftActive: chatSessionStore.getDraft(active ?? '__new_chat__'),
++              draftNew: chatSessionStore.getDraft('__new_chat__'),
++              ...status(),
++            });
++            break;
++          }
++          case 'send-tool':
++            sleepMs = cmd.sleepMs ?? 15000;
++            await ensureToolPal();
++            armStop(cmd);
++            DeviceEventEmitter.emit('crash-repro-send', {text: cmd.prompt});
++            if (cmd.abortAfterMs !== undefined) {
++              setTimeout(() => {
++                modelStore.abortActiveGeneration();
++                log('abort:sent', {afterMs: cmd.abortAfterMs});
++              }, cmd.abortAfterMs);
++            }
++            break;
++          case 'clear-pal':
++            await chatSessionStore.setActivePal(undefined);
++            log('clear-pal:done');
++            break;
++          case 'release':
++            if (cmd.manual) {
++              await modelStore.manualReleaseContext();
++            } else {
++              await modelStore.releaseContext();
++            }
++            log('manual-release:done');
++            break;
++          case 'abort':
++            modelStore.abortActiveGeneration();
++            log('abort:sent');
++            break;
++          case 'dc1-flags':
++            (global as any).__DC1_FORCE_STOP__ = !!cmd.force_stop;
++            (global as any).__DC1_NO_REAPPLY__ = !!cmd.no_reapply;
++            log('dc1-flags', {
++              force_stop: !!cmd.force_stop,
++              no_reapply: !!cmd.no_reapply,
++            });
++            break;
++          case 'image-completion': {
++            let firstToken = false;
++            log('image-completion:start', {
++              image: cmd.image ?? 'test-image.jpg',
++            });
++            modelStore
++              .startImageCompletion({
++                prompt: cmd.prompt ?? 'Describe the image in one sentence.',
++                image_path: `file://${RNFS.ExternalDirectoryPath}/${
++                  cmd.image ?? 'test-image.jpg'
++                }`,
++                onToken: () => {
++                  if (!firstToken) {
++                    firstToken = true;
++                    log('image-completion:first-token');
++                  }
++                },
++                onComplete: text =>
++                  log('image-completion:settled', {
++                    ok: true,
++                    text: text.slice(0, 200),
++                  }),
++                onError: error =>
++                  log('image-completion:settled', {
++                    ok: false,
++                    error: String(error),
++                  }),
++              })
++              .then(() => log('image-completion:returned'))
++              .catch(error =>
++                log('image-completion:settled', {
++                  ok: false,
++                  error: String(error),
++                }),
++              );
++            break;
++          }
++          case 'replay': {
++            if (!lastParams || !lastModelPath) {
++              throw new Error('Nothing to replay');
++            }
++            const params = lastParams;
++            await modelStore.releaseContext();
++            await loadModel(lastModelPath, lastMmproj);
++            log('replay:start', {params: paramsHash(params)});
++            const result = await modelStore.context!.completion(params);
++            log('replay:settled', {
++              prompt_n: result.timings?.prompt_n,
++              tokens_evaluated: result.tokens_evaluated,
++              tokens_predicted: result.tokens_predicted,
++              interrupted: result.interrupted,
++              params: paramsHash(params),
++              text: digest(result.text),
++            });
++            break;
++          }
++          default:
++            throw new Error(`Unknown action ${cmd.action}`);
++        }
++      } catch (error) {
++        log('error', String(error));
++      } finally {
++        busy = false;
++      }
++    }, 250);
++    return () => {
++      clearInterval(timer);
++      dispose();
++    };
++  }, []);
++  return null;
++};
