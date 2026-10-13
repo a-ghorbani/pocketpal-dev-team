@@ -153,7 +153,13 @@ export function makeClient({token, dryRun = false, throttleMs = 1000, baseUrl = 
   // Every change to a language since a timestamp, with its author: the only way to
   // see a translator who edits (often by offline file upload) without commenting.
   async function* translationChanges(lang, sinceIso) {
-    yield* paginate(`${translationBase(lang)}/changes/?timestamp_after=${encodeURIComponent(sinceIso)}&page_size=100`);
+    yield* paginate(`${translationBase(lang)}/changes/?timestamp_after=${encodeURIComponent(sinceIso)}&page_size=1000`);
+  }
+
+  // Every unit in a language. Changes name their unit only by URL, so this is the
+  // map from a change back to its key.
+  async function* allUnits(lang) {
+    yield* paginate(`${translationBase(lang)}/units/?page_size=1000`);
   }
 
   const unitComments = id => api('GET', `${baseUrl}/api/units/${id}/comments/`).then(r => r?.results || []);
@@ -173,6 +179,6 @@ export function makeClient({token, dryRun = false, throttleMs = 1000, baseUrl = 
     } catch { return null; }
   }
 
-  return {api, paginate, findUnit, listLanguages, feedbackUnits, translationChanges, unitComments, unitSuggestions,
+  return {api, paginate, findUnit, listLanguages, feedbackUnits, translationChanges, allUnits, unitComments, unitSuggestions,
           postComment, patchTarget, whoAmI, baseUrl, project, component, dryRun};
 }

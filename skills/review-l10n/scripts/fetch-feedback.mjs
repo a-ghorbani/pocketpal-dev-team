@@ -12,11 +12,14 @@
 //   fetched_at, owner, langs,
 //   active_translators: {lang: {authors:[...], last:"<iso>", edits:N}},   // translator comments, suggestions
 //                       // or target edits in the last 90 days
+//   history: {lang: {key: [{ts, author, by:"translator"|"maintainer", action, target}]}},  // target edits,
+//                       // last HISTORY_DAYS, oldest first; the maintainer's edits are mostly this skill's fills
 //   units: [{lang, key, unit_id, web_url, state, source, target, last_updated,
 //            comments:    [{author, role:"bot"|"maintainer"|"translator", ts, text}],
 //            suggestions: [{author, ts, target, votes}],
 //            human: bool,          // a translator comment or a pending suggestion exists
-//            open:  bool}]         // the latest translator word has no bot/maintainer reply after it
+//            open:  bool,          // the latest translator word has no bot/maintainer reply after it
+//            last_edit: "<iso>"|null}]  // latest target edit inside the history window
 // }
 // `human` units are held: the gate never overwrites them and fill never touches them.
 // `open` units are the ones the feedback reviewers must answer.
@@ -82,7 +85,9 @@ for (const lang of langs) {
 }
 
 const ACTIVE_DAYS = 90;
+const HISTORY_DAYS = 180;
 const cutoff = new Date(Date.now() - ACTIVE_DAYS * 86400e3).toISOString();
+const historyCutoff = new Date(Date.now() - HISTORY_DAYS * 86400e3).toISOString();
 const activeTranslators = {};
 const noteActivity = (lang, author, ts) => {
   const a = (activeTranslators[lang] ||= {authors: [], last: '', edits: 0});
@@ -90,19 +95,35 @@ const noteActivity = (lang, author, ts) => {
   if (ts > a.last) a.last = ts;
   return a;
 };
+// Comments and suggestions carry their own text; these actions are not target edits.
+const NOT_AN_EDIT = /comment|suggestion|alert|lock|repository|resource|string added/i;
+const history = {};
 // Most translator work is silent: edits, often uploaded as a file offline, with no
 // comment. Counting only comments once rated a 233-edit sweep as "no active translator".
+// The same log is the unit's edit history: without it a reviewer cannot see that a
+// translator replaced their own correct wording, or deliberately changed a term.
 for (const lang of langs) {
   try {
-    for await (const c of wl.translationChanges(lang, cutoff)) {
+    const keyOf = new Map();
+    for await (const u of wl.allUnits(lang)) keyOf.set(u.id, u.context);
+    const perKey = (history[lang] = {});
+    for await (const c of wl.translationChanges(lang, historyCutoff)) {
       const author = usernameFromUrl(c.author || c.user);
-      if (!c.unit || isSystemAccount(author) || author === owner) continue;
+      if (!c.unit || isSystemAccount(author)) continue;
+      const key = keyOf.get(Number(c.unit.match(/\/units\/(\d+)\//)?.[1]));
+      if (key && c.target && !NOT_AN_EDIT.test(c.action_name || '')) {
+        (perKey[key] ||= []).push({ts: c.timestamp, author, by: author === owner ? 'maintainer' : 'translator',
+                                   action: c.action_name, target: c.target});
+      }
+      if (author === owner || c.timestamp < cutoff) continue;
       noteActivity(lang, author, c.timestamp).edits++;
     }
+    for (const edits of Object.values(perKey)) edits.sort((a, b) => a.ts.localeCompare(b.ts));
   } catch (e) {
     if (e.status !== 404) throw e;
   }
 }
+for (const u of units) u.last_edit = history[u.lang]?.[u.key]?.at(-1)?.ts ?? null;
 for (const u of units) {
   const events = [...u.comments.filter(c => c.role === 'translator').map(c => ({author: c.author, ts: c.ts})),
                   ...u.suggestions.filter(s => s.author !== 'anonymous').map(s => ({author: s.author, ts: s.ts}))];
@@ -112,7 +133,8 @@ for (const u of units) {
   }
 }
 
-const feedback = {fetched_at: new Date().toISOString(), owner, langs, active_days: ACTIVE_DAYS, active_translators: activeTranslators, units};
+const feedback = {fetched_at: new Date().toISOString(), owner, langs, active_days: ACTIVE_DAYS, history_days: HISTORY_DAYS,
+                  active_translators: activeTranslators, history, units};
 writeFileSync(outPath, JSON.stringify(feedback, null, 2));
 
 const held = units.filter(u => u.human);
@@ -140,13 +162,29 @@ if (mdDir) {
       lines.push(`- en: ${JSON.stringify(u.source)}`);
       lines.push(`- current: ${JSON.stringify(u.target)}`);
       for (const s of u.suggestions) lines.push(`- PENDING SUGGESTION by ${s.author} (${s.ts.slice(0, 10)}, votes ${s.votes}): ${JSON.stringify(s.target)}`);
-      for (const c of u.comments) {
-        const who = c.role === 'bot' ? 'this skill' : `${c.author} (${c.role})`;
-        lines.push(`- ${c.ts.slice(0, 10)} ${who}: ${c.text.replace(/\s+/g, ' ').trim()}`);
-      }
+      const thread = [
+        ...u.comments.map(c => ({ts: c.ts, line: `${c.role === 'bot' ? 'this skill' : `${c.author} (${c.role})`}: ${c.text.replace(/\s+/g, ' ').trim()}`})),
+        ...(history[u.lang]?.[u.key] || []).map(h => ({ts: h.ts, line: `EDIT ${h.action} by ${h.author} (${h.by}): ${JSON.stringify(h.target)}`})),
+      ].sort((a, b) => a.ts.localeCompare(b.ts));
+      for (const t of thread) lines.push(`- ${t.ts.slice(0, 10)} ${t.line}`);
       lines.push('');
     }
     writeFileSync(join(mdDir, `feedback-${lang}.md`), lines.join('\n'));
   }
   console.log(`wrote per-language feedback files to ${mdDir}: ${Object.keys(perLang).join(', ') || 'none'}`);
+  for (const [lang, perKey] of Object.entries(history)) {
+    const keys = Object.keys(perKey).sort();
+    if (!keys.length) continue;
+    const lines = [`# Edit history on Weblate — ${lang} (last ${HISTORY_DAYS} days, oldest first)`, '',
+      `Before flagging a key, look it up here. A translator who replaced their own earlier wording, or ` +
+      `rewrote this skill's draft, made a choice: if the finding would undo it, say so and ask, don't just revert. ` +
+      `Edits by "${owner}" are mostly this skill's machine fills (state 10, "Marked for edit").`, ''];
+    for (const k of keys) {
+      lines.push(`## ${k}`);
+      for (const h of perKey[k]) lines.push(`- ${h.ts.slice(0, 10)} ${h.action} by ${h.author} (${h.by}): ${JSON.stringify(h.target)}`);
+      lines.push('');
+    }
+    writeFileSync(join(mdDir, `history-${lang}.md`), lines.join('\n'));
+  }
+  console.log(`wrote per-language edit history to ${mdDir}: ${Object.keys(history).filter(l => Object.keys(history[l]).length).join(', ') || 'none'}`);
 }

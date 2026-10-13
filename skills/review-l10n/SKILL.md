@@ -32,10 +32,10 @@ only writes are to Weblate; the recommendation is recorded for a maintainer to a
 Flow (orchestrated by `scripts/auto-review.sh` → semantic subagents → feedback subagents → `scripts/decide.mjs` → `scripts/apply-decision.sh`):
 
 1. **Discover** the open Weblate PR (`author:weblate`, head `weblate-translations`). No PR → exit cleanly.
-2. **Pre-review** (`auto-review.sh`): fetch head/base locale JSONs, **derive the wired-language list** (`wired-langs.mjs` against the PR's base commit), run coverage + placeholder checks, split the diff per language, write `review-manifest.json` with the per-language entry counts and chunk plan, and **pull translator feedback** (`fetch-feedback.mjs` → `feedback.json` + `feedback/feedback-<lang>.md`, every language, see **Translator feedback** below). Its summary lists the *open* threads — translator comments or pending suggestions nobody has answered.
-3. **Semantic review**: spawn `general-purpose` subagents over the *changed gated* languages (parallel, blind to each other), each returning STRICT-JSON findings: `[{lang,key,severity:WRONG|AWKWARD,kind,en,current,new?,proposal?,note,source?}]` (see **Grounded findings** in Stage 4: a grammar or orthography claim without a consulted URL is dropped by the gate; a language with an active translator gets WRONG-only review; at most 10 suggestions per language are posted). **Honour the manifest's `chunks`** — a language over 50 entries is split across that many reviewers, each given a slice, never one agent for the whole diff (see Stage 4). Each reviewer also gets its language's `feedback-<lang>.md` when one exists, so it does not re-raise what a translator has already settled. Collate into `findings.json`.
+2. **Pre-review** (`auto-review.sh`): fetch head/base locale JSONs, **derive the wired-language list** (`wired-langs.mjs` against the PR's base commit), run coverage + placeholder checks, split the diff per language, write `review-manifest.json` with the per-language entry counts and chunk plan, and **pull translator feedback** (`fetch-feedback.mjs` → `feedback.json` + `feedback/feedback-<lang>.md` + `feedback/history-<lang>.md`, every language, see **Translator feedback** below). Its summary lists the *open* threads — translator comments or pending suggestions nobody has answered.
+3. **Semantic review**: spawn `general-purpose` subagents over the *changed gated* languages (parallel, blind to each other), each returning STRICT-JSON findings: `[{lang,key,severity:WRONG|AWKWARD,kind,en,current,new?,proposal?,note,source?}]` (see **Grounded findings** in Stage 4: a grammar or orthography claim without a consulted URL is dropped by the gate; a language with an active translator gets WRONG-only review; at most 10 suggestions per language are posted). **Honour the manifest's `chunks`** — a language over 50 entries is split across that many reviewers, each given a slice, never one agent for the whole diff (see Stage 4). Each reviewer also gets its language's `feedback-<lang>.md` and `history-<lang>.md` when they exist, so it does not re-raise what a translator has already settled, and sees when a finding would undo a translator's deliberate edit. Collate into `findings.json`.
 3b. **Feedback resolution**: for every language with open threads (any language, wired or not — a translator is a translator), spawn one `general-purpose` subagent with that language's `feedback-<lang>.md`, the rules from **Translator feedback**, and the output path `feedback/replies-<lang>.json`. Then `build-feedback-plan.mjs --feedback=... --in-dir=feedback --tag="PR #<n>"` → `feedback-plan.json` (replies + adopted translator wording). It lists any open thread left unanswered; a run that leaves threads unanswered must say so in its report.
-4. **Mechanical gate** (`decide.mjs --feedback=<feedback.json> ...`): split into two layers and write `decision.json` + `plan.json`. It drops unsourced grammar/orthography findings, posts no AWKWARD suggestions in a language with an active translator, and caps suggestions at 10 per language (`--max-suggestions`); each of these is printed and recorded in `decision.json` so the report can say what was withheld. Units with translator input are **held**: a WRONG fix there is posted as a comment, never applied, and AWKWARD suggestions on them are dropped because the thread already exists. If `feedback.json` is missing (fetch failed) *every* overwrite is downgraded to a comment — the gate never writes blind.
+4. **Mechanical gate** (`decide.mjs --feedback=<feedback.json> ...`): split into two layers and write `decision.json` + `plan.json`. It drops unsourced grammar/orthography findings, posts no AWKWARD suggestions in a language with an active translator, and caps suggestions at 10 per language (`--max-suggestions`); each of these is printed and recorded in `decision.json` so the report can say what was withheld. Units with translator input are **held**: a WRONG fix there is posted as a comment, never applied, and AWKWARD suggestions on them are dropped because the thread already exists. If `feedback.json` is missing (fetch failed) *every* overwrite is downgraded to a comment — the gate never writes blind. A unit we already flagged with no edit since is **not re-posted** (`alreadyFlagged`, see **Translator feedback**), and an AWKWARD fix on this skill's own untouched draft rewrites the draft instead of commenting on it (`draftRewrites`).
    - **Layer 1 — hard blockers (non-overridable, no judgment):** out-of-scope file (anything outside `src/locales/*.json`), malformed JSON, placeholder mismatch in a gated lang, or GitHub `CONFLICTING`. These can crash/break the app or are unsafe to auto-merge, so any one of them => `mechanical_verdict: HOLD` and the decision is final. The model cannot wave these through. Structural checks run on **every** changed locale; in a genuinely unwired one they are recorded as non-blocking `structuralWarnings` (plus a Weblate comment) so they get fixed before that locale is ever wired.
    - **Layer 2 — semantic findings (adjudicable):** `WRONG` (wired) and `AWKWARD` findings. These never auto-decide. With no hard blockers, `mechanical_verdict: ADJUDICATE`.
    - Unwired-language issues are recorded (`ignoredUnwired`) but never gate — they don't ship in-app.
@@ -70,6 +70,12 @@ language's change log (`GET /api/translations/<p>/<c>/<lang>/changes/?timestamp_
 and counts a person's edits as activity. Comments alone missed every active translator
 except one (PR #944: 233 Russian edits read as "no active translator").
 
+The same log is each unit's **edit history** (last 180 days): `feedback.json` `history`,
+interleaved with the comments in `feedback-<lang>.md`, and per key in `history-<lang>.md`.
+Without it the review could not see, on PR #944, that the Russian translator's own
+earlier correct wording had been replaced by a later file upload, or that a zh_Hant
+term change it kept "fixing" was the translator's deliberate choice.
+
 **Rules.**
 - **The machine overwrites only machine text.** `apply-plan.mjs` checks the live unit
   at write time and refuses an overwrite when the unit is at state ≥ 20 (a person
@@ -81,9 +87,21 @@ except one (PR #944: 233 Russian edits read as "no active translator").
   never as applied.
 - A held unit is never overwritten by the gate or the fill. A WRONG fix on it becomes a
   flag comment; an AWKWARD suggestion on it is dropped.
-- A finding that repeats an earlier review note on the same unit (listed in
-  `feedback-<lang>.md`) means the translator already overruled it once. The comment
-  says so and asks; it does not restate the note as if it were new.
+- **One note per unit until someone edits it.** If this skill (or the maintainer) has
+  commented on a unit and its target has not changed since, `decide.mjs` posts nothing
+  new there — WRONG or AWKWARD — and lists it under `alreadyFlagged` with the note
+  count and dates. On PR #944 the same eight units collected two or three identical
+  flags across runs; a translator who did not act on a note will not act on its copy,
+  and an offline uploader never sees either. Whether to press further (the maintainer
+  fixes it, or asks elsewhere) is a human call: report the stale flags, never re-post.
+  Exception: our own unedited draft (state < 20) may still be corrected.
+- **A comment needs a reader.** An AWKWARD fix on a unit only this skill has ever
+  written (every edit in the history is the token owner's) rewrites the draft at
+  state 10 instead of commenting to nobody; `apply-plan.mjs` still re-checks state
+  and text live.
+- A finding that would undo a translator's edit visible in `history-<lang>.md` (they
+  replaced our draft, or their own earlier wording) is a question, not a revert: say
+  what changed and ask whether it was intended.
 - The translator's judgment wins by default. The feedback reviewer disagrees only for
   an app-context reason (the string is a chip and must stay short; a term is used
   consistently under another key) and even then it *proposes* and leaves the decision
@@ -256,7 +274,7 @@ awk -v scratch="${SCRATCH}" '/^## [A-Za-z_]+:/ {f=scratch "/diff-" $2 ".txt"; su
 ```
 
 For each changed wired language, spawn a `general-purpose` agent **in parallel**. Each agent gets:
-- The path to its diff file only (never another language's file), plus its `feedback-<lang>.md` when one exists.
+- The path to its diff file only (never another language's file), plus its `feedback-<lang>.md` and `history-<lang>.md` when they exist.
 - A language-specific prompt that:
   - States the app context (mobile, RN, local LLMs, Settings/Models/Chat).
   - Lists language-specific gotchas: orthography (e.g. Russian ё, missing measure word 个 in Chinese, Korean register mismatch), brand-name policy (keep `OpenAI`, `Groq`, `Hugging Face`, model names, engine names like `Kitten/Kokoro/Supertonic` in English).
@@ -407,6 +425,7 @@ End with a short summary:
 - Don't ask the user to paste the token in chat. Direct them to `.env` instead.
 - Don't merge or close the original auto-merge PR as part of this skill — that's a separate decision.
 - Don't overwrite, re-suggest on, or machine-fill a unit a translator has commented on or suggested for. Answer the thread instead (`build-feedback-plan.mjs`).
+- Don't post a second note on a unit nobody has edited since the first. Report it as a stale flag.
 - Don't overwrite a person's translation (state ≥ 20) at all, commented or not. Flag it. `apply-plan.mjs` enforces this; never route a write around it.
 - Don't post a Weblate comment without the `[review-l10n]` marker — the next run would read it as a human's.
 - Don't assert a grammar or spelling norm from model memory. Fetch the reference, cite the URL in `source`, or downgrade the finding to `style`.
@@ -420,7 +439,7 @@ End with a short summary:
 - `scripts/diff-entries.mjs` — per-language diff producer.
 - `scripts/weblate-client.mjs` — shared Weblate client: token, throttle/429 retry, lang remap, the `[review-l10n]` marker, unit lookup, comment/suggestion reads.
 - `scripts/apply-plan.mjs` — Weblate API executor (overwrites, suggestions-as-comments, comments, replies).
-- `scripts/fetch-feedback.mjs` — pull translator comments + pending suggestions → `feedback.json` and per-language `feedback-<lang>.md`.
+- `scripts/fetch-feedback.mjs` — pull translator comments + pending suggestions + 180-day edit history → `feedback.json`, per-language `feedback-<lang>.md` and `history-<lang>.md`.
 - `scripts/build-feedback-plan.mjs` — validate the feedback reviewers' resolutions → `feedback-plan.json` (replies + adopted wording).
 - `scripts/find-missing.mjs` — `--fill`: list en keys missing/empty in a locale.
 - `scripts/build-fill-plan.mjs` — `--fill`: validate subagent translations → fill plan (overwrites, state=10).

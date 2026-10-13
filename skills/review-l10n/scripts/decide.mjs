@@ -24,6 +24,8 @@
 //                       overwrite, and AWKWARD suggestions are dropped (the feedback
 //                       reviewer answers that thread instead). If the file is missing
 //                       every overwrite is downgraded to a comment — never write blind.
+//                       It also drives the repeat check: a unit this skill (or the
+//                       maintainer) already flagged, with no edit since, gets no new note.
 //   --max-suggestions=N per-language cap on AWKWARD suggestions posted per run (default 10);
 //                       the overflow is recorded, not posted — a volunteer must never be flooded.
 //   --out=<dir>         where to write decision.json + plan.json (default: cwd)
@@ -160,14 +162,40 @@ const decision = mechanicalHold ? 'HOLD' : null; // null = pending session adjud
 
 // ---- Translator-held units: never overwrite where a human has spoken ----
 const feedbackKnown = Boolean(feedbackPath && existsSync(feedbackPath));
+const fb = feedbackKnown ? JSON.parse(readFileSync(feedbackPath, 'utf-8')) : {};
 const heldUnits = new Set();
 const activeLangs = new Set();
 if (feedbackKnown) {
-  const fb = JSON.parse(readFileSync(feedbackPath, 'utf-8'));
   for (const u of fb.units || []) if (u.human) heldUnits.add(`${u.lang}/${u.key}`);
   for (const l of Object.keys(fb.active_translators || {})) activeLangs.add(l);
 }
 const isHeld = (lang, key) => !feedbackKnown || heldUnits.has(`${lang}/${key}`);
+
+// ---- Repeat check: one note per unit until someone edits it ----
+// A translator who has not acted on a note will not act on the same note posted
+// again; a pile of identical flags is noise, and to an offline uploader it is
+// invisible anyway. So a unit we already flagged is left alone until its target
+// changes. Whether to press further (fix it ourselves, ask elsewhere) is the
+// maintainer's call, so these are reported, never posted.
+const priorNotes = new Map();
+for (const u of fb.units || []) {
+  const ours = u.comments.filter(c => c.role !== 'translator');
+  if (!ours.length) continue;
+  const last = ours.at(-1).ts;
+  const lastEdit = u.last_edit ?? null;
+  if (lastEdit && lastEdit > last) continue;
+  priorNotes.set(`${u.lang}/${u.key}`, {count: ours.length, first: ours[0].ts, last, state: u.state});
+}
+const alreadyFlagged = [];
+// Edited only by the token owner inside the history window: this skill's own fill,
+// untouched by any person. A comment there addresses nobody, so a better wording
+// replaces the draft (still state 10) instead. apply-plan re-checks state and text live.
+const isOwnDraft = (lang, key) => {
+  const edits = fb.history?.[lang]?.[key];
+  return Boolean(edits?.length) && edits.every(e => e.by === 'maintainer');
+};
+const draftRewrites = [];
+const repeatOf = fi => priorNotes.get(`${fi.lang}/${fi.key}`);
 
 // ---- Weblate write plan (used regardless of final call) ----
 const plan = {
@@ -203,6 +231,12 @@ const heldWrong = [];
 const heldAwkward = [];
 const excerpts = [];
 for (const w of wrong) {
+  const prior = repeatOf(w);
+  // Our own unedited draft (state < 20) may still be corrected; a person's text gets one note.
+  if (prior && !(prior.state < 20 && w.new && w.current === headValue(w.lang, w.key))) {
+    alreadyFlagged.push({...w, prior});
+    continue;
+  }
   const exact = w.new && w.current === headValue(w.lang, w.key);
   if (w.new && !exact) excerpts.push(w);
   if (exact && !isHeld(w.lang, w.key)) {
@@ -225,11 +259,17 @@ const capped = [];
 const perLang = {};
 for (const a of awkward) {
   if (!a.proposal) continue;
+  if (repeatOf(a)) { alreadyFlagged.push({...a, prior: repeatOf(a)}); continue; }
   if (feedbackKnown && heldUnits.has(`${a.lang}/${a.key}`)) { heldAwkward.push(a); continue; }
   if (activeLangs.has(a.lang)) { deferredActive.push(a); continue; }
   perLang[a.lang] = (perLang[a.lang] || 0) + 1;
   if (perLang[a.lang] > maxSuggestions) { capped.push(a); continue; }
   const rationale = a.source ? `${a.note || ''} (ref: ${a.source})` : a.note;
+  if (isOwnDraft(a.lang, a.key) && a.current === headValue(a.lang, a.key)) {
+    draftRewrites.push(a);
+    plan.overwrites.push({lang: a.lang, key: a.key, current: a.current, new: a.proposal, comment: rationale});
+    continue;
+  }
   plan.suggestions.push({lang: a.lang, key: a.key, current: a.current, proposal: a.proposal, comment: rationale});
 }
 
@@ -259,6 +299,8 @@ const decisionObj = {
     wrong: wrong.length,
     awkward: awkward.length,
     heldWrong: heldWrong.length,
+    alreadyFlagged: alreadyFlagged.length,
+    draftRewrites: draftRewrites.length,
     excerpts: excerpts.length,
     heldAwkward: heldAwkward.length,
     unsourced: unsourced.length,
@@ -269,7 +311,7 @@ const decisionObj = {
     comments: plan.comments.length,
   },
   hardBlockers, hardReasons, structuralWarnings,
-  wrong, awkward, ignoredUnwired, heldWrong, excerpts, heldAwkward, unsourced, deferredActive, capped,
+  wrong, awkward, ignoredUnwired, heldWrong, alreadyFlagged, draftRewrites, excerpts, heldAwkward, unsourced, deferredActive, capped,
 };
 
 writeFileSync(join(outDir, 'decision.json'), JSON.stringify(decisionObj, null, 2));
@@ -290,6 +332,15 @@ if (excerpts.length) {
 }
 if (heldWrong.length || heldAwkward.length) {
   console.log(`  held back: ${heldWrong.length} WRONG fix(es) posted as comments, ${heldAwkward.length} AWKWARD suggestion(s) dropped — the feedback reviewer owns those threads`);
+}
+if (alreadyFlagged.length) {
+  console.log(`already flagged, no edit since — NOT re-posted (${alreadyFlagged.length}); the maintainer decides whether to press further:`);
+  for (const f of alreadyFlagged) {
+    console.log(`  - ${f.severity} ${f.lang}/${f.key}: ${f.prior.count} earlier note(s), ${f.prior.first.slice(0, 10)} → ${f.prior.last.slice(0, 10)}, state ${f.prior.state}`);
+  }
+}
+if (draftRewrites.length) {
+  console.log(`  ${draftRewrites.length} AWKWARD fix(es) on this skill's own untouched drafts → rewritten (state 10), not commented: ${draftRewrites.map(a => `${a.lang}/${a.key}`).join(', ')}`);
 }
 if (unsourced.length) {
   console.log(`unsourced norm claims dropped (${unsourced.length}) — grammar/orthography findings need a consulted URL:`);
@@ -314,7 +365,7 @@ if (structuralWarnings.length) {
 }
 if (mechanical_verdict === 'ADJUDICATE') {
   console.log(`\n${wrong.length} WRONG finding(s) need session adjudication → MERGE or HOLD.`);
-  for (const w of wrong) console.log(`  - ${w.lang}/${w.key}: ${w.note || ''}`);
+  for (const w of wrong) console.log(`  - ${w.lang}/${w.key}${repeatOf(w) ? ' [already flagged]' : ''}: ${w.note || ''}`);
 }
 console.log(`\nwrote ${join(outDir, 'decision.json')} and ${join(outDir, 'plan.json')}`);
 process.exit(mechanicalHold ? 1 : 0);
