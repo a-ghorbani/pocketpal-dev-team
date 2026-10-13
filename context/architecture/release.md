@@ -19,7 +19,7 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 | `android/app/build.gradle`, `android/gradle.properties` | ABI filters, flavors; the root properties file must not carry `rnllamaBuildFromSource`. No Play Billing pin: Billing (9.x) arrives through `react-native-iap`'s `openiap-google`. |
 | `node_modules/llama.rn/android/` | Upstream: its own `gradle.properties` (`rnllamaBuildFromSource=true`), `build.gradle` (mode, variants, `syncRNLlamaHtpAssets`), CMake variant list, and `RNLlama.java` (the load ladder, `HTP_LIBS`, `isHexagonSupported`). |
 | `node_modules/llama.rn/{cmake,vendor}/` | Upstream: `cmake/rnllama-sources.cmake` (source lists, incl. `ggml-cpu/tiled` and `cpp/rn-decision.cpp`; no test parses it) and `vendor/llama.cpp`, unrenamed upstream llama.cpp pinned in `vendor/VERSIONS`. |
-| `patches/llama.rn+<version>.patch` | (PR #955 only) Our llama.rn source patch (context ownership in `cpp/jsi/`, abort callback and decode-abort handling in `cpp/rn-*`, and in `src/index.ts` a stop re-applied after the native completion call), applied by `scripts/postinstall.sh` (`patch-package`) on every `yarn install`. Runtime contract in `model-loading.md`. |
+| `patches/llama.rn+<version>.patch` | Our llama.rn source patch (context ownership in `cpp/jsi/`, abort callback and decode-abort handling in `cpp/rn-*`, and in `src/index.ts` a stop re-applied after the native completion call), applied by `scripts/postinstall.sh` (`patch-package`) on every `yarn install`. Runtime contract in `model-loading.md`. |
 
 ## How it works
 
@@ -41,7 +41,7 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 - **The escape hatch is `-PrnllamaBuildFromSource=false`**, not the default. The JNI wrapper would link against a prebuilt from another snapshot, and struct-layout drift wouldn't surface.
 - **Consume llama.rn npm releases, not git refs.** A git install lacks `bin/`, `jniLibs`, `lib/`, and the QAIC `vendor/llama.cpp/ggml/src/ggml-hexagon/htp/v73` artifacts.
 
-**The llama.rn patch** (PR #955 only; `main` has no llama.rn patch)
+**The llama.rn patch**
 - **It ships only where llama.rn compiles from source.** Android CI, e2e and release do, and `yarn install` re-applies the patch even on a `node_modules` cache hit. iOS stays on the prebuilt `rnllama.xcframework`, where only `cpp/jsi/` (compiled into the app) is patched: ownership and the end-of-completion `embd` trim ship, the abort callback does not. The `src/index.ts` hunk is in the JS bundle on both platforms and carries no native marker. JSI code that touches a core member added by the patch sits under `#ifndef RNLLAMA_USE_FRAMEWORK_HEADERS` (the podspec's prebuilt mode) so the prebuilt build still compiles.
 - **The patch is proven on the artifact, not trusted.** It exports `rnllama_patch_abort_v3` (core, every `librnllama_*.so`) and `rnllama_jsi_patch_ownership_v3` (every `librnllama_jni*.so`); the manifest demands them as `kind: patch-marker` rules, with a `why` explaining the miss. An unpatched or prebuilt (`-PrnllamaBuildFromSource=false`) artifact fails the gate. Bump the suffix whenever the patch's contract changes.
 - **`patches/**` is in every `node_modules` and `.cxx` cache key in `ci.yml`**, so a patch edit never meets stale patched or compiled sources.
@@ -71,8 +71,8 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 
 ## Verification
 
-- `yarn test scripts/__tests__/` after `yarn install` (the ladder and SDK tests read `node_modules/llama.rn`). (PR #955 only) `yarn install` must print `llama.rn@<version> ✔` from patch-package.
-- Local gate: `node scripts/verify-android-payload.js --apk <apk> [--aab <aab>]`. A sound artifact shows 12 arm64 + 4 x86_64 `librnllama*` libraries, 4 assets, both Hexagon symbols and (PR #955 only) every library's patch marker `present`. A backend-less build fails only those two symbols.
+- `yarn test scripts/__tests__/` after `yarn install` (the ladder and SDK tests read `node_modules/llama.rn`). `yarn install` must print `llama.rn@<version> ✔` from patch-package.
+- Local gate: `node scripts/verify-android-payload.js --apk <apk> [--aab <aab>]`. A sound artifact shows 12 arm64 + 4 x86_64 `librnllama*` libraries, 4 assets, both Hexagon symbols and every library's patch marker `present`. A backend-less build fails only those two symbols.
 - On a llama.rn upgrade, re-check the println wording, the CMake call sites, `HTP_LIBS`, and the SDK paths CMake references. Also re-check:
   - the manifest's symbol names against the vendored header: `grep -n ggml_backend_hexagon_reg node_modules/llama.rn/vendor/llama.cpp/ggml/include/ggml-hexagon.h`;
   - the four `bin/arm64-v8a/libggml-htp-*.so` (the DSP side) change with the pin; never mix them across versions;
