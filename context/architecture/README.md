@@ -25,6 +25,7 @@ One file per **flow**, bounded by a single user-facing concept. Per-component is
 | `explore-tab.md` | Explore tab: PalsHub discovery and `[Pals \| Models]` sub-tabs (**`redesign/phase-3` only**) | `ExploreScreen`, `ExplorePalsPanel`, `PalDetailSheet` |
 | `pals-screen.md` | Pals screen grid: width-driven column count, shared row chunking, card content sizing, testIDs e2e depends on | `PalsScreen`, `palGridLayout`, `PalGridRow`, `SquarePalCard` |
 | `app-shell.md` | root providers, onboarding switch, Drawer and sidebar, global hosts | `App.tsx` (`SwitchPoint`, Drawer), `SidebarContent`, `HeaderLeft`, `ROUTES` |
+| `sheets.md` | shared `Sheet` and the keyboard: input registration, status-bar clamp, percentage snap points, focused-input reveal (**pending PR**) | `src/components/Sheet/` (`Sheet`, `SheetScrollView`, `snapPoints`, `revealOffset`), `SheetAwareNativeInput` |
 | `settings.md` | the Settings screen: controls and their writers, testIDs e2e depends on | `SettingsScreen`, `LanguageSelector` / `SearchableSelectSheet`, `SearchProviderStore` |
 | `onboarding.md` | first-launch onboarding screens and the completion gate | `src/screens/OnboardingScreens/`, `src/store/onboarding/`, `uiStore.hasCompletedOnboarding`, `App.tsx` `SwitchPoint` |
 | `theming.md` | design tokens, typography, DS component layer, Paper-import blocklist | `src/theme/tokens/`, `src/utils/theme.ts`, `useTheme`, `src/components/ui/`, `.eslintrc.js` blocklist |
