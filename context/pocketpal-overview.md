@@ -12,12 +12,12 @@ Location: `./repos/pocketpal-ai`
 
 | Category   | Technology           | Version     |
 | ---------- | -------------------- | ----------- |
-| Framework  | React Native         | 0.82.1      |
-| Language   | TypeScript           | 5.0.4       |
+| Framework  | React Native         | 0.86.3      |
+| Language   | TypeScript           | 5.9.3       |
 | State      | MobX                 | 6.15.0      |
 | Navigation | React Navigation     | 7.x         |
 | Database   | WatermelonDB         | 0.28.0      |
-| UI Kit     | React Native Paper   | 5.14.5      |
+| UI Kit     | React Native Paper   | 5.15.3      |
 | LLM        | llama.rn (llama.cpp) | 0.13.0-rc.7 |
 | Testing    | Jest + Appium        | 29.6.3      |
 
