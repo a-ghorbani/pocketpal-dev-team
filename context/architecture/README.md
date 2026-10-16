@@ -34,7 +34,7 @@ One file per **flow**, bounded by a single user-facing concept. Per-component is
 | `model-download.md` | Android model downloads: scheduling (UIDT on API 34+, WorkManager), the shared resumable loop, resume validation, stop semantics, JS signals | `DownloadModule`, `DownloadController`, `DownloadScheduler`, `DownloadEngine`, `DownloadJobService`, `DownloadBanner` |
 | `deep-linking.md` | inbound `pocketpal://` links and the Hugging Face User-Agent attribution wire | `useDeepLinking`, `hubRunLink`, `HubRunSheetHost`, `hfResolve`, `hfUserAgent` |
 | `benchmark-matrix.md` | on-device benchmark matrix runner and its config / merge / compare toolchain | `src/__automation__/`, `e2e/helpers/bench-runner.ts`, `e2e/scripts/` |
-| `release.md` | Android native build, llama.rn payload variants (incl. Hexagon), payload gate | `scripts/verify-android-payload.js`, `scripts/android-payload-manifest.json`, `android/fastlane/`, `.github/actions/setup-hexagon-sdk/` |
+| `release.md` | Android native build, llama.rn payload variants (incl. Hexagon), payload gate; iOS RN build mode, native dependency patches, RN-upgrade audits | `scripts/verify-android-payload.js`, `scripts/android-payload-manifest.json`, `android/fastlane/`, `.github/actions/setup-hexagon-sdk/` |
 
 A flow file appears here once a story has produced a vetted WHAT for it; the library accrues lazily. Adding a flow doc means adding its row. Flow docs describe `main`; a doc marked with a branch or PR describes code that hasn't landed yet.
 
