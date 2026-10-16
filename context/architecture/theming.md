@@ -75,6 +75,7 @@ DS components map `(variant, size, state)` to tokens in `createStyles` (their ow
   - No per-folder Paper carve-out exists yet (see `.eslintrc.js`): add the wrap folder's allowance in the same change as an overlapping entry (`Menu` will hit `Dropdown`).
   - The raw-hex ban covers only DS `styles.ts`. Screen styles aren't linted, and some already hardcode non-mode-aware hex (onboarding `ModelRadioGroup/styles.ts`, `PipMascot`).
 - **Canonical Figma variants.** Where Figma draws a family more than once, implement against Chip `890:29153`, Tabs `764:27807`, BottomNavBar `143:4685`; the other drawings are dead designs.
+- **`StyleSheet.absoluteFillObject` no longer exists (RN 0.85+) and spreading it is silent:** the style loses its four zero edges and `position`, so an overlay collapses to its content. Use `...StyleSheet.absoluteFill`. RN's types catch it in app code; dependencies need a grep of `node_modules` on every RN bump (`release.md`). The DS `Pressable` state layer and `Dialog` scrim / `centerWrapper` assert the fill keys in their tests, since Jest can't see the layout (pending PR).
 - **Pressed and focused states are not snapshotted:** Jest can't drive them, so those cells would duplicate default. `Pressable` resolves only `pressed`; focus belongs to the consumer (e.g. `Input`).
 - **Remaining legacy.** MD3 types are still imported in `utils/types.ts`, `utils/index.ts`, `SidebarContent/` and `RenameModal/`, and `ChatInput/` imports `fontStyles`. Remove them only with the legacy surface.
 
