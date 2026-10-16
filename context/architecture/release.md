@@ -1,8 +1,8 @@
-# Release — the Android native build and the shipped payload
+# Release — the native build, native dependency patches and the shipped payload
 
 ## Purpose
 
-How PocketPal's Android artifacts get their llama.rn native payload (build mode, compiled variants, the Hexagon/NPU backend), and the payload gate that runs before any Android artifact is uploaded. What the gate checks is enforced by its script and fails loudly; this doc holds what CI cannot tell you. Not covered: signing, version bumping, TestFlight and Play metadata, and iOS (it vendors the prebuilt `ios/rnllama.xcframework`). `model-loading.md` owns runtime Hexagon device selection and the llama.rn version rationale.
+How PocketPal's Android artifacts get their llama.rn native payload (build mode, compiled variants, the Hexagon/NPU backend), and the payload gate that runs before any Android artifact is uploaded. What the gate checks is enforced by its script and fails loudly; this doc holds what CI cannot tell you. It also holds the iOS React Native build mode and the native dependency patches (pending PR). Not covered: signing, version bumping, TestFlight and Play metadata, and llama.rn on iOS (it vendors the prebuilt `ios/rnllama.xcframework`). `model-loading.md` owns runtime Hexagon device selection and the llama.rn version rationale.
 
 **Not on `main` yet:** open PR #869 adds publish-ordering tests, 16 KB alignment checks, and top-level payload assets. The previous version of this doc described them (`git show 1ad6ce1:context/architecture/release.md`); distill them back in when it lands.
 
@@ -19,6 +19,9 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 | `android/app/build.gradle`, `android/gradle.properties` | ABI filters, flavors; the root properties file must not carry `rnllamaBuildFromSource`. No Play Billing pin: Billing (9.x) arrives through `react-native-iap`'s `openiap-google`. |
 | `node_modules/llama.rn/android/` | Upstream: its own `gradle.properties` (`rnllamaBuildFromSource=true`), `build.gradle` (mode, variants, `syncRNLlamaHtpAssets`), CMake variant list, and `RNLlama.java` (the load ladder, `HTP_LIBS`, `isHexagonSupported`). |
 | `node_modules/llama.rn/{cmake,vendor}/` | Upstream: `cmake/rnllama-sources.cmake` (source lists, incl. `ggml-cpu/tiled` and `cpp/rn-decision.cpp`; no test parses it) and `vendor/llama.cpp`, unrenamed upstream llama.cpp pinned in `vendor/VERSIONS`. |
+| `patches/<pkg>+<version>.patch` (others) | Named for the installed version: `react-native-paper` (Menu fixes), `@gorhom/bottom-sheet` and `react-native-image-viewing` (`absoluteFill`), `@nozbe/watermelondb` (iOS JSI glue, Android `buildConfig`), `onnxruntime-react-native` (16 KB pages, iOS JSI glue) |
+| `ios/Podfile` | RN build mode (`RCT_USE_PREBUILT_RNCORE=0`), the `fmt` C++17 pin and the glog textual module map (written only when a `glog` target exists) |
+| `babel.config.js` | An `overrides` entry adds `plugin-transform-class-properties` (loose) for `src/database/models` only |
 | `patches/llama.rn+<version>.patch` | Our llama.rn source patch (context ownership in `cpp/jsi/`, abort callback and decode-abort handling in `cpp/rn-*`, and in `src/index.ts` a stop re-applied after the native completion call), applied by `scripts/postinstall.sh` (`patch-package`) on every `yarn install`. Runtime contract in `model-loading.md`. |
 
 ## How it works
@@ -69,6 +72,14 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 - **Enabling release minify needs a `-keep class com.rnllama.**` rule.** None exists.
 - **Play Billing comes only from `react-native-iap`.** `openiap-versions.json` in the package pins `openiap-google`, which brings `billingclient:billing` 9.x; the app declares no billing dependency, so check `./gradlew :app:dependencies --configuration prodReleaseRuntimeClasspath | grep billingclient` after a library bump. iOS gains the `NitroIap`, `NitroModules` and `openiap` pods.
 
+**React Native upgrades and native dependency patches** (pending PR)
+- **iOS builds RN core from source; deps stay prebuilt.** On 0.86.3, prebuilt core under `use_frameworks! :static` leaves `RNFBApp`'s framework module including non-modular source headers from `Pods/Headers/Public/React-Core`, then `RNFBAppCheck` fails to link; RNFB 23.8 did not help, `RCT_USE_PREBUILT_RNCORE=0` does. `RCT_REMOVE_LEGACY_ARCH=1` and Hermes V1 stay at RN's defaults.
+- **`RCTCxxBridge` is gone in 0.87.** The WatermelonDB and onnxruntime patches read `runtime` / `jsCallInvoker` through a local protocol (llama.rn's `RNLlamaBridgeRuntimeAccess` shape), which bridgeless `RCTBridgeProxy` implements. A failed install is silent (WatermelonDB goes `asynchronous`, TTS quiet).
+- **Audit `node_modules` on every RN or native-library bump** (these breaks are silent): `absoluteFillObject` / unguarded `InteractionManager` in runtime JS; `react-native/Libraries/*` imports that no longer resolve (calibrate with a known-missing path); `RCTCxxBridge` in compiled iOS sources outside a legacy-arch guard, version guard or off flag (`RNS_USE_CXXBRIDGE`; VisionCamera FrameProcessors, on once `react-native-worklets-core` is installed).
+- **The Hermes Babel profile skips class-fields transforms**, breaking WatermelonDB's legacy decorators. The override stays scoped to the models: globally it runs before the TypeScript plugin and turns type-only fields into `undefined` own properties that `makeAutoObservable` observes.
+- **0.87.1 is blocked on Android**: its `react-android` carries Kotlin metadata 2.2, and `currentActivity` read as a property stops compiling (`@pocketpalai/react-native-speech` 2.5.x, `@react-native-documents/picker` < 11). Its Gradle plugin also stops enabling `buildConfig` for every library, and AGP 9 rejects `proguard-android.txt`.
+- **Android WatermelonDB runs `asynchronous`, not JSI** (one "JSI SQLiteAdapter not available" per launch, `main` too); iOS takes the JSI path.
+
 ## Verification
 
 - `yarn test scripts/__tests__/` after `yarn install` (the ladder and SDK tests read `node_modules/llama.rn`). `yarn install` must print `llama.rn@<version> ✔` from patch-package.
@@ -77,4 +88,5 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
   - the manifest's symbol names against the vendored header: `grep -n ggml_backend_hexagon_reg node_modules/llama.rn/vendor/llama.cpp/ggml/include/ggml-hexagon.h`;
   - the four `bin/arm64-v8a/libggml-htp-*.so` (the DSP side) change with the pin; never mix them across versions;
   - every env var `MainApplication.kt` sets against the vendored ggml's `getenv` names (a name nothing reads is a silent no-op): `for v in $(grep -o 'setenv("[A-Z_]*"' android/app/src/main/java/com/pocketpalai/MainApplication.kt | cut -d'"' -f2); do grep -rq "getenv(\"$v\")" node_modules/llama.rn/vendor/llama.cpp/ggml/src && echo "ok $v" || echo "DEAD $v"; done`.
+- On an RN or native-library bump: every patch ✔ on `yarn install`, the three audits, both platform builds, then on device against `main`: WatermelonDB data survives an in-place upgrade, all three TTS engines speak, the camera opens (`dumpsys media.camera`).
 - `release.yml` publishes and can't be rehearsed. Check lane, `aab:` and step-order changes by reading, then watch the next release. To see the backend engage, run an `e2e-tests.yml` APK on a Snapdragon 8-series device.
