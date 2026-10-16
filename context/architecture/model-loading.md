@@ -93,7 +93,7 @@ Generation lease: a chat run holds one for its whole `runAgent` run; a VideoPal 
 - **The classifier is pure and total.** Any unclassifiable device gets `low`.
 - **Remote-attached images are inlined as `data:` URIs** in `openai.ts`, because a server cannot read device paths.
 - **Single-session Hexagon is deliberate.** Requesting several `HTP` sessions engages the multi-session pipeline, whose compute buffers amplify memory. Registry discovery does not prove which sessions execute; the native init arguments and model/compute allocation logs do. CPU, OpenCL and every iOS selection skip the discovery call.
-- **llama.rn is the published npm pin in `package.json`, not a git ref.** Speculative needs ≥ 0.12.5 (MTP) and ≥ 0.12.7 (speculative-correct native timings); ≥ 0.13.0-rc.5 is unprefixed ggml; ≥ 0.13.0-rc.6 serialises claimed JSI ops per context. iOS vendors the prebuilt `rnllama.xcframework`; Android compiles from source, which is what silently dropped the Hexagon backend once. The build contract lives in `release.md`.
+- **llama.rn is the published npm pin in `package.json`, not a git ref.** Speculative needs ≥ 0.12.5 (MTP) and ≥ 0.12.7 (speculative-correct native timings); ≥ 0.13.0-rc.5 is unprefixed ggml; ≥ 0.13.0-rc.6 serialises claimed JSI ops per context. iOS vendors the prebuilt `rnllama.xcframework`; Android compiles from source, which is what silently dropped the Hexagon backend once. The build contract lives in `release.md`. 0.13.0-rc.7 runs on Hermes V1 (RN 0.86's default, not opted out; pending PR); stop, send-again and release mid-prefill were re-checked on device against `main` for that move.
 
 ## Verification
 
