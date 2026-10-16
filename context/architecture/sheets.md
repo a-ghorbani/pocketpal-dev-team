@@ -1,7 +1,5 @@
 # Sheets
 
-*(pending PR: sheet inputs render RN `TextInput` with their own gorhom registration, and the `Sheet.Actions` padding follows the lift; on main, sheet inputs are `BottomSheetTextInput`, so on Android a drag that starts on a field does not scroll the sheet, and a lifted bar keeps the full bottom inset)*
-
 ## Purpose
 
 The shared `Sheet` (`src/components/Sheet`, a `@gorhom/bottom-sheet` `BottomSheetModal`) and how its inputs behave with the keyboard: input registration, the multi-window opt-out, the status-bar clamp, percentage snap points, and the scroll view's focused-input reveal. Not covered: what any one sheet does (each flow doc owns its sheets, e.g. `settings.md`, `remote-servers.md`), and the DS sheet in `src/components/ui/Sheet` (redesign layer; it has neither `topInset` nor snap-point resolution, and no callers).
