@@ -61,6 +61,7 @@ Playback entry points: `play()` (replay), `preview()` (audition), and `onAssista
 - **The picker is a sheet.** It uses a `SearchableSelectSheet` because an anchored menu overflows with 32 options. It stacks above the setup sheet through the DS `Sheet`'s `stackBehavior="push"`. Changes to language or steps apply from the next utterance.
 - **TTS downloads bypass `DownloadManager`.** Engines call `RNFS.downloadFile` directly, so the requests carry no HF attribution User-Agent, no HF token, and no background download. See `deep-linking.md`, "Traps and decisions".
 - **Supertonic voice styles are best-effort.** A failed voice-style download is only logged. `voices-manifest.json` carries `baseUrl`, so the library fetches missing styles lazily on first play, which needs the network.
+- **A silent engine can be a native install failure.** Kokoro, Kitten and Supertonic all run on `onnxruntime-react-native` through `@pocketpalai/react-native-speech`; if onnxruntime's JSI `install()` returns false, no engine speaks and nothing crashes. Its iOS install is patched to read the runtime without `RCTCxxBridge` (`release.md`, pending PR), so re-check all three engines on device after an RN or onnxruntime bump.
 - **Backup exclusion.** Engine directories must live under `tts/`. On iOS the exclusion is `NSURLIsExcludedFromBackupKey` set on the `mkdir`; on Android it is the backup-rules XML. A new engine outside `tts/` would be backed up to the cloud.
 
 ## Verification
