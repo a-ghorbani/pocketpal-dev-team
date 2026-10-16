@@ -12,7 +12,7 @@ Location: `./repos/pocketpal-ai`
 
 | Category   | Technology           | Version     |
 | ---------- | -------------------- | ----------- |
-| Framework  | React Native         | 0.86.3      |
+| Framework  | React Native         | 0.87.1      |
 | Language   | TypeScript           | 5.9.3       |
 | State      | MobX                 | 6.15.0      |
 | Navigation | React Navigation     | 7.x         |
