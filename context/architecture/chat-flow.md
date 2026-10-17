@@ -79,13 +79,15 @@ any ─step_started (initial or follow-up)→ prefill
 - **`sessionDrafts` writers:** ChatView on a chat switch (only when the composer changed since it last synced, joining) and on send (clears the open key, the new-chat key included); `deleteSession`; a cancelled send (`restoreUnsentText`: restored text first, nothing for a deleted chat).
 - `ChatSessionStore` never reads `ModelStore`. `BannerRow`, `ChatView` and `usePalLoadHint` do the cross-store reads.
 
-**Documents** (pending PR; store, block and budget in `documents.md`)
+**Documents** (pending PR; store, plan, retrieval and rendering in `documents.md`)
 
 - **The plus menu is open to every non-video chat; vision gates only Camera and Gallery** (`ChatInput`). Document is always enabled. Send is disabled while any document chip is importing or needs a range.
 - **The send funnel checks the document budget before any write.** `wrappedOnSendPress` calls `evaluateSendBudget` (excluding the edited row and later) only when `hasDocuments` is true, so a send without documents reaches `onSendPress` in the same tick. On `over` it writes nothing, takes no lease, keeps the composer and edit mode, and opens `DocumentBudgetSheet`; the sheet never sends. ChatView, not ChatInput, clears text, images and documents once a send passes.
 - **Regenerate, try again and try-again-with gate before `removeMessagesFromId`** (`useMessageActions.resend`). On `over` nothing is removed and the row opens in edit mode with its documents; on a pass it sends with `preChecked`, which the funnel never rechecks.
 - **`updateComposerDocuments` is ChatView's only writer of composer documents** and updates the held ids synchronously; the funnel and the regenerate gate `holdForSend` before `commitEdit` / removal (`commitEdit` triggers `handleCancelEdit`, which empties the composer).
-- **Assembly prefixes each user row with its documents inside `convertToChatMessages`** (resolver argument), before the reverse; the visible bubble shows the typed text plus static `DocumentChip`s. Markdown export adds `_[document: <name>]_`; JSON export keeps `metadata.documents`.
+- **Assembly prefixes each user row with its documents inside `convertToChatMessages`** (resolver argument), before the reverse: full blocks, searched stubs; only the message being sent carries the excerpt block. The visible bubble shows the typed text plus static `DocumentChip`s. Markdown export adds `_[document: <name>]_`; JSON export keeps `metadata.documents`.
+- **Every chip names its mode.** The message chip shows the persisted mode ("in full" with tokens, or "searched" without); the composer chip shows the mode `evaluateSendBudget` predicts, recomputed on the ready refs, row count, active model, window or edited row (not per keystroke; stale results dropped), and offers "Search instead" on a predicted-full chip (`searchPinned`).
+- **The sheet has two reasons.** `over{reason:'new'}` (even one excerpt of the new documents does not fit): Remove, Choose pages (PDF), Increase context (local), Cancel. `over{reason:'history'}`: New chat, Edit message, Increase context, Cancel, plus Search instead on any new full document. A plan that turns `over` under the lease returns `UndoneSend.verdict`; ChatView restores the composer once and opens the sheet.
 
 **Rendering**
 

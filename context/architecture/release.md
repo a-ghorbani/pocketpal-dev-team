@@ -65,6 +65,12 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 - **The script reads the app's block only through `INIT_CWD`.** Run directly without it, the config is `{}`, math and highlighting default on, and it downloads RaTeX. Yarn v1 also hides a dependency's lifecycle output, so check the lines by running the script directly.
 - **iOS reads the block at `pod install`, not at build time**: after editing it, run `pod install` and build clean. The Android `.so` must be 16 KB page-aligned.
 
+**pdfbox-android and PDFKit** (pending PR)
+- `PdfTextModule` (`documents.md`) uses `com.tom-roush:pdfbox-android:2.0.27.0` (Apache-2.0; bundles LiberationSans, SIL OFL 1.1, and Adobe CMaps / glyph list under the Apache PDFBox NOTICE). The AAR is 3.25 MB; the expected APK delta is about 3.2 MB (classes plus 125 font / CMap assets), to be re-measured on each bump.
+- **BouncyCastle is excluded** (`exclude group: "org.bouncycastle"` in `android/app/build.gradle`, about 8 MB more otherwise). Only `PublicKeySecurityHandler` / `SecurityProvider` use it (certificate-encrypted PDFs, refused anyway); password and RC4/AES standard encryption use `javax.crypto`. `PublicKeySecurityHandler` is loaded for every encrypted PDF, but no BouncyCastle type appears in a class-level signature of the four security classes (`javap -p … | grep -v '(' | grep -c bouncycastle` is 0 for each), so loading it needs none. Re-run that check on a bump; a certificate-encrypted PDF fails as `NoClassDefFoundError`, caught as `E_PDF_UNREADABLE`.
+- Release minify is off; the AAR ships consumer keep rules for when it is turned on.
+- iOS links `PDFKit.framework` explicitly in the app target's Link Binary phase and imports it with `#import <PDFKit/PDFKit.h>` (C++ modules are off in `.mm`, so `@import` fails). No Podfile change.
+
 **Held by review, not by CI**
 - **The gate runs before every upload, on the same paths.** The fastlane lanes are split so the gate can sit between build and upload; nothing tests the ordering.
 - **`upload_android_alpha`'s `aab:` must match the gate's `--aab` in `release.yml`.** It is one path written twice. Without an explicit `aab:`, the lane goes green having uploaded no binary.
