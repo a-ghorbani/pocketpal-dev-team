@@ -12,13 +12,13 @@ On-device tap-to-record speech-to-text for the chat composer: availability gate,
 | --- | --- |
 | `src/store/ASRStore.ts` | `asrStore`: the gate (`asrAvailable`), `selectedTier`, per-tier download state, `captureState` / `lastError` / `inputLevels`, AppState release |
 | `src/services/asr/constants.ts` | `ASR_TIERS` (URL, filename, exact bytes), `ASR_MODEL_VERSION`, VAD floor and frame, `ASR_MAX_RECORD_MS`, `ASR_CHUNK_BYTES`, `ASR_LEVEL_HISTORY`, `ASR_DISK_HEADROOM_FACTOR`, `ASR_INSUFFICIENT_STORAGE` |
-| `src/services/asr/engines/whisper/index.ts` | `whisperAsrEngine`: per-tier `isInstalled` / `downloadModel` / `reclaimLegacySpace`, a deduplicated `initWhisper` context (`prepare`), `transcribe` (with `prompt`), `cancelTranscription`, `release` |
-| `src/services/asr/speechSegmenter.ts` | `SpeechSegmenter`: cuts the live PCM stream at a pause (`ASR_SEGMENT_PAUSE_MS`) once a segment reaches `ASR_MIN_SEGMENT_MS`, or at `ASR_MAX_SEGMENT_MS`, trims silence before speech to `ASR_SEGMENT_LEAD_IN_MS` |
+| `src/services/asr/engines/whisper/index.ts` | `whisperAsrEngine`: per-tier `isInstalled` / `downloadModel` / `reclaimLegacySpace`, a deduplicated `initWhisper` context, `transcribe` (with `language` and `prompt`; returns text and the decoded language), `cancelTranscription`, `release` |
+| `src/services/asr/speechSegmenter.ts` | `SpeechSegmenter`: cuts the live PCM stream at a pause (`ASR_SEGMENT_PAUSE_MS`) once a segment reaches `minSegmentMs`, or at `maxSegmentMs` (both `Infinity` = never cut), trims silence before speech to `ASR_SEGMENT_LEAD_IN_MS` |
 | `src/services/asr/energyVad.ts` | `energyVad` (voiced-frame gate), `inputLevel` (chunk loudness for the waveform), `int16PcmToFloat32` |
 | `src/hooks/useVoiceCapture.ts` | the capture lifecycle (`start` / `stop` / `cancel`): permission, `AudioRecord` PCM stream, levels, VAD, transcribe, release. Mounted once, in `ChatInput` |
 | `src/utils/asrMicPermission.ts` | `ensureMicPermission` (returns granted, denied or blocked; Android blocked-without-dialog timeout), `openMicSettings` |
 | `src/components/MicButton/` | the composer mic, next to send; renders `null` when the gate is closed, routes to Settings when the tier isn't ready, else `onStart` |
-| `src/components/VoiceRecordingBar/` | replaces `ChatInput`'s control row while `recording` / `transcribing`: cancel, waveform from `inputLevels` (or a transcribing label), stop |
+| `src/components/VoiceRecordingBar/` | replaces `ChatInput`'s control row while `recording` / `transcribing`: cancel, waveform from `inputLevels` (or a transcribing label, which says when it waits for the chat reply), stop |
 | `patches/@fugood+react-native-audio-pcm-stream+1.1.4.patch` | iOS: activate the `AVAudioSession` before recording (see Traps) |
 | `src/components/ChatView/ChatView.tsx` | `appendTranscript`, and the `asr-error-snackbar` keyed by `lastError` |
 | `src/screens/SettingsScreen/SettingsScreen.tsx` | the `asr-availability-switch` toggle and per-tier install / remove rows |
@@ -28,7 +28,7 @@ On-device tap-to-record speech-to-text for the chat composer: availability gate,
 
 ## How it works
 
-`ASRStore.init()` sets `deviceMeetsMemory` (`>= ASR_MIN_RAM_BYTES`), derives `downloadStates[tier]` from `isInstalled(tier)`, and registers an AppState listener. `asrAvailable` uses TTS's tristate formula: explicit `userASROverride` wins, `null` falls back to `deviceMeetsMemory`.
+`ASRStore` reads the model picker's device tier (`modelStore.deviceTier`, `deviceRules/classify.ts`): `deviceSupported` is `high` or `flagship` (`ASR_DEVICE_TIERS`), `liveSegments` is `flagship` (`ASR_LIVE_SEGMENT_DEVICE_TIERS`), and both are false while the tier is unresolved. `init()` derives `downloadStates[tier]` from `isInstalled(tier)` and registers an AppState listener. `asrAvailable` uses TTS's tristate formula: explicit `userASROverride` wins, `null` falls back to `deviceSupported`.
 
 The capture state machine (`captureState`, driven by `useVoiceCapture`):
 
@@ -38,17 +38,19 @@ idle ─tap mic→ requesting_perm ─granted→ recording ─stop / 3 min cap�
                recording ─stop, VAD fails→ idle (silently)       transcribing ─empty text→ idle (silently)
                recording ─cancel / app backgrounded→ idle (buffer discarded)
                transcribing ─cancel→ idle (whisper stopped, result dropped)
+               transcribing ─chat generating on CPU→ transcribing (waitingForChat) ─reply done→ decode
                transcribing ─throw→ error(transcribe_failed)
 error ─tap mic→ requesting_perm        (error is a re-armable resting state)
 ```
 
-On permission the hook queues `whisperAsrEngine.prepare(tier)`, so the model loads while the user speaks. Each 50 ms chunk (`ASR_CHUNK_BYTES`) goes to a `SpeechSegmenter` and its `inputLevel` to `asrStore.inputLevels` (last `ASR_LEVEL_HISTORY`), which only `VoiceRecordingBar`'s bars observe; the bar also shows the elapsed time from `recordingStartedAt`. When the segmenter cuts a segment, the hook queues its transcription: `energyVad` gate → `transcribe()` (raw int16 bytes as base64, `selectedTier`, `language: 'auto'`, and the last `ASR_PROMPT_CHARS` of earlier segments as `prompt`). On stop the remaining audio is queued the same way, the state shows `transcribing` until the queue drains, and the segment texts are joined and passed to `onTranscript` (ChatView's `appendTranscript`).
+On permission the hook starts capture; the model loads on the first transcription. Each 50 ms chunk (`ASR_CHUNK_BYTES`) goes to a `SpeechSegmenter`; the peak `inputLevel` of every `ASR_LEVEL_CHUNKS` chunks (100 ms) goes to `asrStore.inputLevels` (last `ASR_LEVEL_HISTORY`), which only `VoiceRecordingBar`'s bars observe; the bar also shows the elapsed time from `recordingStartedAt`. With `liveSegments` the segmenter cuts at `ASR_MIN_SEGMENT_MS` / `ASR_MAX_SEGMENT_MS`; otherwise it never cuts and the whole recording is one transcription after stop. Each segment's transcription is queued: `energyVad` gate → wait while `chatBusyOnCpu` (a local chat model is `inferencing` and `context.gpu === false`), with `waitingForChat` set → `transcribe()` (raw int16 bytes as base64, `selectedTier`, `language: spokenLanguage` or auto-detect when null, and the last `ASR_PROMPT_CHARS` of earlier segments as `prompt`). The first non-empty transcript's decoded language is saved to `spokenLanguage`. On stop the remaining audio is queued the same way, the state shows `transcribing` until the queue drains, and the segment texts are joined and passed to `onTranscript` (ChatView's `appendTranscript`).
 
 `ASRStore.downloadModel(tier)`: `reclaimLegacySpace(tier)` → preflight at `estimatedBytes * ASR_DISK_HEADROOM_FACTOR` → engine download → `setSelectedTier(tier)`.
 
 ## Contracts and invariants
 
-- **The gate is derived.** `asrAvailable` has no writer; `deviceMeetsMemory` only `init()`; `userASROverride` only `setUserASROverride` plus hydration. The `__E2E__`-only `asrAutomation` driver writes these fields directly and is the one sanctioned exception. The switch shows `userASROverride ?? deviceMeetsMemory`.
+- **The gate is derived.** `asrAvailable`, `deviceSupported` and `liveSegments` have no writer; they follow `modelStore.deviceTier`, which can change when the fetched device rules arrive. `userASROverride` is written only by `setUserASROverride` plus hydration. The `__E2E__`-only `asrAutomation` driver writes these fields (and `deviceTier`) directly and is the one sanctioned exception. The switch shows `userASROverride ?? deviceSupported`.
+- **`spokenLanguage` is persisted** and written only by the hook (first non-empty transcript) and Settings' Detect again (`null`). Settings shows it via `languageDisplayNames`, else the upper-case code.
 - **The mic needs gate open and `isSelectedTierReady`.** Otherwise `MicButton` routes to Settings and `start` returns early.
 - **One install makes the mic usable**: `downloadModel` selects the tier; deleting the active tier reselects the first ready one, else `ASR_DEFAULT_TIER`.
 - **Install truth is on disk, per tier**: `asr/<tier>/` holds the model file and `model-version.json` at `ASR_MODEL_VERSION`; no store mirror. The sentinel is the last write; a failed download deletes the tier dir.
@@ -60,15 +62,21 @@ On permission the hook queues `whisperAsrEngine.prepare(tier)`, so the model loa
 - **Offline.** Capture and transcription make no network calls; the only one is the model download.
 - **The model never enters `ModelStore`** (no preset, fit check, auto-load, `ModelCard`); ASR readiness is independent of the LLM.
 - **Capture and context are always released.** The recorder: on stop, cancel, error, `ASR_MAX_RECORD_MS`, background (buffer discarded), unmount. The ~400 MB whisper context: after every transcription (success or failure) and on `'background'` (never `'inactive'`), so it never sits beside the LLM; re-init is lazy.
-- **Engine work is serial.** `prepare`, every segment `transcribe` and `release` go through one promise queue in the hook, so a release never cuts across a load or a decode. The engine also deduplicates a load in flight, and a load that finishes after `release()` frees its context (a generation counter).
+- **Engine work is serial.** Every segment `transcribe` and `release` go through one promise queue in the hook, so a release never cuts across a load or a decode. The engine also deduplicates a load in flight, and a load that finishes after `release()` frees its context (a generation counter).
 - **A failed segment fails the capture.** The remaining segments are skipped and stop shows `transcribe_failed`; partial text is not appended.
-- **`captureState` / `lastError` / `inputLevels` / `recordingStartedAt`** are written by `useVoiceCapture`, plus the snackbar's `resetCapture` on dismiss. Async work from a cancelled capture (a pending permission prompt or transcription) is dropped by a per-capture session counter, never written back.
+- **`captureState` / `lastError` / `inputLevels` / `recordingStartedAt` / `waitingForChat`** are written by `useVoiceCapture`, plus the snackbar's `resetCapture` on dismiss. Cancel also cancels a pending wait for the chat reply. Async work from a cancelled capture (a pending permission prompt or transcription) is dropped by a per-capture session counter, never written back.
 
 ## Traps and decisions
 
 - **Whisper hallucinates text on silence.** That is why the energy gate is required. It deliberately isn't whisper.rn's `initWhisperVad()`, which crashes (whisper.rn issue #308).
 - **Segment at pauses, not fixed windows.** whisper.rn ships a realtime transcriber that slices at pauses, but it finds them with the Silero VAD context that crashes (whisper.rn #308), so the hook slices with the energy gate it already has.
 - **Segments are at least 15 s.** Whisper decodes a fixed 30 s window per call, so a 2 s segment costs as much as a 25 s one. Cutting at every pause made a 13 s clip with two pauses take 17.8 s from stop to text on a POCO F8 Ultra (Snapdragon SM8850), against 7.9 s for one call. Pause cuts only pay off once dictation passes ~15 s. whisper.rn 0.7.4 does not expose `audio_ctx` for whisper transcription (its `audioCtx` option is Parakeet-only), so a smaller encoder window would need a native patch.
+- **Measured costs behind the gate and the policies** (one run each unless noted; Gemma 3 4B Q4_0 unless noted):
+  - Auto-detect runs an extra encoder pass on every call: 7.4 s → 4.0 s stop-to-text for a short clip on the F8 Ultra with the language fixed, and 27 s → 14 s on a OnePlus 6. Hence `spokenLanguage`.
+  - Live segments shorten the wait only on a fast phone (long clip: 9.3 s → 3.9 s on the F8 Ultra) and cost more CPU in total (58 → 84 core-seconds). On a OnePlus 6 they were slower (47 s → 137 s). Hence `liveSegments` on `flagship` only.
+  - A chat model on the CPU competes with whisper for cores: on the F8 Ultra whisper took 13–172 s (by quant) while Gemma generated, and Gemma fell from ~21 to ~5 tok/s. On OpenCL or Hexagon, whisper took 5.6–7 s and Gemma barely slowed, for Q4_0, Q4_K_M, Q6_K and Q8_0 (llama.rn 0.13.0-rc.5). `context.gpu` is false only on the CPU backend. Hence `chatBusyOnCpu`.
+  - Whisper adds 550–650 MB at peak. A 3 GB Redmi 12C ran with 82–140 MB free and lmkd killed other apps; a OnePlus 6 (low tier) worked but slowed Gemma 1B to ~1 tok/s. Hence the `high`/`flagship` gate.
+  - Loading whisper takes 0.1–0.4 s on the F8 Ultra, so preloading at tap was dropped.
 - **Gate per frame, not per buffer.** Whole-buffer RMS let the silence before and after speech pull quiet, clear speech under the floor (a phone speaker at arm's length measured 0.0091 against 0.01), so it was rejected.
 - **whisper.rn's own doc comment says `transcribeData` takes float32.** It doesn't; sending float32 bytes produced noise and an empty transcript every time.
 - **Re-entrant starts are ignored** while a capture is starting, live or transcribing, because a second start would leak the listener and the timer.
@@ -88,7 +96,7 @@ On permission the hook queues `whisperAsrEngine.prepare(tier)`, so the model loa
 
 ## Verification
 
-- Unit tests on the branch: `src/store/__tests__/ASRStore.test.ts`, `src/hooks/__tests__/useVoiceCapture.test.ts`, `src/components/VoiceRecordingBar/__tests__/`, `src/services/asr/__tests__/energyVad.test.ts`, `src/services/asr/engines/whisper/__tests__/whisperAsrEngine.test.ts`, `src/components/MicButton/__tests__/`, `src/components/ChatView/__tests__/ChatView.voiceInput.test.tsx`, `src/utils/__tests__/asrMicPermission.test.ts`. Mocks: `__mocks__/stores/asrStore.ts` and `__mocks__/external/whisper.rn.ts`.
+- Unit tests on the branch: `src/store/__tests__/ASRStore.test.ts`, `src/hooks/__tests__/useVoiceCapture.test.ts`, `src/components/VoiceRecordingBar/__tests__/`, `src/services/asr/__tests__/energyVad.test.ts`, `src/services/asr/__tests__/speechSegmenter.test.ts`, `src/services/asr/engines/whisper/__tests__/whisperAsrEngine.test.ts`, `src/components/MicButton/__tests__/`, `src/components/ChatView/__tests__/ChatView.voiceInput.test.tsx`, `src/utils/__tests__/asrMicPermission.test.ts`. Mocks: `__mocks__/stores/asrStore.ts` and `__mocks__/external/whisper.rn.ts`.
 - `NATIVE_CHANGES=YES`: run `pod install`, then build both iOS and Android.
 - By hand:
   - **Happy path.** In airplane mode, tap the mic, speak (the bars should move), and tap stop. The text should be appended and not sent.
