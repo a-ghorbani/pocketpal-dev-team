@@ -22,12 +22,17 @@ This doc describes `main`. The unmerged `redesign/phase-3` branch adds colour to
 | `src/components/ui/__tests__/invariants.test.ts` | Grep guards: DS observation-free, one `<Header>` per overlay, no Paper `Surface` imports |
 | `scripts/verify-fonts.js` | `yarn verify:fonts` (CI): font assets present; Fraunces covers each Fraunces locale's letters |
 | `src/assets/fonts/` | Font source; `npx react-native-asset` generates iOS `UIAppFonts` / `link-assets-manifest.json` and `android/app/src/main/assets/fonts/` from it |
+| `src/hooks/useNavigationBarAppearance.ts` | (pending PR) The JS writer of the Android nav-bar icon appearance, called once in `App` |
+| `android/app/src/main/java/com/pocketpalai/NavigationBarModule.kt`, `src/specs/NativeNavigationBar.ts` | (pending PR) `setNavigationBarDark`; the spec export is `null` on iOS |
+| `src/utils/edgeToEdge.ts` | (pending PR) `measuresIncludeStatusBar()`: RN's edge-to-edge flag, read once per process |
 
 ## How it works
 
 `useTheme()` reads `uiStore.colorScheme` (`'light' | 'dark'`) and `uiStore.language` (both persisted) and calls `buildTheme()`, which spreads Paper's `MD3DarkTheme` / `DefaultTheme` for Paper-internal fields, overlays `resolveTokens(mode).colors`, sets `typography` from `resolveTypographyForLocale(language)`, adds `spacing` (token scale plus legacy `default: 16`), `radius` and `stroke`, and the frozen legacy `fonts` (`configureFonts` MD3 typescale plus message TextStyles), `borders` and `insets`.
 
 `App` feeds the result to `<PaperProvider>`; a scheme or language change re-renders without a remount. On cold start, `AppWithMigrationWrapper` renders `HydrationHold` (`testID="hydration-splash"`), a black or white `View` chosen by `Appearance.getColorScheme()`, until `isHydrated(uiStore)`.
+
+On Android, `App` calls `useNavigationBarAppearance()`, which sends `colorScheme === 'dark'` to `setNavigationBarDark` on mount and on each scheme change (pending PR).
 
 DS components map `(variant, size, state)` to tokens in `createStyles` (their own `styles.ts`) and render interactive surfaces through `primitives/Pressable`, which adds the `pressed` overlay.
 
@@ -43,6 +48,7 @@ DS components map `(variant, size, state)` to tokens in `createStyles` (their ow
 - **Token-consumer allow-list.** A file reading `theme.typography.`, `theme.radius.` or `theme.stroke.` must be under `ALLOWED_RELATIVE` in the tokens invariants test, or it fails. A restyle slice adds its paths in the same PR.
 - **Headline fallback.** For locales in `NON_LATIN_LOCALES` (`src/theme/tokens/typography.ts`, which holds the list; `yarn verify:fonts` enforces it), Fraunces swaps to Inter at the same weight, and Fraunces italic to `Inter-Medium` with `fontStyle: 'italic'`. Inter and JetBrains Mono never swap. The swap runs inside the builder, so components stay locale-agnostic.
 - **Font names match the files.** Every family string in `typography.ts` and `utils/theme.ts` equals a TTF filename and its iOS PostScript name, and is present in `src/assets/fonts`, the Android `assets/fonts` directory and `UIAppFonts`. `verify-fonts.js` checks presence only; check the PostScript name (`otfinfo --postscript-name`) when adding a font, because iOS silently falls back on a mismatch.
+- **Nav-bar appearance follows the app scheme** (pending PR). After hydration, on API 26+, the activity window's `isAppearanceLightNavigationBars` matches `uiStore.colorScheme`. RN writes it from the system `uiMode` in `onCreate` on Android 15+, before `loadApp` and any host resume, so the app's write lands last. `NavigationBarModule` writes only that flag, only on the activity window, and re-applies its last value (kept on the UI thread) in `onHostResume`.
 - **Hydration gate.** Nothing that calls `useTheme()` mounts before `isHydrated(uiStore)`. The gate must wrap `App`, because `App` calls `useTheme()` above the provider. The hold has no branding, no `Text`, no safe-area or insets (`App.tsx`, `HydrationHold`).
 - **DS layer rules.**
   - Tokens only: raw hex is lint-banned in `src/components/ui/**/styles.ts`; no `theme.fonts.*`; token-module imports are types only.
@@ -76,14 +82,17 @@ DS components map `(variant, size, state)` to tokens in `createStyles` (their ow
   - The raw-hex ban covers only DS `styles.ts`. Screen styles aren't linted, and some already hardcode non-mode-aware hex (onboarding `ModelRadioGroup/styles.ts`, `PipMascot`).
 - **Canonical Figma variants.** Where Figma draws a family more than once, implement against Chip `890:29153`, Tabs `764:27807`, BottomNavBar `143:4685`; the other drawings are dead designs.
 - **`StyleSheet.absoluteFillObject` no longer exists (RN 0.85+) and spreading it is silent:** the style loses its four zero edges and `position`, so an overlay collapses to its content. Use `...StyleSheet.absoluteFill`. RN's types catch it in app code; dependencies need a grep of `node_modules` on every RN bump (`release.md`). The DS `Pressable` state layer and `Dialog` scrim / `centerWrapper` assert the fill keys in their tests, since Jest can't see the layout (pending PR).
-- **Paper menus get `statusBarHeight` from `useMenuStatusBarHeight`** (`Menu`, `SubMenu`, DS `Dropdown`; pending PR). Paper adds it on Android because `measureInWindow` used to exclude the status bar; RN 0.87 includes it whenever its edge-to-edge flag is on (target SDK 35+: always on Android 16, otherwise unless the theme sets `windowOptOutEdgeToEdgeEnforcement`), so the hook reads that flag (`DeviceInfo` `isEdgeToEdge`) and passes 0 then. Passing `insets.top` drops a header menu one status-bar height low.
+- **Paper menus get `statusBarHeight` from `useMenuStatusBarHeight`** (`Menu`, `SubMenu`, DS `Dropdown`; pending PR). Paper adds it on Android because `measureInWindow` used to exclude the status bar; RN 0.87 includes it whenever its edge-to-edge flag is on (Android 15+ devices only, with target SDK 35+: always on Android 16, on 15 unless the theme sets `windowOptOutEdgeToEdgeEnforcement`), so the hook reads that flag (`DeviceInfo` `isEdgeToEdge`) and passes 0 then. Passing `insets.top` drops a header menu one status-bar height low. `edgeToEdge.ts` reads the flag once per process; `isEdgeToEdge` is declared only in RN's deprecated JS spec, so a source-pin case in its test fails if RN renames `DeviceInfo` or the key.
+- **Native `Modal` windows keep system-based nav-bar icons on Android 15+** (pending PR): RN sets each dialog window from the system `uiMode` at show, with no hook.
+- **androidx `enableEdgeToEdge` (`MainActivity`) never sets appearance**, so on Android 14 and older only the app module colours the icons (white without it; API 26+ only, so Android 7 stays white).
+- **Keep the `onHostResume` re-apply.** A relaunch that ends paused (font size changed behind a dialog-style activity) has no current activity when the posted write runs; only the resume re-applies the app value.
 - **Jest runs Paper from `src/`, as Metro does** (`jest.config.js` maps `react-native-paper` there), so the Paper patch is under test; Paper's `lib/commonjs` build is unpatched. On RN 0.87, also type Paper-facing refs against RN's instance types (`HostInstance`, `TextInputInstance`): Paper's typings still use the old component types (pending PR).
 - **Pressed and focused states are not snapshotted:** Jest can't drive them, so those cells would duplicate default. `Pressable` resolves only `pressed`; focus belongs to the consumer (e.g. `Input`).
 - **Remaining legacy.** MD3 types are still imported in `utils/types.ts`, `utils/index.ts`, `SidebarContent/` and `RenameModal/`, and `ChatInput/` imports `fontStyles`. Remove them only with the legacy surface.
 
 ## Verification
 
-- Tests: `src/theme/tokens/__tests__/`, `src/hooks/__tests__/useTheme.test.tsx`, `src/utils/__tests__/theme.test.ts`, `__tests__/App.test.tsx` (hydration hold), each `src/components/ui/<Family>/__tests__/` (snapshots via `__tests__/helpers/snapshotMatrix.tsx`), and `src/components/ui/__tests__/invariants.test.ts`.
+- Tests: `src/theme/tokens/__tests__/`, `src/hooks/__tests__/useTheme.test.tsx`, `src/hooks/__tests__/useNavigationBarAppearance.test.ts`, `src/utils/__tests__/edgeToEdge.test.ts`, `src/utils/__tests__/theme.test.ts`, `__tests__/App.test.tsx` (hydration hold), each `src/components/ui/<Family>/__tests__/` (snapshots via `__tests__/helpers/snapshotMatrix.tsx`), and `src/components/ui/__tests__/invariants.test.ts`.
 - Gates: `yarn lint`, `yarn typecheck`, `yarn verify:fonts`.
 - Visual work: the `figma-implement` skill; `pocketpal-design-parity-reviewer` checks parity; captures per `docs/workflows/visual-capture.md`.
-- By hand: toggle dark mode; switch to `fa` or `ja` (headlines in Inter), then cold-start with it persisted and confirm no Fraunces frame appears first.
+- By hand: nav icons with app Dark and system Light on Android 15+ (gesture and 3-button), and app Light and Dark on Android 14. Also toggle dark mode; switch to `fa` or `ja` (headlines in Inter), then cold-start with it persisted and confirm no Fraunces frame appears first.
