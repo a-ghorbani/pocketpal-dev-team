@@ -145,6 +145,7 @@ any ─step_started (initial or follow-up)→ prefill
 
 ## Traps and decisions
 
+- **The Android image viewer is edge-to-edge from Android 15 (pending PR).** `react-native-image-viewing` opens RN's own `Modal`, a separate dialog window, and RN 0.87 forces dialogs edge-to-edge when its edge-to-edge flag is on: `statusBarTranslucent` / `navigationBarTranslucent` are ignored, and `StatusBar.setHidden` acts on the activity window, which the dialog copies only when it shows. So the viewer draws under a visible status bar, and the close button sits just below it. The operator accepted this; replacing the unmaintained library (with insets-aware layout) is a separate PR.
 - **Fenced code is not searchable.** `CodeRenderer` re-reads the raw HTML, so `<pre>` is excluded from count and marks.
 - **The search jump target is an html-length estimate**, placed via `viewPosition` / `viewOffset` above the keyboard rather than by layout measurement.
 - **A 0-result commit consumes its navigation request**, so a match produced later by streaming does not scroll.
