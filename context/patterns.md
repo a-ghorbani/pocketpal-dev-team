@@ -430,6 +430,17 @@ moduleNameMapper: {
 
 **DO NOT** try to mock these packages inline - they're handled globally.
 
+### Render-perf tests (Reassure) (pending PR)
+
+`*.perf-test.tsx` files beside the unit tests (`__tests__/`), run only by `yarn test:perf` (Reassure CLI, same `jest.config.js`; coverage off). `yarn test:perf:compare [base]` measures base then HEAD in one checkout and gates; CI's `perf` job runs it on PRs against `HEAD^1`. App docs: `docs/render-perf-tests.md`.
+
+- **A render count is React commits under the measured root, mount included**, not component renders. An unstable prop to a memoised child adds work inside a commit, not a commit: the count can't see it.
+- **Write scenarios with `measureScenario` (`jest/perf.ts`)**: same provider wrapper as `render` (`createWrapper`), `runs >= 3`, and it fails a scenario whose interaction adds no commits over mount alone.
+- **Counts must be identical across runs**; the gate fails a varying count. Two sources broke this under real timers: Paper `TextInput`'s 50 ms deferred placeholder and VirtualizedList's 50 ms batched cell update. So `measureScenario` runs on fake timers with the real `performance` clock (durations stay real), and the scenario calls `await flushTimers()` after the mount and after each step.
+- **Drive the app's own path, one `act` per driven write**: `await act(() => runInAction(...))` per store write (`fireEvent` already wraps one). Several writes in one `act` batch into one commit.
+- **Reset in place in `beforeEach`**: Reassure re-mounts the same element every run, so `messages.replace(fresh)` or `filters = []` on the same observable; a new object never reaches the tree. Assert the start and end state in every run.
+- **Reading the result**: the job summary holds Reassure's report and the gate's verdict; durations are informational (identical code shows "significant" swings). An intended count increase goes red: the PR states why, the reviewer accepts, and after merge it is the next base.
+
 ---
 
 ## Test Pattern (Store Unit Tests)
