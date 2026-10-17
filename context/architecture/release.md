@@ -74,7 +74,8 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 
 **CI hygiene**
 - **`print_command: false` on both `gradle(...)` calls.** Fastlane's command echo leaked the signing passwords into the build log.
-- **`RNLLAMA_SKIP_POSTINSTALL=1` (release, e2e) is safe only when building from source.** `ci.yml` doesn't set it because its `node_modules` cache is shared with `build-and-test`.
+- **`RNLLAMA_SKIP_POSTINSTALL=1` (release, e2e) is safe only when building from source.** `ci.yml` doesn't set it in the jobs that save its `node_modules` cache, which is shared with `build-and-test`; only the restore-only `perf` job does.
+- **The `perf` job measures base, then head, in one checkout** (pending PR; `scripts/perf-compare.sh`). It restores the shared `node_modules` key and never saves it: it installs other commits' dependencies and skips llama.rn's native postinstall, and the build jobs consume that key. A `yarn.lock` or `patches/**` difference forces a clean install on both sides, because patch-package can't re-patch already-patched files. The script runs from inside one `main()`, since the base checkout replaces it mid-run. Base's `yarn test:perf [--baseline]` is invoked by head's script, so that command is a cross-commit interface.
 - **No ccache on the release path**: a prefix restore could link objects of unreviewed provenance into the shipped binary. In `ci.yml`, ccache needs `CCACHE_COMPILERCHECK=content` plus the sloppiness list, or every lookup misses and it looks like a cold cache.
 - **GitHub caps caches at 10 GB per repo and evicts silently.** An evicted SDK or ccache entry shows only as a slow run. `ci.yml` `build-android` takes about 44 min cold and 23 min warm.
 - **Enabling release minify needs a `-keep class com.rnllama.**` rule.** None exists.
