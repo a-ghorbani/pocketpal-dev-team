@@ -89,6 +89,6 @@ On mount the screen calls `checkGpuSupport()` and `getDeviceOptions()`. `inferBa
 ## Verification
 
 - Jest: `src/screens/SettingsScreen/__tests__/SettingsScreen.test.tsx`; `src/components/{SearchableSelectSheet,SearchProviderKeySheet}/__tests__/`; `src/store/__tests__/{SearchProviderStore,UIStore}.test.ts`; `src/locales/__tests__/locales.test.ts`; `scripts/__tests__/language-sync.test.js` (cross-checks the e2e locale lists against the registry). `yarn l10n:validate` gates the locale JSONs.
-- Perf (pending PR, `yarn test:perf`): `SettingsScreen.perf-test.tsx` (expand Advanced; 4 commits).
+- Perf (pending PR #996, `yarn test:perf`): `SettingsScreen.perf-test.tsx` (expand Advanced; 4 commits).
 - e2e: `e2e/specs/features/language.spec.ts` (cycles every locale); `speculative.spec.ts`, `speculative-paired.spec.ts`, `speculative-visual.spec.ts` (Advanced accordion and draft rows).
 - By hand: toggle flash-attn off (K/V rows disable and reset to F16); switch device on an Android with Hexagon or OpenCL; type a code in the language sheet, select, reopen (full list); before consent, the search key button is disabled.
