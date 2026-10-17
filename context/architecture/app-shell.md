@@ -79,6 +79,7 @@ This doc describes `main`. The bottom-tab shell and Home screen exist only on th
 - **`HydrationHold` is deliberately neutral.** It is a flat view coloured from `Appearance`, with no branding or text. `App` calls `useTheme()` before `PaperProvider`, so the gate has to wrap `App`, and a plain colour can't clash with either platform's native launch surface. The branded splash belongs to onboarding.
 - **`SwitchPoint` re-checks `isHydrated`** even though the outer wrapper already gates on it. The re-check keeps the onboarding decision correct if the outer gate is refactored.
 - **`AppWithMigration` delays `migrateAllSettings()` by 2 s** so it doesn't compete with startup.
+- **Sidebar items close the drawer themselves** (`SidebarContent` `navigateTo`, pending PR). From `@react-navigation/routers` 7.6, navigating to the already-focused route keeps the drawer entry in history, and the drawer router closes only when the focused route changes; a session tap or the Chat item while on Chat left the drawer open (`draft-autosave` e2e caught it).
 - **Dev Tools has its own nested stack,** whose menu `IconButton` calls `openDrawer()` directly.
 - **Deep links during onboarding.** `DeepLinkHandler` sits above `SwitchPoint`, so a deep link that arrives during onboarding runs its handler, but its `navigate` finds no Drawer route.
 
