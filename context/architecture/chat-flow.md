@@ -188,6 +188,7 @@ any ─step_started (initial or follow-up)→ prefill
 ## Verification
 
 - **Unit:** the `__tests__/` folders next to each code-map entry; key ones are `Message.assistantTurn` (block order, footer, `streamingAnimation` and its in-place drop), `ChatView` (the menu items per row), `MarkdownView` (the library props via the `jest/setup.ts` spy; the shipped mock drops them), `normalizeBreakTags`, `ChatView.assistantTurn` (indicator), `ChatView.keyboard`, `BannerRow`, `bannerVariantResolver`, `useChatSession.*` (`useChatSession.stop` for Stop, drain and release-initiated stop; `useChatSession.ttsSteps` for what auto-speak forwards per step), `ChatSessionStore.assistantTurn`.
+- **Perf** (pending PR, `yarn test:perf`): `ChatView.typing.perf-test.tsx` (ten `changeText` events on the ChatView-owned input) and `ChatView.streaming.perf-test.tsx` (twenty `steps[last]` swaps on the newest turn, `messages[0]`). Both 23 commits: typing costs two per keystroke, the second a redundant timer-driven commit after the flush.
 - **E2E** (`e2e/specs/features/`): `talent-tool-use`, `thinking`, `thinking-pal-override`, `graded-effort-override`, `remote-reasoning`, `context-banner`.
 - **By hand:**
   - A `render_html` turn: the indicator covers both dead zones, and the turn has one footer.
