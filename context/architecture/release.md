@@ -36,7 +36,7 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 ## Traps and decisions
 
 **Build mode and the backend**
-- **The root `android/gradle.properties` is not a lever.** llama.rn's own `gradle.properties` wins for its subproject (measured on Gradle 9.0.0). Only `ORG_GRADLE_PROJECT_…`, `-P`, or a `$GRADLE_USER_HOME/gradle.properties` override it, and the last is live because `release.yml` points `GRADLE_USER_HOME` at `runner.temp`. Build mode is always declared in the job, never inferred.
+- **The root `android/gradle.properties` is not a lever.** llama.rn's own `gradle.properties` wins for its subproject (measured on Gradle 9.0.0, re-checked on 9.4.1 by the allowlist grep; pending PR). Only `ORG_GRADLE_PROJECT_…`, `-P`, or a `$GRADLE_USER_HOME/gradle.properties` override it, and the last is live because `release.yml` points `GRADLE_USER_HOME` at `runner.temp`. Build mode is always declared in the job, never inferred.
 - **Every way of losing the Hexagon backend is silent.** A missing SDK directory prints one line, a missing `libcdsprpc.so` is a CMake warning, and missing DSP sources skip the sync. The build succeeds each time. That shipped once (issue #858), which is why the check sits on the artifact.
 - **Backend presence is read from `.dynsym`, never `strings` or file size.** Both give false results. The #858 APK had all 12 libraries and all 4 DSP assets, so only the symbol rule would have failed it.
 - **Symbol names match exactly.** From llama.rn 0.13.0-rc.5, ggml symbols are unprefixed, and each older `lm_` name ends with its successor, so a suffix or substring reader would pass an old artifact. The gate's fixtures keep the `lm_` names as defined noise for that reason.
