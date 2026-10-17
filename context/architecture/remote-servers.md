@@ -47,6 +47,8 @@ Remote (OpenAI-compatible) model traffic: the `ServerConfig` record and its Keyc
 
 ## Contracts and invariants
 
+- **Attached documents need no transport change** (pending PR): their text is plain text in the user message's string content or leading `text` part, which `encodeMessagesForRemote` passes through (`documents.md`).
+
 **Timeouts**
 
 - `ServerConfig.requestTimeoutMs` is the one per-server duration; `undefined` means the defaults (30 s connection, 60 s idle). It replaces both phases of `streamChatCompletion`; `fetchModelsWithHeaders` has only the connection phase (`openai.ts`).

@@ -16,6 +16,7 @@ How a chat turn is sent, streamed, persisted and rendered: tool-call and reasoni
 | `src/utils/chat.ts` | `stepToApiMessages` (turn to flat OpenAI messages), `derivedText`, `visibleStepContent` (a step's on-screen text), `removeThinkingParts` |
 | `src/screens/ChatScreen/ChatScreen.tsx` | wires the hook into `ChatView`; reasoning pill cycle (`persistReasoning`) |
 | `src/components/ChatView/ChatView.tsx` | inverted list, `isPending`, keyboard, snackbars, the send funnel (`wrappedOnSendPress`) and the draft save / restore on a chat switch |
+| `src/components/ChatInput/ChatInput.tsx` | (pending PR) the plus menu (Camera, Gallery, Document), document import per picked file, composer document chips |
 | `src/components/ChatView/BannerRow.tsx` | the single input-slot banner; does the cross-store reads |
 | `src/utils/bannerVariantResolver.ts` | pure `resolveBannerVariant`, thresholds, `CONTEXT_LADDER` |
 | `src/components/IncreaseContextSheet/`, `src/hooks/usePalLoadHint.ts` | increase-context slider, fit check and reload; the heavy-talent snackbar |
@@ -77,6 +78,14 @@ any ─step_started (initial or follow-up)→ prefill
 - `persistReasoning` sets `newChatThinkingOverride` / `newChatReasoningEffort` only when there is no session. Creating, resetting or switching a session clears them, and a staged override makes the new session `'custom'`.
 - **`sessionDrafts` writers:** ChatView on a chat switch (only when the composer changed since it last synced, joining) and on send (clears the open key, the new-chat key included); `deleteSession`; a cancelled send (`restoreUnsentText`: restored text first, nothing for a deleted chat).
 - `ChatSessionStore` never reads `ModelStore`. `BannerRow`, `ChatView` and `usePalLoadHint` do the cross-store reads.
+
+**Documents** (pending PR; store, block and budget in `documents.md`)
+
+- **The plus menu is open to every non-video chat; vision gates only Camera and Gallery** (`ChatInput`). Document is always enabled. Send is disabled while any document chip is importing or needs a range.
+- **The send funnel checks the document budget before any write.** `wrappedOnSendPress` calls `evaluateSendBudget` (excluding the edited row and later) only when `hasDocuments` is true, so a send without documents reaches `onSendPress` in the same tick. On `over` it writes nothing, takes no lease, keeps the composer and edit mode, and opens `DocumentBudgetSheet`; the sheet never sends. ChatView, not ChatInput, clears text, images and documents once a send passes.
+- **Regenerate, try again and try-again-with gate before `removeMessagesFromId`** (`useMessageActions.resend`). On `over` nothing is removed and the row opens in edit mode with its documents; on a pass it sends with `preChecked`, which the funnel never rechecks.
+- **`updateComposerDocuments` is ChatView's only writer of composer documents** and updates the held ids synchronously; the funnel and the regenerate gate `holdForSend` before `commitEdit` / removal (`commitEdit` triggers `handleCancelEdit`, which empties the composer).
+- **Assembly prefixes each user row with its documents inside `convertToChatMessages`** (resolver argument), before the reverse; the visible bubble shows the typed text plus static `DocumentChip`s. Markdown export adds `_[document: <name>]_`; JSON export keeps `metadata.documents`.
 
 **Rendering**
 
@@ -190,6 +199,7 @@ any ─step_started (initial or follow-up)→ prefill
 - **Unit:** the `__tests__/` folders next to each code-map entry; key ones are `Message.assistantTurn` (block order, footer, `streamingAnimation` and its in-place drop), `ChatView` (the menu items per row), `MarkdownView` (the library props via the `jest/setup.ts` spy; the shipped mock drops them), `normalizeBreakTags`, `ChatView.assistantTurn` (indicator), `ChatView.keyboard`, `BannerRow`, `bannerVariantResolver`, `useChatSession.*` (`useChatSession.stop` for Stop, drain and release-initiated stop; `useChatSession.ttsSteps` for what auto-speak forwards per step), `ChatSessionStore.assistantTurn`.
 - **Perf** (pending PR, `yarn test:perf`): `ChatView.typing.perf-test.tsx` (ten `changeText` events on the ChatView-owned input) and `ChatView.streaming.perf-test.tsx` (twenty `steps[last]` swaps on the newest turn, `messages[0]`). Both 23 commits. Each step is followed by a 100 ms timer flush, so typing shows two commits per keystroke (the second redundant, timer-driven); that is the paused-typist cadence, not typing in general. Streaming writes `steps[last]` directly; `ChatSessionStore`'s 30 ms throttle is upstream and not exercised.
 - **E2E** (`e2e/specs/features/`): `talent-tool-use`, `thinking`, `thinking-pal-override`, `graded-effort-override`, `remote-reasoning`, `context-banner`.
+- **Documents** (pending PR): `ChatView.documents` (gate, holds, range, overflow), `ChatInput.documents` (menu gating, import, refusals); `remote-vision` e2e now asserts the Camera item, not the plus button.
 - **By hand:**
   - A `render_html` turn: the indicator covers both dead zones, and the turn has one footer.
   - Stop mid-stream: Send returns at once with no indicator, and the turn keeps its partial text with a normal footer (copy, plus timings when the engine returned them), not an interrupted one. Send again at once: "Stopping…" shows only until the previous run drains, then the user row and the normal indicator appear together. Send reads disabled to TalkBack / VoiceOver during the wait. Switch chat while "Stopping…" shows: nothing lands in either chat; the text is in the original chat's composer on return.
