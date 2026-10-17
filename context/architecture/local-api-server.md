@@ -51,12 +51,16 @@ Per connection (`handleConnection`): bytes → `createRequestReader` → `routeR
 ## Traps and decisions
 
 - **`react-native-tcp-socket` is a legacy bridge module running on the interop layer** (no TurboModule). Only a device build proves its events arrive; the fallback is an own TurboModule listener.
+- **llama.rn's stream callback `content` / `reasoning_content` are cumulative snapshots,** not deltas (`TokenData`: "parsed content from accumulated text"). `completeStreaming` sends only the unsent suffix, skips a snapshot that rewrote sent text, and flushes the tail from the final result before the finish chunk.
+- **Servers are created with `allowHalfOpen: true`:** the library otherwise `end()`s a socket when the client half-closes after its request (toybox `nc`, some scripts), before the reply is written.
+- **The native `error` event carries a string** (Android `e.getMessage()`), not an `Error`; `lastError` shows it (e.g. `bind failed: EADDRINUSE`).
+- **The Wi-Fi URL needs `ACCESS_WIFI_STATE` on Android:** `DeviceInfo.getIpAddress()` reads `WifiManager` and returns `0.0.0.0` without it, so the card would always say "not on Wi-Fi".
 - **Writes and `end()` race on Android:** `end` goes to a different executor than writes, so the channel ends the socket only from the last write's callback. Writing after the peer closed throws (`destroyed`); the channel drops writes once closed.
 - **Data crosses the bridge base64-encoded per chunk;** `decodeUtf8` uses percent-decoding rather than relying on a runtime `TextDecoder`. A 4 MiB body is slow to decode; the cap keeps it bounded.
 - **The listener's `error` event closes the server first;** a running listener emits `close` before `error`, so `close` only fails a `running` store and `error` always sets `lastError`. A `close()` on a half-open listener is a no-op, so a stale `listening` closes it.
 - **Server completions evict chat's cached prompt and state checkpoints;** the next chat turn re-processes its prompt.
 - **Base params are the global chat settings (`defaultCompletionSettings` + `newChatCompletionSettings`, tools removed),** not `activeModel.completionSettings`, which is written once at model creation and never updated.
-- **The admission cap bounds generated tokens, not prompt processing.** A long client prompt adds its prefill to chat's wait; chat shows the existing "Stopping…" state meanwhile.
+- **The admission cap bounds generated tokens, not prompt processing.** A long client prompt adds its prefill to chat's wait; chat shows the existing "Stopping…" state meanwhile. Measured: a ~1,400-token prompt on Gemma 3 1B (Android, 2,048 context) held a chat send ~44 s, ~23 s of it prefill.
 - **iOS suspends the app shortly after backgrounding:** requests stall and the listener may die → `failed`; foreground restarts it. LAN is the practical iOS mode. Android keeps serving in the background until the OS reclaims the process; Auto-release still releases the model (→ 503).
 - **The listener does not stop on background** (Android same-phone clients need it). Foreground service, autostart, mDNS, Ollama `/api/chat`, tools and images are not built.
 - **Tools, `tool_choice` ≠ `none`, `n` > 1, `logprobs` and non-text parts are rejected with 400,** not ignored, so a client never mistakes an ignored field for model behaviour. `model` is ignored.
@@ -64,4 +68,4 @@ Per connection (`handleConnection`): bytes → `createRequestReader` → `routeR
 ## Verification
 
 - Unit: `src/services/localApiServer/__tests__/{http,wire,router,chatCompletion,connection}.test.ts`, `src/store/__tests__/LocalApiServerStore.test.ts`, `src/screens/SettingsScreen/__tests__/LocalApiServerCard.test.tsx`. `chatCompletion.test.ts` uses the mock store's real `GenerationSlot` for lease order.
-- Device: Android: toggle on, `adb forward tcp:8080 tcp:8080`, `curl localhost:8080/v1/models`, then a streamed `curl -N` chat request; send from chat during a stream (waits, then runs); Auto-release mid-stream ends the stream with an error frame. iOS: LAN mode from a laptop on the same Wi-Fi, noting the local-network prompt.
+- Device: Android: toggle on, `adb forward tcp:8080 tcp:8080`, `curl localhost:8080/v1/models`, then a streamed `curl -N` chat request; send from chat during a stream (waits, then runs); Auto-release mid-stream ends the stream with an error frame. iOS: LAN mode from a laptop on the same Wi-Fi, noting the local-network prompt (the simulator showed none for a loopback listener). On this aarch64 Linux host the APK builds only with the reduced variant list and a local `hermesCommand` (`release.md`).
