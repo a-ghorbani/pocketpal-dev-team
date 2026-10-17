@@ -46,7 +46,6 @@ This doc describes `main`. The bottom-tab shell and Home screen exist only on th
    - `KeyboardProvider`
    - `PaperProvider`
    - `L10nContext`
-   - `MarkdownProvider`
    - `NavigationContainer`, containing `DeepLinkHandler` and a `BottomSheetModalProvider`
 
    Inside `BottomSheetModalProvider` are `SwitchPoint`, `TTSSetupSheet`, `DownloadOverlay` and `HubRunSheetHost`.
@@ -66,7 +65,7 @@ This doc describes `main`. The bottom-tab shell and Home screen exist only on th
 - **Automation boundary.** Only `App.tsx` imports from `src/__automation__/`. `no-restricted-imports` bans it across `src/` (`.eslintrc.js:46-86`); the override at `.eslintrc.js:105-110` exempts only `App.tsx` and `src/hooks/useDeepLinking.ts`. `AutomationBridge` and `BenchmarkRunner` render only when `__E2E__`.
 - **Delete order.** Session delete calls `resetActiveSession()` before `deleteSession()` (`SidebarContent.tsx:381-382`), so Chat never resolves a session mid-deletion.
 - **testIDs e2e relies on:**
-  - `menu-button` is on both the hamburger (`HeaderLeft.tsx:17`) and the chat overflow (`HeaderRight.tsx:178`).
+  - `menu-button` is on both the hamburger (`HeaderLeft.tsx:17`) and the chat overflow (`HeaderRight.tsx:178`). E2E matches it exactly (`byExactTestId`): `byTestId` is a substring match on Android, and every chat row's "…" is `message-menu-button` (pending PR). New testIDs must not contain an existing `byTestId` literal (e.g. `user-message`).
   - `drawer-item-pals` is e2e's drawer-open indicator.
   - The other drawer selectors in `e2e/helpers/selectors.ts` match English labels.
 
