@@ -29,7 +29,7 @@ Execute the HOW steps in order, one step and one commit at a time:
    yarn test --findRelatedTests <changed-file>
    ```
 
-3. Commit with `type(scope): subject`. Types are `feat`, `fix`, `docs`, and `chore` (commitlint rejects others), with a 100-character limit and public references only (see AGENTS.md).
+3. Commit with `type(scope): subject`. Types are `feat`, `fix`, `docs`, and `chore` (commitlint rejects others), with a 100-character limit, public references only, and no body unless a needed fact won't fit the subject (see AGENTS.md).
 4. Update the HOW `## Progress` table: the step's `Status` to `DONE`, the commit hash, and any deviation in `Notes`. It is the durable record the tester and reviewers read.
 
 Write code that needs no comment. When one seems necessary, apply the four-case test under "Comments" in `docs/standards/code-review.md`. Usually the fix is the code.
