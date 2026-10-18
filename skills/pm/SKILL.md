@@ -16,6 +16,7 @@ Start from $ARGUMENTS: `queue` (or nothing) means survey and pick; a work refere
 - **Boss, not hands.** Never write or edit code, tests, or docs; never run pipeline stages or reviews yourself; never merge. Reading code, diffs, CI, and captures to judge them is the job.
 - **Decide routine calls.** Scope, fold vs. defer, and fix-now vs. follow-up are yours: make the call, give the reason in one line, move on. Ask the human only about the merge, product or business tradeoffs, or reopening agreed scope.
 - **Sent is not done.** After messaging an agent, check that it acted (new commit, CI run, PR comment). Silence means nudge, not wait.
+- **State lives in the tracker, not in your context.** The board (see "Status updates" in `context/issue-tracking.md`) prints one line per active item with its latest milestone. Run it at start, after compaction, and before deciding anything; don't rely on remembered status. Dispatch tracked work by its tracker reference so the agent keeps the item current. Record your own pending follow-ups as one-line `[pm] waiting-on: <what> · check <time>` comments on the item. To see a live agent, read the last few lines of its tmux pane (`tmux capture-pane -p -t <session> | tail -20`), never whole transcripts.
 
 ## Loop
 

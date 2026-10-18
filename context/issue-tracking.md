@@ -21,6 +21,16 @@ When handing off to the orchestrator, include a `Source:` tag (`github` / `linea
 - **Linear** — tool: `./tools/linear.sh` (legacy). Prefix `FOU-`. Needs `LINEAR_API_KEY` in `.env`.
 - **Plane** — tool: `./tools/plane` (wraps the CLI shipped in the `plane` plugin; set `PLANE_SH` if it lives elsewhere). Work-item references look like `POC-123`. Needs `PLANE_TOKEN` in `.env` (secret); the workspace slug + project map live in `~/.config/plane/plane.config`.
 
+## Status updates
+
+`start-task` posts one-line milestone comments (`[pr] #1012 · head abc1234`) and moves the state on internal work items; the PM reads them back as a board.
+
+| Tracker | Comment | State | Board |
+|---|---|---|---|
+| Plane | `./tools/plane comment <ref> "<line>"` | `./tools/plane set <ref> state="In Review"` | `./tools/pm-board [project]` |
+| Linear (legacy) | not supported; skip | not supported; skip | n/a |
+| GitHub | never: issues are public and milestones carry task IDs | n/a | n/a |
+
 ## Public-artifact hygiene
 
 Internal tracker IDs — `FOU-*`, `POC-*`, `PAL-*`, `ADV-*` — must **never** appear in public GitHub artifacts (PR title/body/comments, commit messages) or in product source/tests/configs. GitHub `#123` references are public and may be cited freely.

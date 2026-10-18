@@ -51,3 +51,18 @@ Once the pipeline-reviewer returns `APPROVED` with a `PR`:
 3. Allow at most 2 review/fix rounds, then escalate.
 
 Stop only on the conditions listed under "Autonomous-run contract" in `pipeline.md`. Otherwise finish with `APPROVE`, and the human reviews and merges.
+
+## 4. Keep the tracker current
+
+When the task came from an internal tracker, its work item is the task's status for the PM. At each milestone, post one comment and move the state, using that tracker's commands from "Status updates" in [`context/issue-tracking.md`](../../context/issue-tracking.md):
+
+| Milestone | State | Comment |
+| --- | --- | --- |
+| Intake done | In Progress | `[started] <complexity> · <TASK-ID>` |
+| Spec approved | | `[spec] approved` |
+| PR opened | In Review | `[pr] #<n> · head <sha7>` |
+| Review verdict | | `[review] <verdict> · round <R> · head <sha7>` |
+| Stopped on a stop condition | | `[blocked] <what is needed, from whom>` |
+| Final `APPROVE` | | `[ready] #<n> · head <sha7> · CI <status>` |
+
+Each comment is one line: facts only, no reasoning or explanation. Detail lives in the PR and the story. Skip this step for GitHub issues and free-form descriptions.

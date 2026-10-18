@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# One line per active Plane work item: ref, state, latest milestone, title.
+# Milestones are the one-line `[tag] ...` comments start-task posts.
+# Usage: tools/pm-board [project]   (default: POC)
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT="${1:-POC}"
+
+"$ROOT/tools/plane" issues "$PROJECT" \
+  | awk -F'\t' '$2 == "[In Progress]" || $2 == "[In Review]"' \
+  | while IFS=$'\t' read -r ref state _prio _labels title; do
+      latest="$("$ROOT/tools/plane" comments "$ref" 2>/dev/null | awk '
+        /^──────── .* ────────$/ { ts = substr($2, 1, 16); next }
+        /^\[[a-z-]+\] / { last = ts " " $0 }
+        END { print last }')"
+      printf '%s\t%s\t%s\t%s\n' "$ref" "${state//[\[\]]/}" "${latest:-no milestone}" "$title"
+    done
