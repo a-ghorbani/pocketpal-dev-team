@@ -64,7 +64,7 @@ When the app window is smaller than the screen (Android split or freeform; iPad 
   - Rejected: `BottomSheetTextInput` (RNGH field); `android_keyboardInputMode="adjustResize"` (Android only; strands a sheet lifted when the window goes windowed).
   - The flip dismiss is width-guarded because an IME never changes frame width. Windowed → full also dismisses, so a cached `SHOWN` cannot replay; height-only changes do not (Known limitation 5).
 - **Known limitations (recovery: close and reopen the sheet).**
-  1. Android, rotating a focused sheet and back: Xiaomi 0/20; Galaxy S23 New Pal stays at the clamp top, keyboard down, in 3/20; OnePlus 6 (Android 11): after a lifted rotation round trip, clamped lifts alternate blank and fine.
+  1. Android, rotating a focused sheet and back: Xiaomi 0/20; Galaxy S23 New Pal stays at the clamp top, keyboard down, in 0/20; OnePlus 6 (Android 11): after a lifted rotation round trip, clamped lifts alternate blank and fine.
   2. iPad, full screen → floating while focused, then back: the sheet sits 22 pt below rest and a refocus lifts the bar 12 pt under the keyboard.
   3. Opened, rotated, then focused: partial lift, field behind the keyboard (Xiaomi 3/3; S23 and OnePlus 6 fine), as the screen height is captured at present.
   4. Android 3-button landscape: the frame excludes the side nav bar, so the gate reads windowed (no lift, never blank). Accepted; unmeasurable on the fleet (its landscape keyboards float or go fullscreen).
