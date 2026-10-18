@@ -81,6 +81,7 @@ This doc describes `main`. The bottom-tab shell and Home screen exist only on th
 - **Sidebar items close the drawer themselves** (`SidebarContent` `navigateTo`, pending PR). From `@react-navigation/routers` 7.6, navigating to the already-focused route keeps the drawer entry in history, and the drawer router closes only when the focused route changes; a session tap or the Chat item while on Chat left the drawer open (`draft-autosave` e2e caught it).
 - **Dev Tools has its own nested stack,** whose menu `IconButton` calls `openDrawer()` directly.
 - **Deep links during onboarding.** `DeepLinkHandler` sits above `SwitchPoint`, so a deep link that arrives during onboarding runs its handler, but its `navigate` finds no Drawer route.
+- **Voice mode is not a global host.** Its view is an overlay inside `ChatScreen`, so `useChatSession` stays mounted and the voice bar shares the chat (`voice-mode.md`).
 
 ## Verification
 

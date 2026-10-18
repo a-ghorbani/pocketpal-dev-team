@@ -4,6 +4,8 @@
 
 Buying a paid PalsHub Pal through the platform store (StoreKit 2 on iOS, Play Billing on Android), turning the transaction into an installed Pal, and keeping ownership correct across crashes, refunds, withdrawals, creator updates and restore. Not covered: how a PalsHub Pal becomes a local Pal (`pals-and-talents.md`), the Pals grid (`pals-screen.md`), model selection (`model-loading.md`).
 
+Voice mode's paywall is not bought here yet: it reads a seam, `voiceEntitlement.register(source)`, that this flow plugs into (`voice-mode.md`).
+
 ## Code map
 
 | Path | Role |

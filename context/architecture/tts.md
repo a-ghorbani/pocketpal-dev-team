@@ -9,11 +9,11 @@ Text-to-speech: the availability gate, on-demand neural-engine model downloads (
 | Path | Role |
 | --- | --- |
 | `src/store/TTSStore.ts` | `ttsStore`: the gate (`isTTSAvailable`), playback state, per-engine download state, streaming hooks, persisted preferences |
-| `src/services/tts/constants.ts` | download URLs, file manifests, estimated bytes, `TTS_MIN_RAM_BYTES`, `SUPERTONIC_MODEL_VERSION` and the sentinel filename |
+| `src/services/tts/constants.ts` | download URLs, file manifests, estimated bytes, `TTS_MIN_RAM_BYTES`, `TTS_ENGINE_RUNTIME_BYTES` (voice mode's memory fit), `SUPERTONIC_MODEL_VERSION` and the sentinel filename |
 | `src/services/tts/engines/{supertonic,kokoro,kitten,system}/index.ts` | `Engine` implementations: `isInstalled`, `downloadModel`, `reclaimLegacySpace`, `loadInto`, `play`, `playStreaming` |
 | `src/services/tts/runtime.ts` | `ttsRuntime`: one native engine loaded at a time; serialises `acquire` / `release` / `stop` |
 | `src/services/tts/engineRegistry.ts` | `getEngine`, `getAllEngines` (singleton engines) |
-| `src/services/tts/streamingHandle.ts`, `thinkingStripper.ts` | streaming into the engine; `<think>` stripping |
+| `src/services/tts/streamingHandle.ts`, `thinkingStripper.ts` | streaming into the engine (stream options `firstChunk`, `stripMarkdown`, `onProgress`); `<think>` stripping |
 | `src/components/TTSSetupSheet/` | setup sheet; `HeroRow.tsx` holds the steps control and the Supertonic language picker; `engineMeta.ts` holds `sizeMb` labels |
 | `src/components/SearchableSelectSheet/` | the searchable sheet the language picker opens |
 | `src/components/TextMessage/PlayButton.tsx`, `src/components/VoiceChip/VoiceChip.tsx` | gate consumers; both render `null` when the gate is closed |
@@ -36,7 +36,8 @@ Playback entry points: `play()` (replay), `preview()` (audition), and `onAssista
 ## Contracts and invariants
 
 - **Gate derivation.** `isTTSAvailable` is a getter with no writer. `deviceMeetsMemory` has one writer, `init()`, which runs once per session and falls back to `false` if the memory read throws. `userTTSOverride` has one writer, `setUserTTSOverride`, plus hydration (`TTSStore.ts`).
-- **Consumers read only the gate.** `PlayButton`, `VoiceChip` and the store guards (`play`, `preview`, `onAssistantMessageStart`, `onAssistantMessageComplete`'s fallback) read `isTTSAvailable`, never the two inputs.
+- **Consumers read only the gate.** `PlayButton`, `VoiceChip`, `play` and `preview` read `isTTSAvailable`, never the two inputs.
+- **One getter opens a reply stream.** `streamsReplies` (`voiceOutputActive || (isTTSAvailable && autoSpeakEnabled)`) is read by `useChatSession`'s per-run snapshot and by the `onAssistantMessageStart` / `onAssistantMessageComplete`-fallback guards. With voice mode closed it equals the chat predicate. `voiceOutputActive` is written only by voice mode's controller, which never writes the override or `autoSpeakEnabled` (`voice-mode.md`).
 - **The Settings switch shows the effective value** `userTTSOverride ?? deviceMeetsMemory`, persisting nothing until touched; the low-memory helper line tracks `!deviceMeetsMemory`, not the override (`SettingsScreen.tsx`).
 - **Closing the gate frees the engine.** When `setUserTTSOverride` closes an open gate, it runs `stop()` then `ttsRuntime.release()` as fire-and-forget, the same way `setAutoSpeak(false)` does.
 - **`init()` never early-returns on low memory**: a user can opt in mid-session, so listener, reaction and install checks must already exist.
@@ -62,6 +63,7 @@ Playback entry points: `play()` (replay), `preview()` (audition), and `onAssista
 - **TTS downloads bypass `DownloadManager`.** Engines call `RNFS.downloadFile` directly, so the requests carry no HF attribution User-Agent, no HF token, and no background download. See `deep-linking.md`, "Traps and decisions".
 - **Supertonic voice styles are best-effort.** A failed voice-style download is only logged. `voices-manifest.json` carries `baseUrl`, so the library fetches missing styles lazily on first play, which needs the network.
 - **A silent engine can be a native install failure.** Kokoro, Kitten and Supertonic all run on `onnxruntime-react-native` through `@pocketpalai/react-native-speech`; if onnxruntime's JSI `install()` returns false, no engine speaks and nothing crashes. Its iOS install is patched to read the runtime without `RCTCxxBridge` (`release.md`, pending PR), so re-check all three engines on device after an RN or onnxruntime bump.
+- **Voice replies stream differently** (`voice-mode.md`): first chunk at the first clause, markdown stripped in the store so progress offsets match, placeholder ranges excluded from `voiceSpoken`, a first-chunk hold for local models, and `voiceStreamFailed` on a rejected finalize. Chat auto-speak streams are unchanged.
 - **Backup exclusion.** Engine directories must live under `tts/`. On iOS the exclusion is `NSURLIsExcludedFromBackupKey` set on the `mkdir`; on Android it is the backup-rules XML. A new engine outside `tts/` would be backed up to the cloud.
 
 ## Verification

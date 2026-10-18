@@ -30,7 +30,8 @@ One file per **flow**, bounded by a single user-facing concept. Per-component is
 | `settings.md` | the Settings screen: controls and their writers, testIDs e2e depends on | `SettingsScreen`, `LanguageSelector` / `SearchableSelectSheet`, `SearchProviderStore` |
 | `onboarding.md` | first-launch onboarding screens and the completion gate | `src/screens/OnboardingScreens/`, `src/store/onboarding/`, `uiStore.hasCompletedOnboarding`, `App.tsx` `SwitchPoint` |
 | `theming.md` | design tokens, typography, DS component layer, Paper-import blocklist | `src/theme/tokens/`, `src/utils/theme.ts`, `useTheme`, `src/components/ui/`, `.eslintrc.js` blocklist |
-| `asr.md` | voice input: availability gate, Whisper model wire, push-to-talk (**PR #786 only**) | `ASRStore`, `src/services/asr/`, `usePushToTalk`, `MicButton` |
+| `asr.md` | voice input: availability gate, Whisper model wire, dictation capture (**PR #786 only**) | `ASRStore`, `src/services/asr/`, `useVoiceCapture`, `MicButton` |
+| `voice-mode.md` | hands-free voice mode in chat: entry, session controller, cascade turn, spoken rewrite, voice view and bar (**pending PR, stacked on #786**) | `useVoiceMode`, `VoiceModeStore`, `src/services/voice/`, `VoiceModeView`, `VoiceBar` |
 | `tts.md` | text-to-speech: availability gate, Supertonic model wire, re-download sentinel | `TTSStore`, `src/services/tts/`, `TTSSetupSheet` |
 | `model-download.md` | Android model downloads: scheduling (UIDT on API 34+, WorkManager), the shared resumable loop, resume validation, stop semantics, JS signals | `DownloadModule`, `DownloadController`, `DownloadScheduler`, `DownloadEngine`, `DownloadJobService`, `DownloadBanner` |
 | `deep-linking.md` | inbound `pocketpal://` links and the Hugging Face User-Agent attribution wire | `useDeepLinking`, `hubRunLink`, `HubRunSheetHost`, `hfResolve`, `hfUserAgent` |
