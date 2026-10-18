@@ -77,13 +77,25 @@ re-applied; `sync-worktree-config.sh` does not carry `android/app/build.gradle`.
 
 ## Posting to the PR (mandatory)
 
-Captures are not evidence until they are on the PR. After the draft PR exists, post them as an inline comment:
+Captures are not evidence until they are on the PR. A dump of screenshots isn't evidence either: each one has to show what it proves. Pick the layout by what the PR claims:
+
+| Claim | Layout | Captures |
+| --- | --- | --- |
+| A fix | Before / after | the bug on `origin/main`, the fix on the branch |
+| No regression | Before / after | the same surface on `origin/main` and the branch |
+| A new feature | Description / screenshot | one row per state, captioned with what it shows |
+
+Capture only the surfaces the change touches. After the draft PR exists, post them as an inline comment; the helper builds the table and refuses an uncaptioned image:
 
 ```bash
 # run from the task worktree (so gh infers the pocketpal-ai repo)
+./tools/post-pr-visual-evidence.sh <PR-number> --before-after \
+  --title "Visual evidence — <short label>" \
+  "Long model name truncates=pre/name.png" post/name.png ...
+
 ./tools/post-pr-visual-evidence.sh <PR-number> \
   --title "Visual evidence — <short label>" \
-  <path/to/capture-1.png> <path/to/capture-2.png> ...
+  "Voice toggle in Settings=settings.png" "Reply read aloud=chat.png" ...
 ```
 
 The helper uploads each PNG to GitHub's `user-attachments` CDN via the `gh image` extension — public URLs that render inline, so nothing is committed to the app repo — and posts one comment as `pocketpal-dev-team[bot]` via `tools/ghb` (see `docs/workflows/github-bot-identity.md`). If no GitHub session token is available for the upload, or the comment fails, it prints `MANUAL_POST_REQUIRED` with the exact hand-run command and exits non-zero; record that as a pending condition on the PR and do **not** report the evidence as posted. Recording only a local screenshot path is a fallback for a documented capture/post failure (see Failure handling), never the default when posting is possible.

@@ -124,8 +124,10 @@ The body follows the worktree's `.github/PULL_REQUEST_TEMPLATE.md` and "Brevity"
 When UI changed, post the captures right after the PR exists:
 
 ```bash
-cd <WORKTREE> && ../../tools/post-pr-visual-evidence.sh <PR> --title "Visual evidence — <label>" <capture.png> ...
+cd <WORKTREE> && ../../tools/post-pr-visual-evidence.sh <PR> [--before-after] --title "Visual evidence — <label>" "<caption>=<capture.png>" ...
 ```
+
+Fixes and regression checks are before/after pairs; new features are captioned rows. A bare stack of screenshots doesn't count as evidence (layouts in `docs/workflows/visual-capture.md`, "Posting to the PR").
 
 - **Exit 0:** posted.
 - **Exit 3 (`MANUAL_POST_REQUIRED`):** the captures exist but the upload or comment failed. Record the exact command to hand-run as an unmet approval condition; the evidence was not posted.

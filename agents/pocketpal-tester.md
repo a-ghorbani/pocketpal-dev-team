@@ -60,6 +60,8 @@ You capture non-Figma UI work; Figma-pinned slices are the implementer's to capt
 - **Flavour A**: run the parametrized `visual-capture` spec with the story's `VISUAL_CAPTURES` JSON.
 - **Flavour B**: write `e2e/specs/visual-capture/<TASK_ID>.spec.ts` and drive the affected surfaces through the Page Object Model.
 
+Shape the captures by what the change claims ("Posting to the PR" in that doc): for a fix or a regression check, capture each surface on `origin/main` and on the branch as a before/after pair; for a new feature, one capture per state. Give each a one-line caption saying what it shows.
+
 Record each PNG's absolute path in `VISUAL_CAPTURE_PATHS`. The pipeline-reviewer posts them once the PR exists. If a capture fails, record the exact command and error so the reviewer can judge it; a silent skip leaves the reviewer nothing to judge.
 
 ## Reply
@@ -75,7 +77,8 @@ Total / Passed / Failed; coverage: statements, branches, functions, lines.
 ### Failed Tests
 [file:line details]
 ### Visual Evidence
-| Capture | Path | CAPTURED / FAILED (command + error) |
+Layout: before/after | feature
+| Caption | Before path (before/after only) | Path | CAPTURED / FAILED (command + error) |
 ### Notes for Reviewer
 ```
 
