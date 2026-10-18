@@ -13,7 +13,7 @@ Attaching PDFs and plain-text files to a chat message and getting their text to 
 | `src/services/documents/paths.ts` | `documents/<id>/` layout, derived from `DocumentDirectoryPath` at call time |
 | `src/services/documents/render.ts` | full block, searched stub, missing line, excerpt block and citations; `documentContentFor`, `documentKey`, `modeOf` |
 | `src/services/documents/plan.ts` | pure `documentPlan`: each new ref's mode, `excerptBudget`, the verdict (`fits | unknown | over{reason}`) |
-| `src/services/documents/estimate.ts` | `estimateDocTokens`: one per CJK / kana / Hangul code point, a quarter per other |
+| `src/services/documents/estimate.ts` | `estimateDocTokens`: one per CJK / kana / Hangul / Thai code point (CJK punctuation and fullwidth forms included), a third per other |
 | `src/services/documents/chunk.ts` | `chunkDocument`: page-bounded passages of ≤ 200 estimated tokens |
 | `src/services/documents/retrieve.ts` | `retrieveExcerpts` (BM25 `bm25Retriever`, page mentions, fallback query, selection, exact trim), the index LRU |
 | `src/services/documents/budget.ts` | `hasDocuments`, `documentTokens`, `displayTokens` |
@@ -61,9 +61,13 @@ any ─chip removed→ gone (files left for the sweep)
 - **Virtual Android files** convert to PDF when offered, else `text/plain`, else refuse.
 - **Cap first, window second.** The clarified intent rejects window-sized stuffing: a 26B model on a large remote window must not receive whole large documents.
 - **Unknown window sends without a window check**: remote servers without `/props` have nothing to compare against; the caps still bound the request.
-- **Token estimates are script-aware** (`estimateDocTokens`); chars/4 under-counts CJK about fourfold. Search talents keep their own estimator.
-- **Retrieval is BM25 in JS** (k1 1.2, b 0.75, Lucene IDF, CJK / kana / Hangul / Thai as character bigrams, no stopwords): no model, no files. "p./pp./page(s) N–M" (English only) ranks those pages first. An excerpt is a passage plus its same-page neighbour when the budget allows, else one passage; at most 5.
+- **Token estimates are script-aware and conservative** (`estimateDocTokens`): chars/3 for other scripts, because chars/4 under-counted markdown tables and technical PDF text by up to about 1.5x (prose lands near 0.9x), and one per CJK / kana / Hangul / Thai character, which chars/4 under-counts about fourfold. Search talents keep their own estimator.
+- **One excerpt-cost function** (`excerptCost` in `plan.ts`: overhead plus each passage and its newline) sets both the plan's floor and retrieval's selection; if they differ, a budget at exactly the floor selects nothing while the plan says it fits.
+- **Retrieval is BM25 in JS** (k1 1.2, b 0.75, Lucene IDF, word runs include combining marks (Devanagari, Thai vowels); CJK / kana / Hangul / Thai as character bigrams; no stopwords): no model, no files. "p./pp./page(s) N–M" (English only) ranks those pages first. An excerpt is a passage plus its same-page neighbour when the budget allows, else one passage; at most 5.
 - **Index build yields between pages** so a 500-page first turn never blocks the JS thread; the LRU is bounded by indexed characters (4M), not entries, and holds nothing that changes results.
+- **Passages are 50–200 estimated tokens where the page allows.** `splitPage` prefers the latest paragraph, sentence or space break that leaves both sides at least a quarter of the limit, so a heading never becomes a passage of its own and a page never ends on a stray tail.
+- **Document names are escaped inside quotes** (backslash, quote, line breaks) in headers, stubs, missing lines and excerpt delimiters, so a file name cannot close its quotes or forge a delimiter line.
+- **The excerpt lead tells the model to say when the excerpts lack the answer** instead of guessing; the text is fixed English, like the rest of the block.
 - **1024-token reply reserve is fixed**: `n_predict` defaults to unbounded, so it cannot size it.
 - **Send still requires typed text**: `convertToChatMessages` drops empty-text rows, and their documents with them.
 - **Orphans from composer removal and cancelled sends wait for the next launch.**
