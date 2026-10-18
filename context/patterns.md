@@ -430,7 +430,7 @@ moduleNameMapper: {
 
 **DO NOT** try to mock these packages inline - they're handled globally.
 
-### Render-perf tests (Reassure) (pending PR #996)
+### Render-perf tests (Reassure) (#996)
 
 `*.perf-test.tsx` files beside the unit tests (`__tests__/`), run only by `yarn test:perf` (Reassure CLI, same `jest.config.js`; coverage off). `yarn test:perf:compare [base]` measures base then HEAD in one checkout and gates; CI's `perf` job runs it on PRs against `HEAD^1`. App docs: `docs/render-perf-tests.md`.
 
