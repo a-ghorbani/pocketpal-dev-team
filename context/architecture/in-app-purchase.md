@@ -19,12 +19,13 @@ Voice mode's paywall is not bought here yet: it reads a seam, `voiceEntitlement.
 | `src/services/iap/accountLink.ts` | `ACCOUNT_LINK_ENABLED` (off at launch) |
 | `src/services/iap/bindingSource.ts` | The Buy binding, fetched only for a signed-in Pal purchase |
 | `src/services/plus/catalog.ts` | (pending PR) `PLUS_PRODUCT_IDS`, the only Plus product list, and `PLUS_FEATURES`, the bundled feature table |
-| `src/services/plus/features.ts`, `deviceRam.ts`, `shipOverride.ts` | (pending PR) Feature status rows, the one RAM read per process, the `__E2E__`-only "shipped" override |
+| `src/services/plus/features.ts`, `deviceRam.ts`, `shipOverride.ts`, `shipped.ts` | (pending PR) Feature status rows, the one RAM read per process, the `__E2E__`-only "shipped" override; `shipped.ts` (`shippedPlusFeatures`, `plusFeatureRows`) is the one derived source the gate, sidebar item and screen read. Feature ids are typed as the `plus.features` keys of `en.json` |
 | `src/services/plus/gate.ts` | (pending PR) `isPlusUnlocked`, `isPlusAvailable`, `openPlus`, `dismissPlus`, `whenPlusReady`, `plusGate.request` |
 | `src/screens/PlusScreen/` | (pending PR) The Plus screen; `plusScreenState.ts` is its state table |
 | `src/components/PlusHost/`, `src/components/SidebarContent/PlusDrawerItem/` | (pending PR) Global host and sidebar entry (`app-shell.md`) |
 | `src/services/palshub/apiBase.ts`, `palEvents.ts` | API base and client headers; funnel events |
 | `src/components/PalsHub/PalPurchaseFooter/` | Sheet footer: Buy (with the iOS US licence line), purchase phases, Open/Install, update prompt |
+| `src/components/LicenseNotice/`, `src/config/urls.ts` | (pending PR) The two-link licence line shared by the Pal footer and the Plus screen (each caller passes its own Text component, styles, copy, first link and testIDs); `APPLE_MEDIA_TERMS_URL`, `APPLE_EULA_URL`, `REPO_URL` |
 | `src/components/PalsHub/PalModelStep/` | Post-purchase model offer and Start chat |
 | `src/screens/PalsScreen/myPals.ts`, `components/SquarePalCard/` | Owned sections and the Pending / Unlocking / Update badges |
 | `src/screens/SettingsScreen/PurchasesCard.tsx` | Settings › Purchases |
@@ -41,7 +42,7 @@ Voice mode's paywall is not bought here yet: it reads a seam, `voiceEntitlement.
 
 **Refresh** sends what the device holds; the server answers `changed` (newer creator version), `revoked` (refund), `removed` (withdrawn) or `unchanged`.
 
-**Plus** (pending PR). `processTransaction` sends a `PLUS_PRODUCT_IDS` transaction to `runPlus` on its own serialize key `'plus'` before any Pal code. Purchased: write the `plus-entitlement` doc, then `finish` if `unfinished`. Pending: `plusPending`. After each recovery or restore query, Plus transactions and `reconcilePlus` run before the Pal loop. `buyPlus` → `store.purchase(id, null)`; `already_owned` delivers from a fresh `currentEntitlements()`. Features call `isPlusUnlocked()`, else `openPlus({onUnlocked})`; `PlusHost` shows the screen and runs `onUnlocked` after dismissal when unlocked.
+**Plus** (pending PR). `processTransaction` sends a `PLUS_PRODUCT_IDS` transaction to `runPlus` on its own serialize key `'plus'` before any Pal code. Purchased: write the `plus-entitlement` doc unless a valid one is already on disk, then `finish` if `unfinished`. Pending: `plusPending`. After each recovery or restore query, Plus transactions and `reconcilePlus` run before the Pal loop. `buyPlus` → `store.purchase(id, null)`; `already_owned` delivers from a fresh `currentEntitlements()`. Features call `isPlusUnlocked()`, else `openPlus({onUnlocked})`; `PlusHost` shows the screen and runs `onUnlocked` after dismissal when unlocked.
 
 ```
 locked ─deliver (purchased Plus tx, any tier)→ unlocked
@@ -90,7 +91,7 @@ unlocking ─Android, successful query no longer lists it→ deleted
 Plus (pending PR):
 
 - **Store-only.** No Plus transaction reaches verify, refresh, link, `palEvents` or the ledger; Buy sends a null binding. PalsHub sees zero Plus traffic.
-- **Persist before finish, never consume.** The doc write resolves before `finish` (only for `unfinished`); a failed write skips it, so recovery re-delivers. Pending is never finished.
+- **Persist before finish, never consume.** The doc write resolves before `finish` (only for `unfinished`); a failed write skips it, so recovery re-delivers. Pending is never finished. Delivery skips the write when a valid doc is already on disk (never judged from memory; a read that throws counts as absent), keeping the first `productId`/`unlockedAt`. It still bumps `plusRevision` and finishes an unfinished transaction (pending PR).
 - **Only a clean query relocks:** `ok`, no purchased Plus transaction listed, and `plusRevision` equal to the snapshot taken before the query. Memory clears before the doc delete.
 - **Pending is memory-only.** Android re-derives it from each clean query; iOS clears it only on Restore.
 - **Plus before Pal.** `recoverOnce` and `restore` settle Plus before the Pal loop; `dropStalePending` still gets every transaction.
@@ -100,7 +101,7 @@ Plus (pending PR):
 - **Availability gates UI, never the store.** With no shipped `PLUS_FEATURES` row: no sidebar entry, `openPlus` no-op; the store side still runs, so an owner is unlocked when a feature ships.
 - **Feature status is bundled:** `PLUS_FEATURES` and device RAM (`minRamGb × 0.85 × 10⁹`) only; RAM-gated rows wait for the RAM read.
 - **Restore** awaits the in-flight recovery (or runs one) when billing isn't ready, keeping `recoverOnce` the only availability writer, and resolves `{queryOk}`.
-- **The Plus product fetch** is single-flight, separate from the Pal fetch and outside `requestedProducts`, so it retries on the next sync or host open.
+- **The Plus product fetch** is single-flight, separate from the Pal fetch and outside `requestedProducts`. It starts only when billing becomes ready and when the Plus host opens (`openPlus` → `retryPlusProducts`), never from the PalsHub-driven `syncProducts`, and it asks only for missing IDs. The open-time retry sets `plusProductsLoading` before the first frame, and nothing retries while the screen is open (pending PR).
 
 ## Traps and decisions
 
@@ -126,6 +127,7 @@ Plus (pending PR):
   - A failed relock delete: locked this process, unlocked from the stale doc next launch until a clean recovery relocks.
   - `drainQueue` runs before the recovery query, so a granted Pal's install delays the Plus step.
   - Four products grant one entitlement; dropping to one is a one-line edit of `PLUS_PRODUCT_IDS`.
+  - Store prices must rise with the Plus ID suffix (`plus.1` < … < `plus.4`); tiles keep catalog order and preselect the first, which is the cheapest only because of this store-configuration rule.
 - **iOS e2e can't see container testIDs.** XCUITest reports a plain container View as not visible, so specs wait on a visible leaf (`PalBuyPage.waitForReady`), not `purchase-ready`.
 
 ## Verification

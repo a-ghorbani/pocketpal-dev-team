@@ -16,7 +16,7 @@ This doc covers two things: inbound `pocketpal://` links, and the outbound Huggi
 | `src/services/DeepLinkService.ts` | iOS-only JS side of that emitter (`DeepLinkParams`) |
 | `android/app/src/main/AndroidManifest.xml` | `singleTask` activity; host-scoped VIEW filter `pocketpal`/`hub` |
 | `android/app/src/main/java/com/pocketpalai/MainActivity.kt` | `onNewIntent`: `setIntent(intent)` |
-| `src/hooks/useDeepLinking.ts` | `handleDeepLink` for the emitter path (E2E automation, `chat`, `hub`); an always-on `Linking` effect for `hub/run`; an `__E2E__` benchmark `Linking` effect; `useHubRunSheet` |
+| `src/hooks/useDeepLinking.ts` | `handleDeepLink` for the emitter path (E2E automation, `chat`, `hub`); an always-on `Linking` effect for `hub/run`; an `__E2E__` `Linking` effect for the benchmark and Plus test-feature routes (`routeE2eScreen`); `useHubRunSheet` |
 | `src/services/hubRunLink.ts` | `isHubLink`, `parseHubRunURL`, `HubRunRequest` |
 | `src/store/DeepLinkStore.ts` | `pendingMessage` (the chat prefill), `pendingHubRun` |
 | `src/components/HubRunSheetHost/` | global sheet host, mounted in `App.tsx` inside `BottomSheetModalProvider` |
