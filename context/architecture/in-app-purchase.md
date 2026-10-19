@@ -127,6 +127,7 @@ Plus (pending PR):
   - A failed relock delete: locked this process, unlocked from the stale doc next launch until a clean recovery relocks.
   - `drainQueue` runs before the recovery query, so a granted Pal's install delays the Plus step.
   - Four products grant one entitlement; dropping to one is a one-line edit of `PLUS_PRODUCT_IDS`.
+  - Android announces by live region and iOS by `announceForAccessibility`. The live region goes on the message Text: TalkBack never speaks a container View's live region when it mounts already filled (the buy error line was silent this way).
   - Store prices must rise with the Plus ID suffix (`plus.1` < … < `plus.4`); tiles keep catalog order and preselect the first, which is the cheapest only because of this store-configuration rule.
 - **iOS e2e can't see container testIDs.** XCUITest reports a plain container View as not visible, so specs wait on a visible leaf (`PalBuyPage.waitForReady`), not `purchase-ready`.
 
