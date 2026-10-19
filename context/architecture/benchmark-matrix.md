@@ -12,7 +12,7 @@ This doc covers the E2E-only on-device benchmark matrix on Android and iOS: the 
 | `src/__automation__/benchParams.ts` | `DEFAULT_BENCH_BASE_PARAMS`, `buildOverridesParams`, `composeCellParams` (pure) |
 | `src/__automation__/logSignals.ts` | `BENCH_LOG_RE`, `deriveLogSignals`, `deriveEffectiveBackend`, `requestSatisfiedBy` |
 | `src/__automation__/benchmarkRoute.ts` | `BENCHMARK_RUNNER_URL_PREFIX`, `isBenchmarkRunnerUrl`, `parseBenchmarkAutostart` |
-| `src/__automation__/deepLink.ts`, `src/hooks/useDeepLinking.ts` | the two `__E2E__`-gated delivery sites. They navigate to `ROUTES.BENCHMARK_RUNNER`, and also route `pocketpal://e2e/plus-feature` (`app-shell.md`) |
+| `src/__automation__/deepLink.ts`, `src/hooks/useDeepLinking.ts` | the two `__E2E__`-gated delivery sites. They navigate to `ROUTES.BENCHMARK_RUNNER`, and also route `pocketpal://e2e/plus-feature` (`app-shell.md`) (pending PR) |
 | `android/app/src/e2e/AndroidManifest.xml` | e2e-flavor bare `pocketpal://` intent-filter |
 | `e2e/fixtures/benchmark-models.ts` | `getBenchmarkMatrix`: tiers, `BENCH_*` env parsing and validation, fixed axis order |
 | `e2e/helpers/bench-runner.ts` | shared `buildConfig`, `expectedCellCount`, `stampReportMetadata`, `assertRowsPass`; Android `pushConfig`, `deepLinkLaunch`, `pullLatestReport` |
