@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Buying a paid PalsHub Pal through the platform store (StoreKit 2 on iOS, Play Billing on Android), turning the transaction into an installed Pal, and keeping ownership correct across crashes, refunds, withdrawals, creator updates and restore. Not covered: how a PalsHub Pal becomes a local Pal (`pals-and-talents.md`), the Pals grid (`pals-screen.md`), model selection (`model-loading.md`).
+Buying a paid PalsHub Pal through the platform store (StoreKit 2 on iOS, Play Billing on Android), turning the transaction into an installed Pal, and keeping ownership correct across crashes, refunds, withdrawals, creator updates and restore; and the PocketPal Plus entitlement, which is store-only and never touches PalsHub (pending PR). Not covered: the Plus host, sidebar entry and back handling (`app-shell.md`), how a PalsHub Pal becomes a local Pal (`pals-and-talents.md`), the Pals grid (`pals-screen.md`), model selection (`model-loading.md`).
 
 Voice mode's paywall is not bought here yet: it reads a seam, `voiceEntitlement.register(source)`, that this flow plugs into (`voice-mode.md`).
 
@@ -17,22 +17,38 @@ Voice mode's paywall is not bought here yet: it reads a seam, `voiceEntitlement.
 | `src/services/iap/iapApi.ts`, `iapWire.ts` | Verify / refresh HTTP with chunking; `iapWire` is the single parse and build point for wire shapes |
 | `src/services/iap/creatorContent.ts` | Pure creator-content projection and field diff |
 | `src/services/iap/accountLink.ts` | `ACCOUNT_LINK_ENABLED` (off at launch) |
+| `src/services/iap/bindingSource.ts` | The Buy binding, fetched only for a signed-in Pal purchase |
+| `src/services/plus/catalog.ts` | (pending PR) `PLUS_PRODUCT_IDS`, the only Plus product list, and `PLUS_FEATURES`, the bundled feature table |
+| `src/services/plus/features.ts`, `deviceRam.ts`, `shipOverride.ts` | (pending PR) Feature status rows, the one RAM read per process, the `__E2E__`-only "shipped" override |
+| `src/services/plus/gate.ts` | (pending PR) `isPlusUnlocked`, `isPlusAvailable`, `openPlus`, `dismissPlus`, `whenPlusReady`, `plusGate.request` |
+| `src/screens/PlusScreen/` | (pending PR) The Plus screen; `plusScreenState.ts` is its state table |
+| `src/components/PlusHost/`, `src/components/SidebarContent/PlusDrawerItem/` | (pending PR) Global host and sidebar entry (`app-shell.md`) |
 | `src/services/palshub/apiBase.ts`, `palEvents.ts` | API base and client headers; funnel events |
 | `src/components/PalsHub/PalPurchaseFooter/` | Sheet footer: Buy (with the iOS US licence line), purchase phases, Open/Install, update prompt |
 | `src/components/PalsHub/PalModelStep/` | Post-purchase model offer and Start chat |
 | `src/screens/PalsScreen/myPals.ts`, `components/SquarePalCard/` | Owned sections and the Pending / Unlocking / Update badges |
 | `src/screens/SettingsScreen/PurchasesCard.tsx` | Settings › Purchases |
 | `src/__automation__/fakeStore.ts`, `adapters/IapAdapter.tsx` | e2e-only store and its Android command surface |
+| `src/__automation__/plusShipOverride.ts`, `screens/PlusTestFeatureScreen.tsx` | (pending PR) e2e-only `plus_ship` verb and a locked test feature behind Plus |
 
 ## How it works
 
-`App.tsx` calls `purchaseStore.start()`: subscribe to store transactions and app foreground, wait for `palStore.ready`, then `recover()`. Recovery inits billing, drives every open record's transaction through `processTransaction`, drops stale pending records, then refreshes, but only if the entitlement query succeeded.
+`App.tsx` calls `purchaseStore.start()`: kick `loadPlus()`, subscribe to app foreground, wait for `palStore.ready`, then `recover()`. Prod subscribes to store transactions lazily, at the first `storePort` use inside that first recovery; e2e subscribes at `start` through `setStore(fakeStore)`. Recovery inits billing, drives every open record's transaction through `processTransaction`, drops stale pending records, then refreshes, but only if the entitlement query succeeded.
 
 **Buy**: binding (when signed in) → `store.purchase` → outcome. `purchased` → `processTransaction`; `pending` → `pending_payment`; `already_owned` → `installOwned`; `cancelled` / `error` close the sheet.
 
 **processTransaction** is serialized per product: write `unlocking`, verify with the server, write the outcome, then finish the transaction. `drainQueue` installs a grant via `palStore.installOwnedPal`, moving it to `active`.
 
 **Refresh** sends what the device holds; the server answers `changed` (newer creator version), `revoked` (refund), `removed` (withdrawn) or `unchanged`.
+
+**Plus** (pending PR). `processTransaction` sends a `PLUS_PRODUCT_IDS` transaction to `runPlus` on its own serialize key `'plus'` before any Pal code. Purchased: write the `plus-entitlement` doc, then `finish` if `unfinished`. Pending: `plusPending`. After each recovery or restore query, Plus transactions and `reconcilePlus` run before the Pal loop. `buyPlus` → `store.purchase(id, null)`; `already_owned` delivers from a fresh `currentEntitlements()`. Features call `isPlusUnlocked()`, else `openPlus({onUnlocked})`; `PlusHost` shows the screen and runs `onUnlocked` after dismissal when unlocked.
+
+```
+locked ─deliver (purchased Plus tx, any tier)→ unlocked
+unlocked ─clean query, no purchased Plus tx, revision unchanged→ locked
+unlocked ─failed query | offline | sign-out | account deletion | already_owned→ unlocked
+screen: purchased > paying > pending > billing unavailable > loading > no product > idle (+ error, licence, unsupported)
+```
 
 **Creator updates are opt-in.** A `changed` Pal whose content differs from `applied` becomes `pendingUpdate` and shows a badge; Update → Confirm runs `applyUpdate`, which writes only the creator-changed fields.
 
@@ -69,7 +85,22 @@ unlocking ─Android, successful query no longer lists it→ deleted
 - **Secrets.** Purchase tokens, JWS and binding values are never persisted or logged.
 - **Web purchases are untouchable.** A local owned Pal with no ledger record is never refreshed, changed or deleted by this flow.
 - **Account deletion ends library-only ownership**. It clears `palStore.userLibrary` (`clearAccountPals`), so a library Pal that is not installed stops counting in `isOwned` and `keptByLibrary`, and the next account never inherits it. Ledger ownership stays, and so does an installed paid Pal's `isLegacyInstall` ownership (the rule above). Deletion never touches the ledger or `local_pals` (`palshub-auth.md`).
-- **FakeStore and the API-base override exist only under `__E2E__`**; CI greps the prod bundle for their markers.
+- **FakeStore and the API-base override exist only under `__E2E__`**; CI greps the prod bundle for their markers. So do the Plus shipped override (`PLUS_SHIP_OVERRIDE`) and the Plus test feature (`PLUS_GATE_PROBE`) (pending PR).
+
+Plus (pending PR):
+
+- **Store-only.** No Plus transaction reaches verify, refresh, link, `palEvents` or the ledger; Buy sends a null binding. PalsHub sees zero Plus traffic.
+- **Persist before finish, never consume.** The doc write resolves before `finish` (only for `unfinished`); a failed write skips it, so recovery re-delivers. Pending is never finished.
+- **Only a clean query relocks:** `ok`, no purchased Plus transaction listed, and `plusRevision` equal to the snapshot taken before the query. Memory clears before the doc delete.
+- **Pending is memory-only.** Android re-derives it from each clean query; iOS clears it only on Restore.
+- **Plus before Pal.** `recoverOnce` and `restore` settle Plus before the Pal loop; `dropStalePending` still gets every transaction.
+- **Buy waits for `plusChecked`,** set by the first Plus step (any `ok`) or a recovery throw, never by a billing-init failure; also refused while unlocked, pending or paying.
+- **`loadPlus` seeds once** and every Plus writer awaits it. `isPlusUnlocked()` is false until then; boot-time readers await `whenPlusReady()`.
+- **One of each:** product list, check (`isPlusUnlocked`), availability (`isPlusAvailable`), entry (`openPlus`), host (`PlusHost`).
+- **Availability gates UI, never the store.** With no shipped `PLUS_FEATURES` row: no sidebar entry, `openPlus` no-op; the store side still runs, so an owner is unlocked when a feature ships.
+- **Feature status is bundled:** `PLUS_FEATURES` and device RAM (`minRamGb × 0.85 × 10⁹`) only; RAM-gated rows wait for the RAM read.
+- **Restore** awaits the in-flight recovery (or runs one) when billing isn't ready, keeping `recoverOnce` the only availability writer, and resolves `{queryOk}`.
+- **The Plus product fetch** is single-flight, separate from the Pal fetch and outside `requestedProducts`, so it retries on the next sync or host open.
 
 ## Traps and decisions
 
@@ -87,10 +118,19 @@ unlocking ─Android, successful query no longer lists it→ deleted
 - **A failed storefront lookup emits an id-less purchase error.** OpenIAP's `getStorefront` does this when `Storefront.current` is nil (e.g. no Apple ID). With no JS error listener attached, react-native-iap's iOS side buffers the error and flushes it to the first listener, which is the next Buy, so that Buy fails. `NativeStore.storefront` holds a no-op `purchaseErrorListener` across the lookup to drain it. The storefront is read once per process, after the first successful billing init, and never awaited: the Apple pay sheet triggers a foreground `recover()` while a purchase listener is live, so a re-read there could still settle that purchase as an error. A storefront switch mid-session takes effect on the next launch.
 - **iOS needs glog's textual module map** (`ios/Podfile` `post_install`). Without it, NitroModules fails to build.
 - **Labels follow the store apps.** The price alone on Buy; a progress indicator with no text while paying or unlocking; `Pending`; `Open` / `Install`; `Purchased`.
+- **Plus traps** (pending PR):
+  - RAM factor 0.85, decimal: a phone sold with X GB reports under X GiB, and the next size down is at most 0.75 of it.
+  - The revision snapshot exists because a delivery or pending purchase can land mid-query; that query must not relock or clear what it never saw.
+  - `plusChecked` stops a reinstalling owner being offered Buy before recovery lists the purchase; a failed query releases it so offline users can buy.
+  - A Play refund without "Remove entitlement" keeps Plus unlocked; a declined iOS Ask to Buy stays pending until Restore or relaunch.
+  - A failed relock delete: locked this process, unlocked from the stale doc next launch until a clean recovery relocks.
+  - `drainQueue` runs before the recovery query, so a granted Pal's install delays the Plus step.
+  - Four products grant one entitlement; dropping to one is a one-line edit of `PLUS_PRODUCT_IDS`.
 - **iOS e2e can't see container testIDs.** XCUITest reports a plain container View as not visible, so specs wait on a visible leaf (`PalBuyPage.waitForReady`), not `purchase-ready`.
 
 ## Verification
 
-- Jest: `src/store/__tests__/PurchaseStore.{pipeline,recover,link,update,accountDeletion}.test.ts`, `src/services/iap/__tests__/` (including the exact refresh body), `PalStore.install.test.ts`, and the footer, model step and Purchases card tests.
-- e2e: `e2e/specs/features/iap-{purchase,recovery,restore}.spec.ts`, run against the FakeStore and `e2e/helpers/iapMockServer.ts` (`adb reverse tcp:8787` on Android).
+- Jest: `src/store/__tests__/PurchaseStore.{pipeline,recover,link,update,accountDeletion,storefront}.test.ts`, `PurchaseStore.plus.test.ts` and `src/services/plus/__tests__/` (pending PR), `src/services/iap/__tests__/` (including the exact refresh body), `PalStore.install.test.ts`, and the footer, model step and Purchases card tests.
+- e2e: `e2e/specs/features/iap-{purchase,recovery,restore}.spec.ts`, run against the FakeStore and `e2e/helpers/iapMockServer.ts` (`adb reverse tcp:8787` on Android). `iap-plus.spec.ts` (pending PR) sets `plus_ship::<feature>` after every `reset` (which clears it) and asserts no Plus verify, refresh or event traffic.
+- Plus by hand (pending PR): an iOS sandbox and an Android licence-tester run of purchase from the host, slow card (pending), declined card, reinstall + Restore, and a Play Console refund with Remove entitlement (relock on the next foreground).
 - By hand (Android): a prod build, sideloaded, signed in with a licence tester, against production. Buy with "always approves", the slow card (pending) and "always declines" (Buy must stay), reinstall + Restore, and a Play Console refund (the Pal locks on the next refresh, Buy returns, and buying again ends on Open). After a classpath change, check that Buy and the restore row appear on a real-store build.

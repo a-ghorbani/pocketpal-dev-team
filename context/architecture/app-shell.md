@@ -33,7 +33,10 @@ This doc describes `main`. The bottom-tab shell and Home screen exist only on th
 | `src/components/HeaderRight/`, `ModelsHeaderRight/`, `PalHeaderRight/` | Per-screen header-right menus |
 | `src/components/DatabaseMigration/AppWithMigration.tsx` | Wraps `App`, runs the settings migration, overlays `DatabaseMigration` |
 | `src/components/DownloadOverlay/`, `HubRunSheetHost/`, `TTSSetupSheet/` | Global hosts above the switch |
+| `src/components/PlusHost/` | (pending PR) `PlusHost`, the in-window Plus overlay after `BottomSheetModalProvider`, and `PlusA11yScope` around that provider (`in-app-purchase.md`, Plus) |
+| `src/components/SidebarContent/PlusDrawerItem/` | (pending PR) The sidebar Plus entry |
 | `src/__automation__/AutomationBridge.tsx` | E2E-only root child (hosts `OnboardingBypass`) |
+| `src/__automation__/screens/PlusTestFeatureScreen.tsx`, `plusFeatureRoute.ts` | (pending PR) E2E-only locked feature behind Plus and its `pocketpal://e2e/plus-feature` matcher |
 | `src/screens/DevToolsScreen/DevToolsScreen.tsx` | Debug-only; nested stack with its own drawer button |
 | `src/utils/types.ts` (`RootDrawerParamList`) | Partial route typing |
 
@@ -41,18 +44,18 @@ This doc describes `main`. The bottom-tab shell and Home screen exist only on th
 
 1. `AppWithMigrationWrapper` renders `HydrationHold` until `isHydrated(uiStore)`, then renders `<AppWithMigration><App/></AppWithMigration>`.
 2. `App` builds its providers in this order:
-   - `GestureHandlerRootView`, plus `AutomationBridge` when `__E2E__`
+   - `GestureHandlerRootView`, whose first child is the app-root `StatusBar` (`theming.md`), plus `AutomationBridge` when `__E2E__`
    - `SafeAreaProvider`
    - `KeyboardProvider`
    - `PaperProvider`
    - `L10nContext`
    - `NavigationContainer`, containing `DeepLinkHandler` and a `BottomSheetModalProvider`
 
-   Inside `BottomSheetModalProvider` are `SwitchPoint`, `TTSSetupSheet`, `DownloadOverlay` and `HubRunSheetHost`.
+   Inside `BottomSheetModalProvider` are `SwitchPoint`, `TTSSetupSheet`, `DownloadOverlay` and `HubRunSheetHost`. With Plus (pending PR), `PlusA11yScope` wraps the provider and `PlusHost` follows it as the container's last child.
 3. `SwitchPoint` re-checks hydration, then renders `OnboardingStack` (see `onboarding.md`) or the Drawer.
-4. The Drawer's screens are Chat, Pals, Models, Benchmark, Settings, App Info, Dev Tools (only when `__DEV__`) and `BenchmarkRunner` (only when `__E2E__`). The first screen, Chat, is the initial route. Every non-Chat header uses `HeaderLeft` from `screenOptions`.
+4. The Drawer's screens are Chat, Pals, Models, Benchmark, Settings, App Info, Dev Tools (only when `__DEV__`), and `BenchmarkRunner` and `PlusTestFeature` (only when `__E2E__`; the latter pending PR). The first screen, Chat, is the initial route. Every non-Chat header uses `HeaderLeft` from `screenOptions`.
 5. `SidebarContent` covers navigation and the session list:
-   - Nav items call `navigate(ROUTES.X)`.
+   - Nav items call `navigate(ROUTES.X)`. The Plus item (pending PR), between Settings and App Info, calls `closeDrawer()` then `openPlus()` instead; it is not a route.
    - Sessions are sectioned from `chatSessionStore.groupedSessions` (pinned group + date groups).
    - Tapping a session awaits `setActiveSession`, then navigates to Chat.
    - Long-press opens a menu: pin/unpin, rename (`RenameModal`), export, delete, select….
@@ -61,12 +64,16 @@ This doc describes `main`. The bottom-tab shell and Home screen exist only on th
 ## Contracts and invariants
 
 - **One navigator, flat route names.** Every destination is a sibling in the Drawer. `navigate(ROUTES.X)` therefore resolves from any screen, and also from the hosts above the switch (`DownloadBanner` → Models, deep links → Chat / `BenchmarkRunner`). The `ROUTES` strings are the contract, e.g. `'Pals (experimental)'`. Change them only in `navigationConstants.ts`, never inline.
-- **Hosts above the switch.** The global hosts are siblings of `SwitchPoint` inside `BottomSheetModalProvider`. They survive navigation and are mounted during onboarding too (`App.tsx:216-218`).
+- **Hosts above the switch.** The global hosts are siblings of `SwitchPoint` inside `BottomSheetModalProvider`. They survive navigation and are mounted during onboarding too (`App.tsx`).
+- **`PlusHost` is the one host after the provider** (pending PR). It must follow `BottomSheetModalProvider` (whose portal host renders after the provider's children) to cover presented sheets, and its root (`zIndex` 200, `elevation` 8) must stay above every other global host (`DownloadOverlay`: 100 and 4); a new host stays below it. Mounted during onboarding too; nothing opens it there. `plusGate.request` non-null is the only "shown" state.
+- **While Plus is shown it alone gets back, taps and screen readers** (pending PR). Its `BackHandler` subscription (the first in `src/`) is made in an effect keyed on shown, so it registers after `NavigationContainer`'s and RN calls it first; it dismisses and returns true. iOS: `accessibilityViewIsModal` on the host root. Android: `PlusA11yScope` (`collapsable={false}`) sets `no-hide-descendants` on the app beneath. `AutomationBridge` stays outside the scope, so the e2e IAP bridge is reachable while Plus is shown.
+- **Plus adds no route.** No Drawer screen, `ROUTES` entry or `RootDrawerParamList` change; dismissal returns the user to the screen, sheet and scroll position they left. The sidebar item renders only while `isPlusAvailable()`.
 - **Automation boundary.** Only `App.tsx` imports from `src/__automation__/`. `no-restricted-imports` bans it across `src/` (`.eslintrc.js:46-86`); the override at `.eslintrc.js:105-110` exempts only `App.tsx` and `src/hooks/useDeepLinking.ts`. `AutomationBridge` and `BenchmarkRunner` render only when `__E2E__`.
 - **Delete order.** Session delete calls `resetActiveSession()` before `deleteSession()` (`SidebarContent.tsx:381-382`), so Chat never resolves a session mid-deletion.
 - **testIDs e2e relies on:**
   - `menu-button` is on both the hamburger (`HeaderLeft.tsx:17`) and the chat overflow (`HeaderRight.tsx:178`). E2E matches it exactly (`byExactTestId`): `byTestId` is a substring match on Android, and every chat row's "…" is `message-menu-button` (pending PR). New testIDs must not contain an existing `byTestId` literal (e.g. `user-message`).
   - `drawer-item-pals` is e2e's drawer-open indicator.
+  - `drawer-item-plus` (pending PR) is stable across locked and owned; its label may change, so iOS specs select it by testID only. Plus testIDs overlap as prefixes (`plus-restore` / `plus-restore-note`, `drawer-item-plus` / `drawer-item-plus-subtitle`), so `e2e/pages/PlusPage.ts` matches exactly.
   - The other drawer selectors in `e2e/helpers/selectors.ts` match English labels.
 
 ## Traps and decisions
@@ -79,6 +86,8 @@ This doc describes `main`. The bottom-tab shell and Home screen exist only on th
 - **`SwitchPoint` re-checks `isHydrated`** even though the outer wrapper already gates on it. The re-check keeps the onboarding decision correct if the outer gate is refactored.
 - **`AppWithMigration` delays `migrateAllSettings()` by 2 s** so it doesn't compete with startup.
 - **Sidebar items close the drawer themselves** (`SidebarContent` `navigateTo`, pending PR). From `@react-navigation/routers` 7.6, navigating to the already-focused route keeps the drawer entry in history, and the drawer router closes only when the focused route changes; a session tap or the Chat item while on Chat left the drawer open (`draft-autosave` e2e caught it).
+- **Plus is an in-window host, not a Drawer route or an RN `Modal`** (pending PR). A route loses the user's place (back follows `backBehavior: 'firstRoute'` to Chat) and leaves a presented gorhom sheet above it. A `Modal` is a separate Android window, where the hidden `iap-command-input` the e2e FakeStore needs is unreachable. The cost is owning back and screen-reader focus.
+- **The `PlusTestFeature` route and the Plus shipped override exist only under `__E2E__`** (pending PR): markers `PLUS_GATE_PROBE` and `PLUS_SHIP_OVERRIDE` are in the CI prod-bundle grep. No marker may equal a `ROUTES` key or value, because those ship in prod. Android delivers `pocketpal://e2e/plus-feature` through the `__E2E__` Linking effect in `useDeepLinking.ts`; iOS through `dispatchAutomationDeepLink`.
 - **Dev Tools has its own nested stack,** whose menu `IconButton` calls `openDrawer()` directly.
 - **Deep links during onboarding.** `DeepLinkHandler` sits above `SwitchPoint`, so a deep link that arrives during onboarding runs its handler, but its `navigate` finds no Drawer route.
 - **Voice mode is not a global host.** Its view is an overlay inside `ChatScreen`, so `useChatSession` stays mounted and the voice bar shares the chat (`voice-mode.md`).
@@ -86,7 +95,8 @@ This doc describes `main`. The bottom-tab shell and Home screen exist only on th
 ## Verification
 
 - **Unit tests:**
-  - `__tests__/App.test.tsx`: hydration hold (`hydration-splash`) and mount after hydration.
+  - `__tests__/App.test.tsx`: hydration hold (`hydration-splash`), mount after hydration, the app-root `StatusBar` props and `PlusHost` outside the a11y scope (pending PR).
+  - `src/components/PlusHost/__tests__/` (dismissal order, back ahead of an earlier handler, stacking above `DownloadOverlay`) and `SidebarContent.plus.test.tsx` (pending PR).
   - `src/components/SidebarContent/__tests__/`: `SidebarContent.test.tsx` and `SidebarContent.pinned.test.tsx`.
   - `src/components/ChatHeader/__tests__/`.
   - `src/components/HubRunSheetHost/__tests__/`.
