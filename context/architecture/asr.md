@@ -37,7 +37,8 @@ The capture state machine (`captureState`, driven by `useVoiceCapture`):
 idle ─tap mic→ requesting_perm ─granted→ recording ─stop / 3 min cap→ transcribing ─text→ idle (appended)
                requesting_perm ─denied / blocked→ error         requesting_perm ─AudioRecord.init throws→ error(transcribe_failed)
                recording ─stop, VAD fails→ idle (silently)       transcribing ─empty text→ idle (silently)
-               recording ─cancel / app backgrounded→ idle (buffer discarded)
+               recording ─cancel→ idle (buffer discarded)
+               recording ─app backgrounded→ transcribing (as stop)
                transcribing ─cancel→ idle (whisper stopped, result dropped)
                transcribing ─chat generating on CPU→ transcribing (waitingForChat) ─reply done→ decode
                transcribing ─throw→ error(transcribe_failed)
@@ -62,7 +63,7 @@ Before the permission prompt, `asrStore.hasMemoryForCapture()` (the rule is `whi
 - **Transcripts are appended, never sent.** `appendTranscript` space-joins onto `inputText`; ChatView stays the only composer writer.
 - **Offline.** Capture and transcription make no network calls; the only one is the model download.
 - **The model never enters `ModelStore`** (no preset, fit check, auto-load, `ModelCard`); ASR readiness is independent of the LLM.
-- **Capture and context are always released.** The recorder: on stop, cancel, error, `ASR_MAX_RECORD_MS`, background (buffer discarded), unmount. The ~400 MB whisper context: after every dictation (success or failure) and on `'background'` (never `'inactive'`); re-init is lazy. Voice mode alone keeps base resident, for its session (`voice-mode.md`).
+- **Capture and context are always released.** The recorder: on stop, cancel, error, `ASR_MAX_RECORD_MS`, background (finishes like stop), unmount. The ~400 MB whisper context: after every dictation (success or failure) and on `'background'` while no capture is in progress (never `'inactive'`); re-init is lazy. Voice mode alone keeps base resident, for its session (`voice-mode.md`).
 - **`release()` never frees under a decode.** It stops an in-flight `transcribeData` and awaits it before `releaseContext`, so the voice exit and the AppState release, which can race, both close cleanly. whisper.rn 0.7.4 already aborts and waits inside `whisperReleaseContext`; this is a clean close, not a crash fix.
 - **Engine work is serial.** Every segment `transcribe` and `release` go through one promise queue in the hook, so a release never cuts across a load or a decode. The engine also deduplicates a load in flight, and a load that finishes after `release()` frees its context (a generation counter).
 - **A failed segment fails the capture.** The remaining segments are skipped and stop shows `transcribe_failed`; partial text is not appended.
@@ -106,6 +107,6 @@ Before the permission prompt, `asrStore.hasMemoryForCapture()` (the rule is `whi
   - **Happy path.** In airplane mode, tap the mic, speak (the bars should move), and tap stop. The text should be appended and not sent.
   - **Silence.** Tap the mic, stay silent, tap stop. The bars stay flat and the composer returns to normal with no message and no decode.
   - **Cancel.** Tap ✕ while recording, and again while transcribing. Nothing is appended either time.
-  - **Background.** Background the app while recording. The recording should be discarded.
+  - **Background.** Background the app while recording, and again right after stop. Either way the text should be there on return.
   - **Speaker rig.** A second phone playing speech next to the device works; check that it is not on Do Not Disturb with media volume at 0.
   - **Stale sentinel.** Write an older version into `asr/<tier>/model-version.json` and relaunch. The tier should show as not installed.
