@@ -16,7 +16,7 @@ Hands-free voice mode inside a chat: the user speaks, the reply is spoken, and t
 | `src/services/voice/cascadeEngine.ts` | `CascadeVoiceEngine`: `prepare` / `release` residency, `runTurn` → `{done, interrupt}` |
 | `src/services/voice/types.ts` | the engine interface (one implementation; its readiness and memory checks live in the controller): `VoiceEngine`, `VoiceTurnPort` (`send(text, onTurnCreated)`, `stop`), `VoiceTurnEvents`, `VoiceTurnOutcome` |
 | `src/services/voice/endpointer.ts` | `Endpointer`: lead-in trim, 600 ms hang after speech, 25 s cap, manual tap |
-| `src/services/voice/memoryFit.ts` | pure `voiceMemoryFit` → `fits` / `tight` / `wont_fit` plus the rows it counted; memory read and Android budget come from `services/asr` (`readDeviceMemory`, `androidMemoryBudget`) |
+| `src/services/voice/memoryFit.ts` | pure `voiceMemoryFit` → `fits` / `tight` / `wont_fit` plus the rows it counted; memory read and budget come from `services/asr` (`readDeviceMemory(modelStore)`, `memoryBudget`) |
 | `src/services/voice/readiness.ts` | `isVoiceModeVoice` (neural only), `isMicGranted` (no prompt) |
 | `src/services/voice/constants.ts` | `VOICE_ENDPOINT_HANG_MS`, `VOICE_FIRST_CHUNK_HOLD_MS`, `VOICE_CAPTURE_SETTLE_MS`, `VOICE_MIC_WATCHDOG_MS`, `VOICE_START_TIMEOUT_MS`, `VOICE_MODE_UNLOCKED_DEFAULT` |
 | `src/components/VoiceModeButton/` | composer button (waveform, lock badge), in Send's slot while the input is empty |
@@ -26,7 +26,6 @@ Hands-free voice mode inside a chat: the user speaks, the reply is spoken, and t
 | `src/components/VoiceCloud/` | SVG radial-gradient blobs with Reanimated motion per visual; `voiceVisual(phase, micMuted)` |
 | `src/components/VoiceSetupSheet/`, `VoiceMemorySheet/` | first-use setup (Whisper base, neural voice, mic); memory breakdown with Continue anyway / Choose a smaller model |
 | `src/screens/ChatScreen/ChatScreen.tsx` | builds the turn port from `handleSendPress` / `handleStopPress`, mounts the hook, provides the controls, renders the view and both sheets, and calls `end()` when a video Pal takes over (the one exit outside the controller) |
-| `src/services/voice/audioInterruptions.ts` | `onAudioInterruption`: the speech library's audio-session interruption event (`began` / `ended`), deep-imported from its `NativeAudioPlayer` |
 | `src/components/ChatInput/ChatInput.tsx`, `ChatView/ChatView.tsx` | `onVoicePress` / `onVoiceModePress`; ChatView shows `VoiceBar` instead of `ChatInput` while `phase ≠ closed` |
 | `src/__automation__/voiceAutomation.ts`, `adapters/VoiceAdapter.tsx` | E2E driver for visual captures (`pocketpal://voice?cmd=` on iOS, the bridge input on Android) |
 
@@ -62,20 +61,21 @@ any open phase ─audio interruption began→ mic off, running turn interrupted 
 - **The mic runs only in `listening ∧ !micMuted`**, started by the controller's own transitions, never by a reaction on `phase`, so a forced phase starts nothing. No barge-in.
 - **Neural voices only.** The `system` engine reports no chunk progress, which `speaking` and the rewrite need.
 - **The paywall is a seam.** Default locked, `openPaywall` only warns; the purchase flow calls `voiceEntitlement.register(source)` (`in-app-purchase.md`), shaped like the Plus gate's `openPlus({onUnlocked})`. A release build before that ships the icon locked.
-- **Memory rows are per platform.** Android: chat + Whisper + voice against `androidMemoryBudget`. iOS: Whisper and the voice (0 when loaded) with headroom against available memory, which already holds the chat model. The sheet renders the rows as given.
+- **Memory rows are chat + Whisper + voice on both platforms**, against `memoryBudget`: Android `androidMemoryBudget`, iOS the chat model's load ceiling (`asr.md`; iOS free memory doesn't count mmap'd chat weights). No iOS ceiling yet means `fits`. The sheet renders the rows as given.
 
 ## Traps and decisions
 
-- **First audio at the first clause is a speech-library patch** (`release.md`): `firstChunk: 'clause'` cuts the first chunk at the earliest of a sentence end, `[,;:—]`+space after 3 words, or 12 words. Chat auto-speak never passes it.
+- **First audio at the first clause is the speech library's `firstChunk: 'clause'`** (`@pocketpalai/react-native-speech` 2.6.0, public API, no patch): the first chunk ends at the earliest of a sentence end, `[,;:—]`+space after 3 words, or 12 words. Its markdown buffer won't cut a first clause holding an inline marker (`*`, `_`, `` ` ``, `[`, `<`), so such a reply starts at its sentence end. Chat auto-speak never passes it.
 - **Markdown is stripped in `TTSStore` for voice streams** (`stripMarkdown: false` to the engine), so stream progress offsets index the text the store appended. Thinking placeholders are excluded from `voiceSpoken.text` by recorded range (a placeholder can share a chunk with reply text). `voiceSpoken` survives `stop()`.
 - **A local model holds the first voice chunk** until the reply settles or 1.5 s pass: synthesis next to decoding roughly doubled time to first audio on Pixel 9 / S23. Measured on CPU only, so every local backend holds; remote models never do.
 - **The mic waits `VOICE_CAPTURE_SETTLE_MS` (150 ms) after a stop before it starts again.** On Android the old read thread releases the shared recorder when it ends, so a quick restart could lose the new one.
 - **A started mic that sends no audio within `VOICE_MIC_WATCHDOG_MS` (3 s; a Bluetooth headset's mic route takes 1–3 s) is restarted once, then voice mode ends.** iOS `RNLiveAudioStream` only logs a failed start. Neither audio library reports route changes to JS, so it can't re-arm on one.
-- **Audio interruptions come from the speech library** (`onAudioInterruption`, iOS `AVAudioSession` and Android audio focus). `began` stops the mic and interrupts any running turn, `transcribing` included. `ended` may never come (Android holds focus only while a chunk plays), so the next move into `listening` reopens the mic, and the watchdog ends the session if it is still taken. The event isn't exported from the package root, so `audioInterruptions.ts` deep-imports `lib/module/NativeAudioPlayer.js`; recheck the path on a speech bump.
+- **Audio interruptions come from the speech library** (`onAudioInterruption`, iOS `AVAudioSession` and Android audio focus). `began` stops the mic and interrupts any running turn, `transcribing` included. `ended` may never come (Android holds focus only while a chunk plays), so the next move into `listening` reopens the mic, and the watchdog ends the session if it is still taken.
 - **The controller is disposed with the chat screen**, so a late paywall `onUnlocked` starts nothing; the effect re-attaches it on mount (StrictMode).
 - **The video-Pal exit lives in `ChatScreen`**: `VideoPalScreen` has no voice controls, so ChatScreen calls `end()` when `isVideoPal` turns true.
 - **`prepare()` logs its two load times in dev builds only** (durations only). A first load took about 21 s, hence the `starting` hint and the 45 s limit.
-- **The library's chunk-progress callback is one global slot**, cleared by a stream's cleanup: a new stream starts only after the previous cancel resolves, and a turn ends only at `playbackState` idle. A later turn that never reaches `speaking` points here.
+- **Chunk-progress listeners stack** (2.6.0): each stream subscribes once and drops it on finalize or cancel, so a stream left neither would hear later streams' progress. A new stream starts only after the previous cancel resolves, and a turn ends only at `playbackState` idle.
+- **`Speech.release()` during an active stream leaves its `finalize()` hanging.** A turn's interrupt awaits the stream cancel, and exit releases the models only after the interrupt (then at idle).
 - **Keep-awake is counted** (`chat-flow.md`): the voice hold and a turn's hold coexist.
 - **Exit on chat switch, background, blur and model change**: mic and Whisper can't run backgrounded, and the memory fit would be stale. One exemption: `activeSessionId` going from none to an id is ignored from the start of `port.send` until `onTurnCreated` (a new chat's first spoken send creates it), with model and context unchanged; any other switch closes the session. iOS `inactive` doesn't end it; back to `active` while listening restarts capture.
 - **The view and bar follow the finger** in UI-thread gesture worklets: the view translates, dims and shrinks a little, then slides away and switches to the bar from the `withTiming` completion (`scheduleOnRN`), or springs back. Reduced motion: no follow, only the snap.
@@ -86,6 +86,6 @@ any open phase ─audio interruption began→ mic off, running turn interrupted 
 
 ## Verification
 
-- Unit: `src/services/voice/__tests__/` (rewrite races in `cascadeEngine`), `useVoiceMode.test.ts` (entry, exits, mic, interruptions), `VoiceModeStore.test.ts` (gate), the `Voice*` component suites, `ChatScreen.voice*.test.tsx`, `ChatInput.test.tsx`, `ChatView.voiceInput.test.tsx`, `speechLibFirstChunk.test.ts`, `TTSStore.test.ts` (voice stream, hold, heard trim), `voiceAutomation.test.ts`.
+- Unit: `src/services/voice/__tests__/` (rewrite races in `cascadeEngine`), `useVoiceMode.test.ts` (entry, exits, mic, interruptions), `VoiceModeStore.test.ts` (gate), the `Voice*` component suites, `ChatScreen.voice*.test.tsx`, `ChatInput.test.tsx`, `ChatView.voiceInput.test.tsx`, `markdownStreamBuffer.test.ts`, `TTSStore.test.ts` (voice stream, hold, heard trim), `voiceAutomation.test.ts`.
 - Visual: a per-task Flavour B spec driven by `voice?cmd=` (`docs/workflows/visual-capture.md`).
 - By hand, on a high-tier Android phone and an iPhone with a neural voice, local model in airplane mode: a spoken turn (first audio before the reply ends; no thinking pass); a tap mid-speech leaves only the spoken text; End while transcribing, thinking and speaking; mute; drag down to the bar and up again, slowly and with a flick; a tap while thinking cancels; AirPods connected at entry; chat scrolling right after End; iOS listening → speech → listening still captures; the screen stays on through a 2-minute silent listen and sleeps after End; second and third turns still reach `speaking`.
