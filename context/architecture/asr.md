@@ -18,7 +18,7 @@ On-device tap-to-record speech-to-text for the chat composer: availability gate,
 | `src/services/asr/energyVad.ts` | `energyVad` (voiced-frame gate), `inputLevel` (chunk loudness for the waveform), `int16PcmToFloat32` |
 | `src/hooks/useVoiceCapture.ts` | the capture lifecycle (`start` / `stop` / `cancel`): permission, `AudioRecord` PCM stream, levels, VAD, transcribe, release. Mounted once, in `ChatInput` |
 | `src/utils/asrMicPermission.ts` | `ensureMicPermission` (returns granted, denied or blocked; Android blocked-without-dialog timeout), `openMicSettings` |
-| `src/components/MicButton/` | the composer mic, next to send; renders `null` when the gate is closed, routes to Settings when the tier isn't ready, else `onStart`. `ChatInput` passes `micBeforeSend` (cancels send/stop's 16 px left margin) unless the video button follows; the send wrapper is `pointerEvents="box-none"` so that margin doesn't cover the mic |
+| `src/components/MicButton/` | the composer mic, next to send; renders `null` when the gate is closed, routes to Settings when the tier isn't ready, else `onStart`. `ChatInput` passes `micBeforeSend` (cancels send/stop's 16 px left margin) unless the video button follows; the send wrapper is `pointerEvents="box-none"` so that margin doesn't cover the mic. No mic for a video pal: ChatView withholds `appendTranscript`, because that composer shows `promptText`, which dictation doesn't write |
 | `src/components/VoiceRecordingBar/` | replaces `ChatInput`'s control row while `recording` / `transcribing`: cancel, waveform from `inputLevels` (or a transcribing label, which says when it waits for the chat reply), stop; below them `Language: auto` or `Language: <CODE> (tap to reset)`, whose tap clears `spokenLanguage` so the next segment auto-detects |
 | `patches/@fugood+react-native-audio-pcm-stream+1.1.4.patch` | iOS: activate the `AVAudioSession` before recording (see Traps) |
 | `src/components/ChatView/ChatView.tsx` | `appendTranscript`, and the `asr-error-snackbar` keyed by `lastError` |
@@ -41,7 +41,7 @@ idle ─tap mic→ requesting_perm ─granted→ recording ─stop / 3 min cap�
                recording ─app backgrounded→ transcribing (as stop)
                transcribing ─cancel→ idle (whisper stopped, result dropped)
                transcribing ─chat generating on CPU→ transcribing (waitingForChat) ─reply done→ decode
-               transcribing ─throw→ error(transcribe_failed)
+               transcribing ─every segment threw→ error(transcribe_failed)
 error ─tap mic→ requesting_perm        (error is a re-armable resting state)
 ```
 
@@ -52,7 +52,7 @@ Before the permission prompt, `asrStore.hasMemoryForCapture()` (the rule is `whi
 ## Contracts and invariants
 
 - **The gate is derived.** `asrAvailable` and `deviceSupported` have no writer; they follow `modelStore.deviceTier`, which can change when the fetched device rules arrive. `userASROverride` is written only by `setUserASROverride` plus hydration. The `__E2E__`-only `asrAutomation` driver writes these fields (and `deviceTier`) directly and is the one sanctioned exception. The switch shows `userASROverride ?? deviceSupported`.
-- **`spokenLanguage` is persisted** and written only by the hook (first non-empty transcript), voice mode's cascade engine (the same rule) and the resets in Settings and on the recording bar (`null`). Settings always shows the row while voice input is on: `Auto-detect`, or `Auto-detected: <name>` (via `languageDisplayNames`, else the upper-case code) with Reset. It stays set across recordings because auto-detect costs an extra encoder pass per call (below).
+- **`spokenLanguage` is persisted** and written only by the hook (the first non-empty transcript decoded with auto-detect; a segment sent with a fixed language never writes, so a reset during its decode holds), voice mode's cascade engine (the same rule) and the resets in Settings and on the recording bar (`null`). Settings always shows the row while voice input is on: `Auto-detect`, or `Auto-detected: <name>` (via `languageDisplayNames`, else the upper-case code) with Reset. It stays set across recordings because auto-detect costs an extra encoder pass per call (below).
 - **The mic needs gate open and `isSelectedTierReady`.** Otherwise `MicButton` routes to Settings and `start` returns early.
 - **One install makes the mic usable**: `downloadModel` selects the tier; deleting the active tier reselects the first ready one, else `ASR_DEFAULT_TIER`.
 - **Install truth is on disk, per tier**: `asr/<tier>/` holds the model file and `model-version.json` at `ASR_MODEL_VERSION`; no store mirror. The sentinel is the last write; a failed download deletes the tier dir.
@@ -63,10 +63,11 @@ Before the permission prompt, `asrStore.hasMemoryForCapture()` (the rule is `whi
 - **Transcripts are appended, never sent.** `appendTranscript` space-joins onto `inputText`; ChatView stays the only composer writer.
 - **Offline.** Capture and transcription make no network calls; the only one is the model download.
 - **The model never enters `ModelStore`** (no preset, fit check, auto-load, `ModelCard`); ASR readiness is independent of the LLM.
-- **Capture and context are always released.** The recorder: on stop, cancel, error, `ASR_MAX_RECORD_MS`, background (finishes like stop), unmount. The ~400 MB whisper context: after every dictation (success or failure) and on `'background'` while no capture is in progress (never `'inactive'`); re-init is lazy. Voice mode alone keeps base resident, for its session (`voice-mode.md`).
+- **Capture and context are always released.** The recorder: on stop, cancel, error, `ASR_MAX_RECORD_MS`, background (finishes like stop), unmount. The whisper context: after every dictation (success or failure) and on `'background'` while no capture is in progress (never `'inactive'`); re-init is lazy. Voice mode alone keeps base resident, for its session (`voice-mode.md`).
 - **`release()` never frees under a decode.** It stops an in-flight `transcribeData` and awaits it before `releaseContext`, so the voice exit and the AppState release, which can race, both close cleanly. whisper.rn 0.7.4 already aborts and waits inside `whisperReleaseContext`; this is a clean close, not a crash fix.
 - **Engine work is serial.** Every segment `transcribe` and `release` go through one promise queue in the hook, so a release never cuts across a load or a decode. The engine also deduplicates a load in flight, and a load that finishes after `release()` frees its context (a generation counter).
-- **A failed segment fails the capture.** The remaining segments are skipped and stop shows `transcribe_failed`; partial text is not appended.
+- **A failed segment is dropped.** Later segments still transcribe and stop appends whatever text came back (with a gap where the failure was); only a capture with failures and no text shows `transcribe_failed`.
+- **Known gap (iOS, follow-up):** backgrounding finishes the capture, but whisper decodes on Metal and iOS refuses GPU work from a backgrounded app, so the tail segment can fail there. Not device-checked; Android decodes on the CPU and keeps the transcript.
 - **`captureState` / `lastError` / `inputLevels` / `recordingStartedAt` / `waitingForChat`** are written by `useVoiceCapture`, plus the snackbar's `resetCapture` on dismiss. Cancel also cancels a pending wait for the chat reply. Async work from a cancelled capture (a pending permission prompt or transcription) is dropped by a per-capture session counter, never written back.
 
 ## Traps and decisions
