@@ -13,7 +13,7 @@ Text-to-speech: the availability gate, on-demand neural-engine model downloads (
 | `src/services/tts/engines/{supertonic,kokoro,kitten,system}/index.ts` | `Engine` implementations: `isInstalled`, `downloadModel`, `reclaimLegacySpace`, `loadInto`, `play`, `playStreaming` |
 | `src/services/tts/runtime.ts` | `ttsRuntime`: one native engine loaded at a time; serialises `acquire` / `release` / `stop` |
 | `src/services/tts/engineRegistry.ts` | `getEngine`, `getAllEngines` (singleton engines) |
-| `src/services/tts/streamingHandle.ts`, `thinkingStripper.ts` | streaming into the engine (stream options `firstChunk`, `stripMarkdown`, `onProgress`); `<think>` stripping |
+| `src/services/tts/streamingHandle.ts`, `thinkingStripper.ts` | streaming into the engine (stream options `firstChunk`, `onProgress`); `<think>` stripping |
 | `src/components/TTSSetupSheet/` | setup sheet; `HeroRow.tsx` holds the steps control and the Supertonic language picker; `engineMeta.ts` holds `sizeMb` labels |
 | `src/components/SearchableSelectSheet/` | the searchable sheet the language picker opens |
 | `src/components/TextMessage/PlayButton.tsx`, `src/components/VoiceChip/VoiceChip.tsx` | gate consumers; both render `null` when the gate is closed |
@@ -63,7 +63,7 @@ Playback entry points: `play()` (replay), `preview()` (audition), and `onAssista
 - **TTS downloads bypass `DownloadManager`.** Engines call `RNFS.downloadFile` directly, so the requests carry no HF attribution User-Agent, no HF token, and no background download. See `deep-linking.md`, "Traps and decisions".
 - **Supertonic voice styles are best-effort.** A failed voice-style download is only logged. `voices-manifest.json` carries `baseUrl`, so the library fetches missing styles lazily on first play, which needs the network.
 - **A silent engine can be a native install failure.** Kokoro, Kitten and Supertonic all run on `onnxruntime-react-native` through `@pocketpalai/react-native-speech`; if onnxruntime's JSI `install()` returns false, no engine speaks and nothing crashes. Its iOS install is patched to read the runtime without `RCTCxxBridge` (`release.md`, pending PR), so re-check all three engines on device after an RN or onnxruntime bump.
-- **Voice replies stream differently** (`voice-mode.md`): first chunk at the first clause, markdown stripped in the store so progress offsets match, placeholder ranges excluded from `voiceSpoken`, a first-chunk hold for local models, and `voiceStreamFailed` on a rejected finalize. Chat auto-speak streams are unchanged. All of it uses `@pocketpalai/react-native-speech` 2.6.0's public API (`firstChunk`, `createMarkdownStreamBuffer`, `onAudioInterruption` from the package root), with no patch.
+- **Voice replies stream differently** (`voice-mode.md`): first chunk at the first clause, `voiceSpeechStarted` from stream progress, a first-chunk hold for local models, and `voiceStreamFailed` on a rejected finalize. Chat auto-speak streams are unchanged. Both use `@pocketpalai/react-native-speech` 2.6.0's public API (`firstChunk`, and `onAudioInterruption` from the package root), with no patch.
 - **Cancel a stream before releasing the engine.** `Speech.release()` during an active stream leaves its `finalize()` hanging. Chunk-progress listeners stack from 2.6.0; a stream drops its own on finalize or cancel.
 - **Backup exclusion.** Engine directories must live under `tts/`. On iOS the exclusion is `NSURLIsExcludedFromBackupKey` set on the `mkdir`; on Android it is the backup-rules XML. A new engine outside `tts/` would be backed up to the cloud.
 

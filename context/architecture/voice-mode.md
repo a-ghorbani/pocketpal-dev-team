@@ -36,7 +36,7 @@ Hands-free voice mode inside a chat: the user speaks, the reply is spoken, and t
 ```
 closed ─enter→ starting ─prepared→ listening ─endpoint (hang | tap with speech | cap)→ transcribing
 transcribing ─empty | VAD reject→ listening        ─throw→ listening (transcribe_failed)
-transcribing | thinking ─tap→ cancel → listening (no rewrite; turn marked unheard)
+transcribing | thinking ─tap→ cancel → listening
 transcribing ─text→ thinking ─first chunk plays→ speaking ─run settled ∧ TTS idle→ listening
 thinking ─settled, nothing spoken→ listening (reply_failed if it failed)
 speaking ─tap→ interrupt → listening              ─finalize rejects→ listening (speech_failed)
@@ -45,28 +45,27 @@ any open phase ─audio interruption began→ mic off, running turn interrupted 
   * except the session a new chat's own spoken send creates (see Traps)
 ```
 
-`micMuted` and `presentation` are independent of `phase`. A turn: `energyVad`, `whisperAsrEngine.transcribe` (base, `spokenLanguage`), `port.send(text, onTurnCreated)` (= `handleSendPress(…, {spoken: true, onTurnCreated})`), `speechStarted` when `ttsStore.voiceSpoken.messageId` is this turn, `done` after the send settles and `playbackState` is idle.
+`micMuted` and `presentation` are independent of `phase`. A turn: `energyVad`, `whisperAsrEngine.transcribe` (base, `spokenLanguage`), `port.send(text, onTurnCreated)` (= `handleSendPress(…, {spoken: true, onTurnCreated})`), `speechStarted` when `ttsStore.voiceSpeechStarted` is this turn's id, `done` after the send settles and `playbackState` is idle.
 
 ## Contracts and invariants
 
 - **Voice never writes the TTS gate or auto-speak.** One getter, `ttsStore.streamsReplies` (`voiceOutputActive || (isTTSAvailable && autoSpeakEnabled)`), opens the stream; with voice closed it equals the chat predicate (`tts.md`).
 - **Single writers.** `phase` / `micMuted` / `lastError`: the controller only. `presentation`: `setPresentation` from the view, bar and back. `voiceOutputActive`: controller enter / exit. `unlockOverride`: E2E drivers, persisted only under `__E2E__`.
 - **Voice turns are chat turns.** Every turn goes through `handleSendPress` under the generation lease; `applyEventToStore` stays the only store writer during a run.
-- **The spoken rewrite runs only after the send settles**, and only if `voiceSpoken.messageId` is this turn's and its heard text is non-empty, in any phase. Stopped inside the first word, or after only the thinking placeholder, the turn keeps its partial text (the rule for that case is pending a product decision). `rewriteTurnToSpoken` keeps tool calls, outcomes and reasoning and puts the spoken text in the last step's content. An assistant turn where nothing was heard gets `metadata.spoken = false`. No row shows a Spoken label; the flag is data only.
-- **Heard means played.** `ttsStore.stop()` trims the playing chunk to the share of its estimated length (`VOICE_SPEECH_CHARS_PER_SECOND`, 14) that elapsed since it started, back to a word end; earlier chunks count whole. Where a placeholder is removed, the gap before following punctuation closes; the reply's own spacing (French ` !`) stays.
+- **An interrupted reply keeps what the model generated before the stop**, the same as a typed Stop: interrupt cancels the speech stream, stops the run and writes nothing back. Voice turns carry `metadata.spoken = true`; no row renders it.
 - **Spoken replies run with thinking off** (`enable_thinking: false` and `reasoning: {enabled: false}` for a `{spoken: true}` send), whatever the chat or Pal says; typed turns are unchanged. `interrupt()` after `done` is a no-op.
 - **Whisper is resident for the session**: `prepare` preloads base; nothing releases it until exit. Every exit runs, in order: `phase = closed`, mic stop, `turn.interrupt()`, `engine.release()` (Whisper, and TTS only when auto-speak is off), the keep-awake release, `setVoiceOutputActive(false)`. A re-entry awaits the previous exit.
 - **Voice mode has its own device gate**: `high` / `flagship`, plus `mid` on iOS. An iPhone 13 Pro (A15, 6 GB) is `mid` and answered in 2.8–5.6 s; Android's `mid` holds an 8 GB OnePlus 6 (SD845; Whisper alone 4–8 s). Dictation keeps its gate; the memory check still screens 4 GB iPhones.
 - **Dictation's rules hold.** `wont_fit` is `whisperFits` for base, dictation's rule. The two never overlap: the button needs dictation idle, and the composer is gone while a session is open.
 - **The mic runs only in `listening ∧ !micMuted`**, started by the controller's own transitions, never by a reaction on `phase`, so a forced phase starts nothing. No barge-in.
-- **Neural voices only.** The `system` engine reports no chunk progress, which `speaking` and the rewrite need.
+- **Neural voices only.** The `system` engine reports no chunk progress, which `speaking` needs.
 - **The paywall is a seam.** Default locked, `openPaywall` only warns; the purchase flow calls `voiceEntitlement.register(source)` (`in-app-purchase.md`), shaped like the Plus gate's `openPlus({onUnlocked})`. A release build before that ships the icon locked.
 - **Memory rows are chat + Whisper + voice on both platforms**, against `memoryBudget`: Android `androidMemoryBudget`, iOS the chat model's load ceiling (`asr.md`; iOS free memory doesn't count mmap'd chat weights). No iOS ceiling yet means `fits`. The sheet renders the rows as given.
 
 ## Traps and decisions
 
 - **First audio at the first clause is the speech library's `firstChunk: 'clause'`** (`@pocketpalai/react-native-speech` 2.6.0, public API, no patch): the first chunk ends at the earliest of a sentence end, `[,;:—]`+space after 3 words, or 12 words. Its markdown buffer won't cut a first clause holding an inline marker (`*`, `_`, `` ` ``, `[`, `<`), so such a reply starts at its sentence end. Chat auto-speak never passes it.
-- **Markdown is stripped in `TTSStore` for voice streams** (`stripMarkdown: false` to the engine), so stream progress offsets index the text the store appended. Thinking placeholders are excluded from `voiceSpoken.text` by recorded range (a placeholder can share a chunk with reply text). `voiceSpoken` survives `stop()`.
+- **Stream progress only marks that speech began** (`voiceSpeechStarted`); the engine strips markdown, as for chat auto-speak.
 - **A local model holds the first voice chunk** until the reply settles or 1.5 s pass: synthesis next to decoding roughly doubled time to first audio on Pixel 9 / S23. Measured on CPU only, so every local backend holds; remote models never do.
 - **The mic waits `VOICE_CAPTURE_SETTLE_MS` (150 ms) after a stop before it starts again.** On Android the old read thread releases the shared recorder when it ends, so a quick restart could lose the new one.
 - **A started mic that sends no audio within `VOICE_MIC_WATCHDOG_MS` (3 s; a Bluetooth headset's mic route takes 1–3 s) is restarted once, then voice mode ends.** iOS `RNLiveAudioStream` only logs a failed start. Neither audio library reports route changes to JS, so it can't re-arm on one.
@@ -86,6 +85,6 @@ any open phase ─audio interruption began→ mic off, running turn interrupted 
 
 ## Verification
 
-- Unit: `src/services/voice/__tests__/` (rewrite races in `cascadeEngine`), `useVoiceMode.test.ts` (entry, exits, mic, interruptions), `VoiceModeStore.test.ts` (gate), the `Voice*` component suites, `ChatScreen.voice*.test.tsx`, `ChatInput.test.tsx`, `ChatView.voiceInput.test.tsx`, `markdownStreamBuffer.test.ts`, `TTSStore.test.ts` (voice stream, hold, heard trim), `voiceAutomation.test.ts`.
+- Unit: `src/services/voice/__tests__/` (interrupt races in `cascadeEngine`), `useVoiceMode.test.ts` (entry, exits, mic, interruptions), `VoiceModeStore.test.ts` (gate), the `Voice*` component suites, `ChatScreen.voice*.test.tsx`, `ChatInput.test.tsx`, `ChatView.voiceInput.test.tsx`, `TTSStore.test.ts` (voice stream, hold, speech started), `voiceAutomation.test.ts`.
 - Visual: a per-task Flavour B spec driven by `voice?cmd=` (`docs/workflows/visual-capture.md`).
-- By hand, on a high-tier Android phone and an iPhone with a neural voice, local model in airplane mode: a spoken turn (first audio before the reply ends; no thinking pass); a tap mid-speech leaves only the spoken text; End while transcribing, thinking and speaking; mute; drag down to the bar and up again, slowly and with a flick; a tap while thinking cancels; AirPods connected at entry; chat scrolling right after End; iOS listening → speech → listening still captures; the screen stays on through a 2-minute silent listen and sleeps after End; second and third turns still reach `speaking`.
+- By hand, on a high-tier Android phone and an iPhone with a neural voice, local model in airplane mode: a spoken turn (first audio before the reply ends; no thinking pass); a tap mid-speech stops speech and keeps the generated text; End while transcribing, thinking and speaking; mute; drag down to the bar and up again, slowly and with a flick; a tap while thinking cancels; AirPods connected at entry; chat scrolling right after End; iOS listening → speech → listening still captures; the screen stays on through a 2-minute silent listen and sleeps after End; second and third turns still reach `speaking`.
