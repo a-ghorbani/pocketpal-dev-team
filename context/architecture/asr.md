@@ -18,8 +18,8 @@ On-device tap-to-record speech-to-text for the chat composer: availability gate,
 | `src/services/asr/energyVad.ts` | `energyVad` (voiced-frame gate), `inputLevel` (chunk loudness for the waveform), `int16PcmToFloat32` |
 | `src/hooks/useVoiceCapture.ts` | the capture lifecycle (`start` / `stop` / `cancel`): permission, `AudioRecord` PCM stream, levels, VAD, transcribe, release. Mounted once, in `ChatInput` |
 | `src/utils/asrMicPermission.ts` | `ensureMicPermission` (returns granted, denied or blocked; Android blocked-without-dialog timeout), `openMicSettings` |
-| `src/components/MicButton/` | the composer mic, next to send; renders `null` when the gate is closed, routes to Settings when the tier isn't ready, else `onStart` |
-| `src/components/VoiceRecordingBar/` | replaces `ChatInput`'s control row while `recording` / `transcribing`: cancel, waveform from `inputLevels` (or a transcribing label, which says when it waits for the chat reply), stop |
+| `src/components/MicButton/` | the composer mic, next to send; renders `null` when the gate is closed, routes to Settings when the tier isn't ready, else `onStart`. `ChatInput` passes `micBeforeSend` (cancels send/stop's 16 px left margin) unless the video button follows; the send wrapper is `pointerEvents="box-none"` so that margin doesn't cover the mic |
+| `src/components/VoiceRecordingBar/` | replaces `ChatInput`'s control row while `recording` / `transcribing`: cancel, waveform from `inputLevels` (or a transcribing label, which says when it waits for the chat reply), stop; below them `Language: auto` or `Language: <CODE> (tap to reset)`, whose tap clears `spokenLanguage` so the next segment auto-detects |
 | `patches/@fugood+react-native-audio-pcm-stream+1.1.4.patch` | iOS: activate the `AVAudioSession` before recording (see Traps) |
 | `src/components/ChatView/ChatView.tsx` | `appendTranscript`, and the `asr-error-snackbar` keyed by `lastError` |
 | `src/screens/SettingsScreen/SettingsScreen.tsx` | the `asr-availability-switch` toggle and per-tier install / remove rows |
@@ -51,7 +51,7 @@ Before the permission prompt, `asrStore.hasMemoryForCapture()` (the rule is `whi
 ## Contracts and invariants
 
 - **The gate is derived.** `asrAvailable` and `deviceSupported` have no writer; they follow `modelStore.deviceTier`, which can change when the fetched device rules arrive. `userASROverride` is written only by `setUserASROverride` plus hydration. The `__E2E__`-only `asrAutomation` driver writes these fields (and `deviceTier`) directly and is the one sanctioned exception. The switch shows `userASROverride ?? deviceSupported`.
-- **`spokenLanguage` is persisted** and written only by the hook (first non-empty transcript), voice mode's cascade engine (the same rule) and Settings' Detect again (`null`). Settings shows it via `languageDisplayNames`, else the upper-case code.
+- **`spokenLanguage` is persisted** and written only by the hook (first non-empty transcript), voice mode's cascade engine (the same rule) and the resets in Settings and on the recording bar (`null`). Settings always shows the row while voice input is on: `Auto-detect`, or `Auto-detected: <name>` (via `languageDisplayNames`, else the upper-case code) with Reset. It stays set across recordings because auto-detect costs an extra encoder pass per call (below).
 - **The mic needs gate open and `isSelectedTierReady`.** Otherwise `MicButton` routes to Settings and `start` returns early.
 - **One install makes the mic usable**: `downloadModel` selects the tier; deleting the active tier reselects the first ready one, else `ASR_DEFAULT_TIER`.
 - **Install truth is on disk, per tier**: `asr/<tier>/` holds the model file and `model-version.json` at `ASR_MODEL_VERSION`; no store mirror. The sentinel is the last write; a failed download deletes the tier dir.
