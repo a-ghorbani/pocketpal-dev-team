@@ -11,12 +11,12 @@ Hands-free voice mode inside a chat: the user speaks, the reply is spoken, and t
 | Path | Role |
 | --- | --- |
 | `src/hooks/useVoiceMode.ts` | `VoiceModeController` (created once per chat screen) and the hook: entry order, mic capture, turns, every exit; returns `requestEntry`, `sheet`, `setupDone`, `continueAnyway`, `chooseSmallerModel`, `tapCloud`, `toggleMute`, `end` |
-| `src/store/VoiceModeStore.ts` | `voiceModeStore` (`phase`, `micMuted`, `presentation`, `lastError`, dev `unlockOverride`; derived `supported`, `isUnlocked`) and the `voiceEntitlement` instance with its default source |
-| `src/services/voice/entitlement.ts` | `VoiceEntitlement`: the swappable `source` (`isUnlocked`, `openPaywall`) and `register` |
+| `src/store/VoiceModeStore.ts` | `voiceModeStore` (`phase`, `micMuted`, `presentation`, `lastError`, E2E `unlockOverride`; derived `supported`, `isUnlocked`) and the `voiceEntitlement` instance with its default source |
+| `src/services/voice/entitlement.ts` | `VoiceEntitlement`: the registrable `source` (`isUnlocked`, `openPaywall({onUnlocked})`) and `register` |
 | `src/services/voice/cascadeEngine.ts` | `CascadeVoiceEngine`: `prepare` / `release` residency, `runTurn` → `{done, interrupt}` |
-| `src/services/voice/types.ts` | the engine seam: `VoiceEngine`, `VoiceTurnPort` (`send(text, onTurnCreated)`, `stop`), `VoiceTurnEvents`, `VoiceTurnOutcome` |
+| `src/services/voice/types.ts` | the engine interface (one implementation; its readiness and memory checks live in the controller): `VoiceEngine`, `VoiceTurnPort` (`send(text, onTurnCreated)`, `stop`), `VoiceTurnEvents`, `VoiceTurnOutcome` |
 | `src/services/voice/endpointer.ts` | `Endpointer`: lead-in trim, 600 ms hang after speech, 25 s cap, manual tap |
-| `src/services/voice/memoryFit.ts` | pure `voiceMemoryFit` → `fits` / `tight` / `wont_fit` plus the breakdown |
+| `src/services/voice/memoryFit.ts` | pure `voiceMemoryFit` → `fits` / `tight` / `wont_fit` plus the rows it counted; memory read and Android budget come from `services/asr` (`readDeviceMemory`, `androidMemoryBudget`) |
 | `src/services/voice/readiness.ts` | `isVoiceModeVoice` (neural only), `isMicGranted` (no prompt) |
 | `src/services/voice/constants.ts` | `VOICE_ENDPOINT_HANG_MS`, `VOICE_FIRST_CHUNK_HOLD_MS`, `VOICE_MODE_UNLOCKED_DEFAULT` |
 | `src/components/VoiceModeButton/` | composer button (waveform, lock badge), in Send's slot while the input is empty |
@@ -31,10 +31,10 @@ Hands-free voice mode inside a chat: the user speaks, the reply is spoken, and t
 
 ## How it works
 
-`requestEntry`, in order: locked → `voiceEntitlement.source.openPaywall()`; no `activeModelId` → ChatView's model picker (no resume after the pick); `isContextLoading` → nothing; setup incomplete (base not `ready`, voice null or `system`, mic not granted) → setup sheet, whose Continue downloads base with `{select: false}`, then `ensureMicPermission()`, then `setupDone`; then `voiceMemoryFit`: `fits` enters, `tight` / `wont_fit` open the memory sheet. Enter: `setVoiceOutputActive(true, {holdFirstChunk: model is local})`, `ttsStore.stop()`, one keep-awake hold, `engine.prepare()`, then `listening` and `full`.
+`requestEntry`, in order: locked → `voiceEntitlement.source.openPaywall({onUnlocked})`, where `onUnlocked` re-runs `requestEntry`; no `activeModelId` → ChatView's model picker (no resume after the pick); `isContextLoading` → nothing; setup incomplete (base not `ready`, voice null or `system`, mic not granted) → setup sheet, whose Continue downloads base with `{select: false}`, then `ensureMicPermission()`, then `setupDone`; then `voiceMemoryFit`: `fits` enters, `tight` / `wont_fit` open the memory sheet. Enter: `setVoiceOutputActive(true, {holdFirstChunk: model is local})`, `ttsStore.stop()`, one keep-awake hold, `starting` and `full` at once, `engine.prepare()`, then `listening`. A failed prepare or `AudioRecord.init` shows a localized `uiStore.chatWarning` and exits.
 
 ```
-closed ─enter→ listening ─endpoint (hang | tap with speech | cap)→ transcribing
+closed ─enter→ starting ─prepared→ listening ─endpoint (hang | tap with speech | cap)→ transcribing
 transcribing ─empty | VAD reject→ listening        ─throw→ listening (transcribe_failed)
 transcribing ─text→ thinking ─first chunk plays→ speaking ─run settled ∧ TTS idle→ listening
 thinking ─settled, nothing spoken→ listening (reply_failed if it failed)
@@ -48,20 +48,22 @@ any ─End | background | blur | chat switch* | activeModelId / contextId change
 ## Contracts and invariants
 
 - **Voice never writes the TTS gate or auto-speak.** One getter, `ttsStore.streamsReplies` (`voiceOutputActive || (isTTSAvailable && autoSpeakEnabled)`), opens the stream; with voice closed it equals the chat predicate (`tts.md`).
-- **Single writers.** `phase` / `micMuted` / `lastError`: the controller only. `presentation`: `setPresentation` from the view, bar and back. `voiceOutputActive`: controller enter / exit. `unlockOverride`: dev / E2E drivers, persisted only under `__DEV__ || __E2E__`.
+- **Single writers.** `phase` / `micMuted` / `lastError`: the controller only. `presentation`: `setPresentation` from the view, bar and back. `voiceOutputActive`: controller enter / exit. `unlockOverride`: E2E drivers, persisted only under `__E2E__`.
 - **Voice turns are chat turns.** Every turn goes through `handleSendPress` under the generation lease; `applyEventToStore` stays the only store writer during a run.
-- **The spoken rewrite runs only after the send settles**, and only if `voiceSpoken.messageId` is this turn's, in any phase (End right after the first chunk starts still rewrites; a `voiceSpoken` left from an earlier turn never does). `rewriteTurnToSpoken` keeps every step's tool calls, outcomes and reasoning, clears content, and puts the spoken text in the last step, so the next prompt holds only what was heard. `interrupt()` after `done` is a no-op.
+- **The spoken rewrite runs only after the send settles**, and only if `voiceSpoken.messageId` is this turn's and its text is non-empty (a turn where only the thinking placeholder played keeps its partial text), in any phase (End right after the first chunk starts still rewrites; a `voiceSpoken` left from an earlier turn never does). `rewriteTurnToSpoken` keeps every step's tool calls, outcomes and reasoning, clears content, and puts the spoken text in the last step, so the next prompt holds only what was heard. An assistant turn where nothing was heard gets `metadata.spoken = false`, so it shows no Spoken marker. `interrupt()` after `done` is a no-op.
 - **Whisper is resident for the session**: `prepare` preloads base; nothing releases it until exit. Every exit runs, in order: `phase = closed`, mic stop, `turn.interrupt()`, `engine.release()` (Whisper, and TTS only when auto-speak is off), the keep-awake release, `setVoiceOutputActive(false)`. A re-entry awaits the previous exit.
-- **Dictation's rules hold.** `wont_fit` is exactly `whisperFits` / `hasMemoryForCapture('base')`, so voice never runs where dictation would refuse base. Voice and dictation never overlap: the button needs dictation idle, and the composer is gone while `phase ≠ closed`. `useVoiceCapture` and `SpeechSegmenter` are untouched.
+- **Dictation's rules hold.** `wont_fit` is exactly `whisperFits` for base, the rule `hasMemoryForCapture` applies, so voice never runs where dictation would refuse base. Voice and dictation never overlap: the button needs dictation idle, and the composer is gone while `phase ≠ closed`. `useVoiceCapture` and `SpeechSegmenter` are untouched.
 - **The mic runs only in `listening ∧ !micMuted`**, started imperatively by the controller on its own transitions, never by a reaction on `phase`, so a forced phase (automation) starts nothing. No echo capture: there is no barge-in.
 - **Neural voices only.** The `system` engine reports no chunk progress, which `speaking` and the rewrite need.
-- **The paywall is a seam.** Default locked, `openPaywall` only warns; the purchase flow calls `voiceEntitlement.register(source)` (`in-app-purchase.md`). A release build before that ships the icon locked.
+- **The paywall is a seam.** Default locked, `openPaywall` only warns; the purchase flow calls `voiceEntitlement.register(source)` (`in-app-purchase.md`), shaped like the Plus gate's `openPlus({onUnlocked})`. A release build before that ships the icon locked.
+- **Memory rows are per platform.** Android counts chat + Whisper + voice against `androidMemoryBudget`; iOS counts Whisper and the voice (0 when loaded) with headroom against the app's available memory, with no chat row, since that figure already holds the chat model. The sheet renders the rows as given.
 
 ## Traps and decisions
 
 - **First audio at the first clause is a speech-library patch** (`release.md`): `firstChunk: 'clause'` cuts the first chunk at the earliest of a sentence end, `[,;:—]`+space after 3 words, or 12 words. Chat auto-speak never passes it.
 - **Markdown is stripped in `TTSStore` for voice streams** (`stripMarkdown: false` to the engine), so stream progress offsets index the text the store appended. Thinking placeholders are recorded as ranges at the real append and excluded from `voiceSpoken.text`; string matching fails when a placeholder shares a chunk with reply text. `voiceSpoken` survives `stop()`.
 - **A local model holds the first voice chunk** until the reply settles or 1.5 s pass: synthesis next to decoding roughly doubled time to first audio on Pixel 9 / S23. Measured on CPU only, so every local backend holds; remote models never do.
+- **The mic waits `VOICE_CAPTURE_SETTLE_MS` (150 ms) after a stop before it starts again.** On Android, the recorder's read thread releases the shared recorder when it ends, so a restart right after an `'empty'` turn could lose the new recorder and leave the session deaf with the mic held.
 - **The library's chunk-progress callback is one global slot**, cleared by a stream's cleanup. A new stream is created only after the previous one's cancel resolves (`waitFor`), and a turn ends only at `playbackState` idle, after finalize's cleanup. A second or third turn that never reaches `speaking` points here.
 - **Keep-awake is counted** (`chat-flow.md`): the voice hold and a turn's hold coexist.
 - **Exit on chat switch, background, blur and model change**: mic and Whisper can't run backgrounded, and the memory fit would be stale. One exemption: in a chat with no session yet, the first spoken send creates the session, so `activeSessionId` going from none to an id is ignored only from the start of `port.send` until `onTurnCreated`, with the model and context unchanged. A switch during transcribing, or after the turn row exists, still closes the session, so a turn is never written into another chat. iOS `inactive` (call, Control Center) doesn't end the session; returning to `active` while listening restarts capture.
