@@ -60,7 +60,7 @@ any open phase ─audio interruption began→ mic off, running turn interrupted 
 - **The mic runs only in `listening ∧ !micMuted`**, started by the controller's own transitions, never by a reaction on `phase`, so a forced phase starts nothing. No barge-in.
 - **Neural voices only.** The `system` engine reports no chunk progress, which `speaking` needs.
 - **The paywall is a seam.** Default locked, `openPaywall` only warns; the purchase flow calls `voiceEntitlement.register(source)` (`in-app-purchase.md`), shaped like the Plus gate's `openPlus({onUnlocked})`. A release build before that ships the icon locked.
-- **Memory rows are chat + Whisper + voice on both platforms**, against `memoryBudget`: Android `androidMemoryBudget`, iOS the chat model's load ceiling (`asr.md`; iOS free memory doesn't count mmap'd chat weights). No iOS ceiling yet means `fits`. The sheet renders the rows as given.
+- **Memory rows are chat + Whisper + voice on both platforms**, against `memoryBudget`: Android `androidMemoryBudget`, iOS the free memory it reported before any chat model loaded, `availableMemoryCeiling` (`asr.md`; later readings don't count mmap'd chat weights). Not yet known means `fits`. The sheet renders the rows as given.
 
 ## Traps and decisions
 
