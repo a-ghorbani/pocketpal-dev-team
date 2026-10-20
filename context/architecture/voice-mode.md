@@ -39,7 +39,8 @@ transcribing ─empty | VAD reject→ listening        ─throw→ listening (tr
 transcribing ─text→ thinking ─first chunk plays→ speaking ─run settled ∧ TTS idle→ listening
 thinking ─settled, nothing spoken→ listening (reply_failed if it failed)
 speaking ─tap→ interrupt → listening              ─finalize rejects→ listening (speech_failed)
-any ─End | background | blur | chat switch | activeModelId / contextId change | unmount | mic failure→ closed
+any ─End | background | blur | chat switch* | activeModelId / contextId change | unmount | mic failure→ closed
+  * except the session a new chat's own spoken send creates (see Traps)
 ```
 
 `micMuted` and `presentation` are independent of `phase`. A turn: `energyVad`, `whisperAsrEngine.transcribe` (base, `spokenLanguage`), `port.send(text, onTurnCreated)` (= `handleSendPress(…, {spoken: true, onTurnCreated})`), `speechStarted` when `ttsStore.voiceSpoken.messageId` is this turn, `done` after the send settles and `playbackState` is idle.
@@ -63,7 +64,7 @@ any ─End | background | blur | chat switch | activeModelId / contextId change 
 - **A local model holds the first voice chunk** until the reply settles or 1.5 s pass: synthesis next to decoding roughly doubled time to first audio on Pixel 9 / S23. Measured on CPU only, so every local backend holds; remote models never do.
 - **The library's chunk-progress callback is one global slot**, cleared by a stream's cleanup. A new stream is created only after the previous one's cancel resolves (`waitFor`), and a turn ends only at `playbackState` idle, after finalize's cleanup. A second or third turn that never reaches `speaking` points here.
 - **Keep-awake is counted** (`chat-flow.md`): the voice hold and a turn's hold coexist.
-- **Exit on chat switch, background, blur and model change**: mic and Whisper can't run backgrounded, and the memory fit would be stale. iOS `inactive` (call, Control Center) doesn't end the session; returning to `active` while listening restarts capture.
+- **Exit on chat switch, background, blur and model change**: mic and Whisper can't run backgrounded, and the memory fit would be stale. One exemption: in a chat with no session yet, the first spoken send creates the session, so `activeSessionId` going from none to an id is ignored only from the start of `port.send` until `onTurnCreated`, with the model and context unchanged. A switch during transcribing, or after the turn row exists, still closes the session, so a turn is never written into another chat. iOS `inactive` (call, Control Center) doesn't end the session; returning to `active` while listening restarts capture.
 - **`transcribing` and `thinking` share one cloud look**; errors are a subtitle until the next phase change, since every failure resumes listening.
 - **Overlay, not a route**: `useChatSession` must stay mounted, and the bar shares the chat.
 - **The cloud uses theme tokens** (`secondary`, `tertiary`, `accent.peach`, `inverseSecondary`), so in dark mode the periwinkle blob turns teal. It honours reduced motion.
