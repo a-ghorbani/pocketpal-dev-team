@@ -61,7 +61,7 @@ any ─step_started (initial or follow-up)→ prefill
 
 - Storage is rolled up: one `assistant_turn` row per turn, with outcomes nested in their step. Messages are stored newest-first (`[0]`). On the wire, `stepToApiMessages` flattens a step to an assistant message (`content`, `tool_calls`, `reasoning_content`), then one `tool` message per outcome (`src/utils/chat.ts:77`).
 - Orphan guard: a call with no outcome gets a synthetic `{role:'tool', content:'aborted'}` message (`chat.ts:99`). Strict Jinja templates reject an unanswered `tool_call_id`, and an abort mid-tool leaves one behind.
-- `step.toolOutcomes` is always a call-order prefix of `step.toolCalls`, because the runner yields finishes in call order even when calls settle out of order (`agent-runner.md`, pending PR). Replay therefore emits real outcomes, then orphan stubs, in `toolCalls` order, matching the in-run messages and the KV-cache prefix; many chat templates pair tool responses by position.
+- `step.toolOutcomes` is always a call-order prefix of `step.toolCalls`, because the runner yields finishes in call order even when calls settle out of order (`agent-runner.md`). Replay therefore emits real outcomes, then orphan stubs, in `toolCalls` order, matching the in-run messages and the KV-cache prefix; many chat templates pair tool responses by position.
 - `step.toolCalls[i].id === outcome.callId` holds by construction: `appendToolCall` runs once per step, on `step_finished`, with the runner's normalised ids. Token deltas never write `toolCalls` (`useChatSession.ts:374-390`).
 
 **Single writers**
