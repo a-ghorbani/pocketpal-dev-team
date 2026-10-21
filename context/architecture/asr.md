@@ -1,6 +1,6 @@
 # Voice Input (ASR) Flow
 
-> **Status: not on `main`.** This code lives only on `feature/TASK-20260619-2246`, the branch of draft PR #786 (merged up to `main`; llama.rn 0.13.0-rc.5, whisper.rn 0.7.4). The paths below exist there, not on `main`.
+> **Status:** on `main` since #786 (whisper.rn 0.7.4). `whisperFits.ts` / `deviceMemory.ts`, the rule shared with voice mode, land with voice mode's pending PR; on `main` the same rule is inline in `ASRStore.hasMemoryForCapture`.
 
 ## Purpose
 
