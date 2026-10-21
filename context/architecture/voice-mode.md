@@ -1,6 +1,6 @@
 # Voice Mode Flow
 
-> **Status: pending PR, stacked on draft PR #786.** It needs on-device ASR, which exists only on #786's branch (`asr.md`), so it lands after #786.
+> **Status: pending PR #1007.** On-device ASR (#786, `asr.md`) is on main.
 
 ## Purpose
 
