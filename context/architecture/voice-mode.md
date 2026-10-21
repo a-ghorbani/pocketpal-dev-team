@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Hands-free voice mode inside a chat: the user speaks, the reply is spoken, and the chat itself is the transcript. Covers entry (paywall seam, model, setup, combined memory fit), the session controller and its state machine, the cascade engine (Whisper, the normal send path, TTS), the spoken rewrite after an interrupt, and the voice view and bar. Elsewhere: Whisper and dictation (`asr.md`), TTS engines and the stream (`tts.md`), the send path and keep-awake (`chat-flow.md`), purchases (`in-app-purchase.md`).
+Hands-free voice mode inside a chat: the user speaks, the reply is spoken, and the chat itself is the transcript. Covers entry (paywall seam, model, setup, combined memory fit), the session controller and its state machine, the cascade engine (Whisper, the normal send path, TTS), interrupt handling, and the voice view and bar. Elsewhere: Whisper and dictation (`asr.md`), TTS engines and the stream (`tts.md`), the send path and keep-awake (`chat-flow.md`), purchases (`in-app-purchase.md`).
 
 ## Code map
 
