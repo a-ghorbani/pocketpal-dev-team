@@ -20,7 +20,7 @@ Voice mode's paywall is not bought here yet: it reads a seam, `voiceEntitlement.
 | `src/services/iap/bindingSource.ts` | The Buy binding, fetched only for a signed-in Pal purchase |
 | `src/services/plus/catalog.ts` | (pending PR) `PLUS_PRODUCT_IDS`, the only Plus product list, and `PLUS_FEATURES`, the bundled feature table |
 | `src/services/plus/features.ts`, `deviceRam.ts`, `shipOverride.ts`, `shipped.ts` | (pending PR) Feature status rows, the one RAM read per process, the `__E2E__`-only "shipped" override; `shipped.ts` (`shippedPlusFeatures`, `plusFeatureRows`) is the one derived source the gate, sidebar item and screen read. Feature ids are typed as the `plus.features` keys of `en.json` |
-| `src/services/plus/gate.ts` | (pending PR) `isPlusUnlocked`, `isPlusAvailable`, `openPlus`, `dismissPlus`, `whenPlusReady`, `plusGate.request` |
+| `src/services/plus/gate.ts` | (pending PR) `isPlusUnlocked`, `isPlusAvailable`, `openPlus`, `dismissPlus`, `plusGate.request` |
 | `src/screens/PlusScreen/` | (pending PR) The Plus screen; `plusScreenState.ts` is its state table |
 | `src/components/PlusHost/`, `src/components/SidebarContent/PlusDrawerItem/` | (pending PR) Global host and sidebar entry (`app-shell.md`) |
 | `src/services/palshub/apiBase.ts`, `palEvents.ts` | API base and client headers; funnel events |
@@ -96,12 +96,12 @@ Plus (pending PR):
 - **Pending is memory-only.** Android re-derives it from each clean query; iOS clears it only on Restore.
 - **Plus before Pal.** `recoverOnce` and `restore` settle Plus before the Pal loop; `dropStalePending` still gets every transaction.
 - **Buy waits for `plusChecked`,** set by the first Plus step (any `ok`) or a recovery throw, never by a billing-init failure; also refused while unlocked, pending or paying.
-- **`loadPlus` seeds once** and every Plus writer awaits it. `isPlusUnlocked()` is false until then; boot-time readers await `whenPlusReady()`.
+- **`loadPlus` seeds once** and every Plus writer awaits it. `isPlusUnlocked()` is false until then; a boot-time reader awaits `purchaseStore.loadPlus()`.
 - **One of each:** product list, check (`isPlusUnlocked`), availability (`isPlusAvailable`), entry (`openPlus`), host (`PlusHost`).
 - **Availability gates UI, never the store.** With no shipped `PLUS_FEATURES` row: no sidebar entry, `openPlus` no-op; the store side still runs, so an owner is unlocked when a feature ships.
 - **Feature status is bundled:** `PLUS_FEATURES` and device RAM (`minRamGb × 0.85 × 10⁹`) only; RAM-gated rows wait for the RAM read.
-- **Restore** awaits the in-flight recovery (or runs one) when billing isn't ready, keeping `recoverOnce` the only availability writer, and resolves `{queryOk}`.
-- **The Plus product fetch** is single-flight, separate from the Pal fetch and outside `requestedProducts`. It starts only when billing becomes ready and when the Plus host opens (`openPlus` → `retryPlusProducts`), never from the PalsHub-driven `syncProducts`, and it asks only for missing IDs. The open-time retry sets `plusProductsLoading` before the first frame, and nothing retries while the screen is open (pending PR).
+- **Restore** awaits the in-flight recovery (or runs one) when billing isn't ready, keeping `recoverOnce` the only availability writer, and resolves `{queryOk}`. The Plus screen disables Restore while restoring or paying (pending PR).
+- **The Plus product fetch** is single-flight, separate from the Pal fetch and outside `requestedProducts`. It starts only when billing becomes ready and when the Plus host opens (`openPlus` → `retryPlusProducts`), never from the PalsHub-driven `syncProducts`, and it asks only for missing IDs. The open-time retry sets `plusProductsLoading` before the first frame, and nothing retries while the screen is open. The fetch counts as loading only while no Plus price has loaded, so a missing ID never hides the loaded prices; the loading phase shows a spinner in the button slot (pending PR).
 
 ## Traps and decisions
 
@@ -136,6 +136,6 @@ Plus (pending PR):
 ## Verification
 
 - Jest: `src/store/__tests__/PurchaseStore.{pipeline,recover,link,update,accountDeletion,storefront}.test.ts`, `PurchaseStore.plus.test.ts` and `src/services/plus/__tests__/` (pending PR), `src/services/iap/__tests__/` (including the exact refresh body), `PalStore.install.test.ts`, and the footer, model step and Purchases card tests.
-- e2e: `e2e/specs/features/iap-{purchase,recovery,restore}.spec.ts`, run against the FakeStore and `e2e/helpers/iapMockServer.ts` (`adb reverse tcp:8787` on Android). `iap-plus.spec.ts` (pending PR) sets `plus_ship::<feature>` after every `reset` (which clears it) and asserts no Plus verify, refresh or event traffic.
+- e2e: `e2e/specs/features/iap-{purchase,recovery,restore}.spec.ts`, run against the FakeStore and `e2e/helpers/iapMockServer.ts` (`adb reverse tcp:8787` on Android). `iap-plus.spec.ts` (pending PR) sets `plus_ship::<feature>` after every `reset` (which clears it and the saved Plus unlock) and asserts no Plus verify, refresh or event traffic.
 - Plus by hand (pending PR): an iOS sandbox and an Android licence-tester run of purchase from the host, slow card (pending), declined card, reinstall + Restore, and a Play Console refund with Remove entitlement (relock on the next foreground).
 - By hand (Android): a prod build, sideloaded, signed in with a licence tester, against production. Buy with "always approves", the slow card (pending) and "always declines" (Buy must stay), reinstall + Restore, and a Play Console refund (the Pal locks on the next refresh, Buy returns, and buying again ends on Open). After a classpath change, check that Buy and the restore row appear on a real-store build.
