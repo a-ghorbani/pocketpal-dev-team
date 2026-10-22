@@ -4,13 +4,13 @@
 
 ## Purpose
 
-Hands-free voice mode inside a chat: the user speaks, the reply is spoken, and the chat itself is the transcript. Covers entry (Plus entitlement, model, setup, combined memory fit), the session controller and its state machine, the cascade engine (Whisper, the normal send path, TTS), interrupt handling, and the voice view and bar. Elsewhere: Whisper and dictation (`asr.md`), TTS engines and the stream (`tts.md`), the send path and keep-awake (`chat-flow.md`), purchases (`in-app-purchase.md`).
+Hands-free voice mode inside a chat: the user speaks, the reply is spoken, and the chat itself is the transcript. Covers entry (Plus entitlement and its teaser, model, setup, combined memory fit), the session controller and its state machine, the cascade engine (Whisper, the normal send path, TTS), interrupt handling, and the voice view and bar. Elsewhere: Whisper and dictation (`asr.md`), TTS engines and the stream (`tts.md`), the send path and keep-awake (`chat-flow.md`), purchases (`in-app-purchase.md`).
 
 ## Code map
 
 | Path | Role |
 | --- | --- |
-| `src/hooks/useVoiceMode.ts` | `VoiceModeController` (created once per chat screen) and the hook: entry order, mic capture, turns, every exit; returns `requestEntry`, `sheet`, `setupDone`, `continueAnyway`, `chooseSmallerModel`, `tapCloud`, `toggleMute`, `end` |
+| `src/hooks/useVoiceMode.ts` | `VoiceModeController` (created once per chat screen) and the hook: entry order, mic capture, turns, every exit; returns `requestEntry({openModelPicker, focusInput})`, `sheet` (`teaser` / `setup` / `memory`), `getPlus`, `keepTyping`, `dismissSheet`, `setupDone`, `continueAnyway`, `chooseSmallerModel`, `tapCloud`, `toggleMute`, `end` |
 | `src/store/VoiceModeStore.ts` | `voiceModeStore` (`phase`, `micMuted`, `presentation`, `lastError`, persisted `userVoiceModeOverride`, E2E `unlockOverride`; derived `deviceSupported`, `supported`, `isOpen`, `isFullViewOpen`, `isUnlocked`) and the `voiceEntitlement` instance, whose default source is PocketPal Plus |
 | `src/services/voice/entitlement.ts` | `VoiceEntitlement`: the registrable `source` (`isUnlocked`, `openPaywall({onUnlocked})`) and `register` |
 | `src/services/voice/cascadeEngine.ts` | `CascadeVoiceEngine`: `prepare` / `release` residency, `runTurn` → `{done, interrupt}` |
@@ -19,19 +19,20 @@ Hands-free voice mode inside a chat: the user speaks, the reply is spoken, and t
 | `src/services/voice/memoryFit.ts` | pure `voiceMemoryFit` → `fits` / `tight` / `wont_fit` plus the rows it counted; memory read and budget come from `services/asr` (`readDeviceMemory(modelStore)`, `memoryBudget`) |
 | `src/services/voice/readiness.ts` | `isVoiceModeVoice` (neural only), `isMicGranted` (no prompt) |
 | `src/services/voice/constants.ts` | `VOICE_ENDPOINT_HANG_MS`, `VOICE_FIRST_CHUNK_HOLD_MS`, `VOICE_CAPTURE_SETTLE_MS`, `VOICE_MIC_WATCHDOG_MS`, `VOICE_START_TIMEOUT_MS` |
-| `src/components/VoiceModeButton/` | composer button (waveform, lock badge), in Send's slot while the input is empty |
+| `src/components/VoiceModeButton/` | composer button (waveform), in Send's slot while the input is empty; 40 pt with a 44 pt hit area. Locked: soft `surfaceVariant` fill with an `outline` border, `onSurface` icon, peach sparkle badge (`voice-mode-lock`), label "Hands-free voice, PocketPal Plus" and a preview hint |
+| `src/components/VoiceTeaser/` | locked voice mode's full-screen overlay over the chat: the still cloud, a card with Get Plus and Keep typing, free; ✕, Android back, a pull down and the screen-reader escape close it; screen-reader focus moves to its title |
 | `src/components/VoiceModeView/` | full-screen overlay: cloud, status, mute, End; it follows a downward drag and collapses on distance or a flick (Android back and "Show chat" too); `VoiceModeControlsContext`; `voiceStatus` |
 | `src/services/voice/deviceGate.ts` | `voiceModeDeviceSupported(tier, os)`: voice mode's own device gate |
 | `src/components/VoiceBar/` | the collapsed session in the composer's slot; tap, or a drag up past the distance or a flick, expands |
-| `src/components/VoiceCloud/` | SVG radial-gradient blobs with Reanimated motion per visual; `voiceVisual(phase, micMuted)` |
+| `src/components/VoiceCloud/` | SVG radial-gradient blobs with Reanimated motion per visual, plus `still` (full colour, no motion; the teaser's); `voiceVisual(phase, micMuted)` |
 | `src/components/VoiceSetupSheet/`, `VoiceMemorySheet/` | first-use setup (Whisper base, neural voice, mic); memory breakdown with Continue anyway / Choose a smaller model |
-| `src/screens/ChatScreen/ChatScreen.tsx` | builds the turn port from `handleSendPress` / `handleStopPress`, mounts the hook, provides the controls, renders the view and both sheets, and calls `end()` when a video Pal takes over (the one exit outside the controller) |
-| `src/components/ChatInput/ChatInput.tsx`, `ChatView/ChatView.tsx` | `onVoicePress` / `onVoiceModePress`; ChatView shows `VoiceBar` instead of `ChatInput` while `phase ≠ closed` |
+| `src/screens/ChatScreen/ChatScreen.tsx` | builds the turn port from `handleSendPress` / `handleStopPress`, mounts the hook, provides the controls, renders the view, the teaser and both sheets (the chat is hidden from screen readers under the view or the teaser), and calls `end()` when a video Pal takes over (the one exit outside the controller) |
+| `src/components/ChatInput/ChatInput.tsx`, `ChatView/ChatView.tsx` | `onVoicePress(focusInput)` / `onVoiceModePress({openModelPicker, focusInput})`; ChatView shows `VoiceBar` instead of `ChatInput` while `phase ≠ closed` |
 | `src/__automation__/voiceAutomation.ts`, `adapters/VoiceAdapter.tsx` | E2E driver for visual captures (`pocketpal://voice?cmd=` on iOS, the bridge input on Android) |
 
 ## How it works
 
-`requestEntry`, in order: locked → `voiceEntitlement.source.openPaywall({onUnlocked})`, where `onUnlocked` re-runs `requestEntry`; no `activeModelId` → ChatView's model picker (no resume after the pick); `isContextLoading` → nothing; setup incomplete (base not `ready`, voice null or `system`, mic not granted) → setup sheet, whose Continue downloads base with `{select: false}`, then (only if the sheet is still open) `ensureMicPermission()` and `setupDone`; then `voiceMemoryFit`: `fits` enters, `tight` / `wont_fit` open the memory sheet. Enter: `setVoiceOutputActive(true, {holdFirstChunk: model is local})`, `ttsStore.stop()`, one keep-awake hold, `starting` and `full` at once, `engine.prepare()` (limited to `VOICE_START_TIMEOUT_MS`, 45 s), then `listening`. A failed or timed-out prepare, a failed `AudioRecord.init`, or a mic that stays silent shows a localized `uiStore.chatWarning` and exits. The keyboard is closed before entry.
+`requestEntry`, in order: locked → the teaser (`sheet = teaser`, on every tap, nothing persisted). Its Get Plus closes it and calls `voiceEntitlement.source.openPaywall({onUnlocked})`, where `onUnlocked` re-runs `requestEntry` with the same actions; Keep typing closes it and calls `focusInput`; ✕, back, pull down and escape only close it (`dismissSheet`); no `activeModelId` → ChatView's model picker (no resume after the pick); `isContextLoading` → nothing; setup incomplete (base not `ready`, voice null or `system`, mic not granted) → setup sheet, whose Continue downloads base with `{select: false}`, then (only if the sheet is still open) `ensureMicPermission()` and `setupDone`; then `voiceMemoryFit`: `fits` enters, `tight` / `wont_fit` open the memory sheet. Enter: `setVoiceOutputActive(true, {holdFirstChunk: model is local})`, `ttsStore.stop()`, one keep-awake hold, `starting` and `full` at once, `engine.prepare()` (limited to `VOICE_START_TIMEOUT_MS`, 45 s), then `listening`. A failed or timed-out prepare, a failed `AudioRecord.init`, or a mic that stays silent shows a localized `uiStore.chatWarning` and exits. The keyboard is closed before entry.
 
 ```
 closed ─enter→ starting ─prepared→ listening ─endpoint (hang | tap with speech | cap)→ transcribing
@@ -59,7 +60,8 @@ any open phase ─audio interruption began→ mic off, running turn interrupted 
 - **Dictation's rules hold.** `wont_fit` is `whisperFits` for base, dictation's rule. The two never overlap: the button needs dictation idle, and the composer is gone while a session is open.
 - **The mic runs only in `listening ∧ !micMuted`**, started by the controller's own transitions, never by a reaction on `phase`, so a forced phase starts nothing. No barge-in.
 - **Neural voices only.** The `system` engine reports no chunk progress, which `speaking` needs.
-- **Voice mode is a Plus feature** (`handsFreeVoice`, shipped; `in-app-purchase.md`). The default source is `unlockOverride ?? isPlusUnlocked()`, and its paywall is `openPlus({onUnlocked})`; `onUnlocked` re-runs entry once the Plus screen is dismissed unlocked. `register(source)` stays the seam for tests. E2E: `unlock::on|off` forces it, and `unlock::plus` clears the override so a FakeStore purchase decides.
+- **Voice mode is a Plus feature** (`handsFreeVoice`, shipped; `in-app-purchase.md`), and the paywall opens only from the teaser's Get Plus, never from the voice button itself. The default source is `unlockOverride ?? isPlusUnlocked()`, and its paywall is `openPlus({onUnlocked})`; `onUnlocked` re-runs entry once the Plus screen is dismissed unlocked. `register(source)` stays the seam for tests. E2E: `unlock::on|off` forces it, and `unlock::plus` clears the override so a FakeStore purchase decides.
+- **The teaser is a picture, not a session.** It is a controller sheet, so `phase` stays `closed`: no `prepare`, mic, audio session, Whisper, TTS, keep-awake or permission prompt.
 - **Memory rows are chat + Whisper + voice on both platforms**, against `memoryBudget`: Android `androidMemoryBudget`, iOS `ASR_IOS_CEILING_SHARE` (0.8) of the free memory it reported before any chat model loaded, `availableMemoryCeiling` (`asr.md`; later readings don't count mmap'd chat weights, and a pair that fit the full figure aborted Whisper's init). The share is applied once, in `memoryBudget`, so the sheet's available figure is the reduced one; 4B Q4 + Base won't fit at 4.2 GB. Not yet known means `fits`. The sheet renders the rows as given.
 
 ## Traps and decisions
@@ -82,10 +84,12 @@ any open phase ─audio interruption began→ mic off, running turn interrupted 
 - **After End, the models are freed when the JS thread is idle** (`requestIdleCallback`; RN 0.87 removed `InteractionManager`), so the teardown doesn't land on a scroll. ChatScreen and ChatView read `isFullViewOpen` / `isOpen`, not `phase`, so a turn's phase changes don't re-render the chat; the cloud cancels its loops on unmount.
 - **`transcribing` and `thinking` share one cloud look**; errors are a subtitle until the next phase change, since every failure resumes listening.
 - **Overlay, not a route**: `useChatSession` must stay mounted, and the bar shares the chat.
+- **Teaser before the paywall**: the locked button used to open Plus straight away, which users who had not chatted yet could read as "chatting costs money". The teaser shows what they tapped and a free way back to typing. It is an overlay like the view, not a `Modal`, so Keep typing can focus the composer at once; the composer's own ref travels as `focusInput` through `onVoicePress`.
 - **Android gets no automation deep-link hosts**, so voice captures there go through `VoiceAdapter` (`voice-command-input`).
 
 ## Verification
 
-- Unit: `src/services/voice/__tests__/` (interrupt races in `cascadeEngine`), `useVoiceMode.test.ts` (entry, exits, mic, interruptions), `VoiceModeStore.test.ts` (gate), the `Voice*` component suites, `ChatScreen.voice*.test.tsx`, `ChatInput.test.tsx`, `ChatView.voiceInput.test.tsx`, `TTSStore.test.ts` (voice stream, hold, speech started), `voiceAutomation.test.ts`.
+- Unit: `src/services/voice/__tests__/` (interrupt races in `cascadeEngine`), `useVoiceMode.test.ts` (entry and the teaser, exits, mic, interruptions), `VoiceModeStore.test.ts` (gate), the `Voice*` component suites, `ChatScreen.voice*.test.tsx`, `ChatInput.test.tsx`, `ChatView.voiceInput.test.tsx`, `TTSStore.test.ts` (voice stream, hold, speech started), `voiceAutomation.test.ts`.
+- E2E: `iap-plus.spec.ts` taps the locked button, keeps typing, then reaches Plus through the teaser and buys.
 - Visual: a per-task Flavour B spec driven by `voice?cmd=` (`docs/workflows/visual-capture.md`).
 - By hand, on a high-tier Android phone and an iPhone with a neural voice, local model in airplane mode: a spoken turn (first audio before the reply ends; no thinking pass); a tap mid-speech stops speech and keeps the generated text; End while transcribing, thinking and speaking; mute; drag down to the bar and up again, slowly and with a flick; a tap while thinking cancels; AirPods connected at entry; chat scrolling right after End; iOS listening → speech → listening still captures; the screen stays on through a 2-minute silent listen and sleeps after End; second and third turns still reach `speaking`.
