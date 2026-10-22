@@ -4,7 +4,7 @@
 
 Buying a paid PalsHub Pal through the platform store (StoreKit 2 on iOS, Play Billing on Android), turning the transaction into an installed Pal, and keeping ownership correct across crashes, refunds, withdrawals, creator updates and restore; and the PocketPal Plus entitlement, which is store-only and never touches PalsHub. Not covered: the Plus host, sidebar entry and back handling (`app-shell.md`), how a PalsHub Pal becomes a local Pal (`pals-and-talents.md`), the Pals grid (`pals-screen.md`), model selection (`model-loading.md`).
 
-Voice mode's paywall is not bought here yet: it reads a seam, `voiceEntitlement.register(source)`, that this flow plugs into (`voice-mode.md`).
+Voice mode's paywall is Plus: hands-free voice is the `handsFreeVoice` feature, read through `voiceEntitlement`'s default source, and a free user reaches this flow only from the locked-voice teaser's Get Plus (`voice-mode.md`).
 
 ## Code map
 
