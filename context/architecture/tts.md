@@ -33,7 +33,7 @@ The gate is the getter `isTTSAvailable`: an explicit `userTTSOverride` (`true` /
 
 Playback entry points: `play()` (replay), `preview()` (audition), and `onAssistantMessageStart()` which opens a `StreamingHandle` fed by `onAssistantMessageChunk()`; `onAssistantMessageComplete()` finalises it or falls back to `play()`. Engines run through `ttsRuntime.acquire()`, which swaps the loaded engine via `loadInto()`. What the hook forwards to `onAssistantMessageChunk` during an agent turn is defined in `chat-flow.md`, under Speech.
 
-The picker renders `ENGINE_ORDER` (Kitten, Kokoro, Supertonic, then Phonon) filtered by `isEngineOffered(id)`, which is `id !== 'phonon' || phononSupported` (pending PR).
+The picker renders `ENGINE_ORDER` (Phonon first, then Kitten, Kokoro, Supertonic) filtered by `isEngineOffered(id)`, which is `id !== 'phonon' || phononSupported` (pending PR). Order only: no default voice depends on it.
 
 `downloadNeuralEngine(id)`: `reclaimLegacySpace()` (if implemented) → free-disk preflight at `estimatedBytes * 1.2` → `engine.downloadModel()` → auto-select a voice, preferring the one stashed in `pendingVoiceRestore`.
 
