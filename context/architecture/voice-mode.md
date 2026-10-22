@@ -4,21 +4,21 @@
 
 ## Purpose
 
-Hands-free voice mode inside a chat: the user speaks, the reply is spoken, and the chat itself is the transcript. Covers entry (paywall seam, model, setup, combined memory fit), the session controller and its state machine, the cascade engine (Whisper, the normal send path, TTS), interrupt handling, and the voice view and bar. Elsewhere: Whisper and dictation (`asr.md`), TTS engines and the stream (`tts.md`), the send path and keep-awake (`chat-flow.md`), purchases (`in-app-purchase.md`).
+Hands-free voice mode inside a chat: the user speaks, the reply is spoken, and the chat itself is the transcript. Covers entry (Plus entitlement, model, setup, combined memory fit), the session controller and its state machine, the cascade engine (Whisper, the normal send path, TTS), interrupt handling, and the voice view and bar. Elsewhere: Whisper and dictation (`asr.md`), TTS engines and the stream (`tts.md`), the send path and keep-awake (`chat-flow.md`), purchases (`in-app-purchase.md`).
 
 ## Code map
 
 | Path | Role |
 | --- | --- |
 | `src/hooks/useVoiceMode.ts` | `VoiceModeController` (created once per chat screen) and the hook: entry order, mic capture, turns, every exit; returns `requestEntry`, `sheet`, `setupDone`, `continueAnyway`, `chooseSmallerModel`, `tapCloud`, `toggleMute`, `end` |
-| `src/store/VoiceModeStore.ts` | `voiceModeStore` (`phase`, `micMuted`, `presentation`, `lastError`, persisted `userVoiceModeOverride`, E2E `unlockOverride`; derived `deviceSupported`, `supported`, `isOpen`, `isFullViewOpen`, `isUnlocked`) and the `voiceEntitlement` instance with its default source |
+| `src/store/VoiceModeStore.ts` | `voiceModeStore` (`phase`, `micMuted`, `presentation`, `lastError`, persisted `userVoiceModeOverride`, E2E `unlockOverride`; derived `deviceSupported`, `supported`, `isOpen`, `isFullViewOpen`, `isUnlocked`) and the `voiceEntitlement` instance, whose default source is PocketPal Plus |
 | `src/services/voice/entitlement.ts` | `VoiceEntitlement`: the registrable `source` (`isUnlocked`, `openPaywall({onUnlocked})`) and `register` |
 | `src/services/voice/cascadeEngine.ts` | `CascadeVoiceEngine`: `prepare` / `release` residency, `runTurn` → `{done, interrupt}` |
 | `src/services/voice/types.ts` | the engine interface (one implementation; its readiness and memory checks live in the controller): `VoiceEngine`, `VoiceTurnPort` (`send(text, onTurnCreated)`, `stop`), `VoiceTurnEvents`, `VoiceTurnOutcome` |
 | `src/services/voice/endpointer.ts` | `Endpointer`: lead-in trim, 600 ms hang after speech, 25 s cap, manual tap |
 | `src/services/voice/memoryFit.ts` | pure `voiceMemoryFit` → `fits` / `tight` / `wont_fit` plus the rows it counted; memory read and budget come from `services/asr` (`readDeviceMemory(modelStore)`, `memoryBudget`) |
 | `src/services/voice/readiness.ts` | `isVoiceModeVoice` (neural only), `isMicGranted` (no prompt) |
-| `src/services/voice/constants.ts` | `VOICE_ENDPOINT_HANG_MS`, `VOICE_FIRST_CHUNK_HOLD_MS`, `VOICE_CAPTURE_SETTLE_MS`, `VOICE_MIC_WATCHDOG_MS`, `VOICE_START_TIMEOUT_MS`, `VOICE_MODE_UNLOCKED_DEFAULT` |
+| `src/services/voice/constants.ts` | `VOICE_ENDPOINT_HANG_MS`, `VOICE_FIRST_CHUNK_HOLD_MS`, `VOICE_CAPTURE_SETTLE_MS`, `VOICE_MIC_WATCHDOG_MS`, `VOICE_START_TIMEOUT_MS` |
 | `src/components/VoiceModeButton/` | composer button (waveform, lock badge), in Send's slot while the input is empty |
 | `src/components/VoiceModeView/` | full-screen overlay: cloud, status, mute, End; it follows a downward drag and collapses on distance or a flick (Android back and "Show chat" too); `VoiceModeControlsContext`; `voiceStatus` |
 | `src/services/voice/deviceGate.ts` | `voiceModeDeviceSupported(tier, os)`: voice mode's own device gate |
@@ -59,7 +59,7 @@ any open phase ─audio interruption began→ mic off, running turn interrupted 
 - **Dictation's rules hold.** `wont_fit` is `whisperFits` for base, dictation's rule. The two never overlap: the button needs dictation idle, and the composer is gone while a session is open.
 - **The mic runs only in `listening ∧ !micMuted`**, started by the controller's own transitions, never by a reaction on `phase`, so a forced phase starts nothing. No barge-in.
 - **Neural voices only.** The `system` engine reports no chunk progress, which `speaking` needs.
-- **The paywall is a seam.** Default locked, `openPaywall` only warns; the purchase flow calls `voiceEntitlement.register(source)` (`in-app-purchase.md`), shaped like the Plus gate's `openPlus({onUnlocked})`. A release build before that ships the icon locked.
+- **Voice mode is a Plus feature** (`handsFreeVoice`, shipped; `in-app-purchase.md`). The default source is `unlockOverride ?? isPlusUnlocked()`, and its paywall is `openPlus({onUnlocked})`; `onUnlocked` re-runs entry once the Plus screen is dismissed unlocked. `register(source)` stays the seam for tests. E2E: `unlock::on|off` forces it, and `unlock::plus` clears the override so a FakeStore purchase decides.
 - **Memory rows are chat + Whisper + voice on both platforms**, against `memoryBudget`: Android `androidMemoryBudget`, iOS `ASR_IOS_CEILING_SHARE` (0.8) of the free memory it reported before any chat model loaded, `availableMemoryCeiling` (`asr.md`; later readings don't count mmap'd chat weights, and a pair that fit the full figure aborted Whisper's init). The share is applied once, in `memoryBudget`, so the sheet's available figure is the reduced one; 4B Q4 + Base won't fit at 4.2 GB. Not yet known means `fits`. The sheet renders the rows as given.
 
 ## Traps and decisions
