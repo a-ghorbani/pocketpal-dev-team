@@ -31,7 +31,7 @@ One file per **flow**, bounded by a single user-facing concept. Per-component is
 | `onboarding.md` | first-launch onboarding screens and the completion gate | `src/screens/OnboardingScreens/`, `src/store/onboarding/`, `uiStore.hasCompletedOnboarding`, `App.tsx` `SwitchPoint` |
 | `theming.md` | design tokens, typography, DS component layer, Paper-import blocklist | `src/theme/tokens/`, `src/utils/theme.ts`, `useTheme`, `src/components/ui/`, `.eslintrc.js` blocklist |
 | `asr.md` | voice input: availability gate, Whisper model wire, dictation capture | `ASRStore`, `src/services/asr/`, `useVoiceCapture`, `MicButton` |
-| `voice-mode.md` | hands-free voice mode in chat: entry, session controller, cascade turn, spoken rewrite, voice view and bar (**pending PR**) | `useVoiceMode`, `VoiceModeStore`, `src/services/voice/`, `VoiceModeView`, `VoiceBar` |
+| `voice-mode.md` | hands-free voice mode in chat: entry, session controller, cascade turn, spoken rewrite, voice view and bar | `useVoiceMode`, `VoiceModeStore`, `src/services/voice/`, `VoiceModeView`, `VoiceBar` |
 | `tts.md` | text-to-speech: availability gate, Supertonic model wire, re-download sentinel | `TTSStore`, `src/services/tts/`, `TTSSetupSheet` |
 | `model-download.md` | Android model downloads: scheduling (UIDT on API 34+, WorkManager), the shared resumable loop, resume validation, stop semantics, JS signals | `DownloadModule`, `DownloadController`, `DownloadScheduler`, `DownloadEngine`, `DownloadJobService`, `DownloadBanner` |
 | `deep-linking.md` | inbound `pocketpal://` links and the Hugging Face User-Agent attribution wire | `useDeepLinking`, `hubRunLink`, `HubRunSheetHost`, `hfResolve`, `hfUserAgent` |

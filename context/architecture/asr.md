@@ -1,6 +1,6 @@
 # Voice Input (ASR) Flow
 
-> **Status:** on `main` since #786 (whisper.rn 0.7.4). `whisperFits.ts` / `deviceMemory.ts`, the rule shared with voice mode, land with voice mode's pending PR; on `main` the same rule is inline in `ASRStore.hasMemoryForCapture`.
+> **Status:** on `main` since #786 (whisper.rn 0.7.4). `whisperFits.ts` / `deviceMemory.ts`, the rule shared with voice mode, are on `main` since #1007.
 
 ## Purpose
 
