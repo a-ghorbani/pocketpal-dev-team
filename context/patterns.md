@@ -91,15 +91,37 @@ export const exampleStore = new ExampleStore();
 
 ## Component Pattern
 
+Styles live in the component folder's `styles.ts` (`createStyles({theme, ...})`), never in a `StyleSheet.create` inside the component file; `ExampleComponent/` holds `ExampleComponent.tsx`, `styles.ts`, `index.ts` and `__tests__/`.
+
+```typescript
+// src/components/ExampleComponent/styles.ts
+import {StyleSheet} from 'react-native';
+
+import {Theme} from '../../utils/types';
+
+export const createStyles = ({theme}: {theme: Theme}) =>
+  StyleSheet.create({
+    container: {
+      padding: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
+    },
+    title: {
+      color: theme.colors.onSurface,
+    },
+  });
+```
+
 ```typescript
 // src/components/ExampleComponent/ExampleComponent.tsx
 import React from 'react';
-import {View, StyleSheet} from 'react-native';
+import {View} from 'react-native';
 import {Text, Button} from 'react-native-paper';
 import {observer} from 'mobx-react';
 
 import {useTheme} from '../../hooks';
 import {exampleStore} from '../../store';
+
+import {createStyles} from './styles';
 
 interface ExampleComponentProps {
   title: string;
@@ -109,16 +131,7 @@ interface ExampleComponentProps {
 export const ExampleComponent: React.FC<ExampleComponentProps> = observer(
   ({title, onPress}) => {
     const theme = useTheme();
-
-    const styles = StyleSheet.create({
-      container: {
-        padding: theme.spacing.md,
-        backgroundColor: theme.colors.surface,
-      },
-      title: {
-        color: theme.colors.onSurface,
-      },
-    });
+    const styles = createStyles({theme});
 
     return (
       <View style={styles.container} testID="example-component">
