@@ -60,7 +60,7 @@ any ─chip removed→ gone (files left for the sweep)
 ## Traps and decisions
 
 - **Ranged extraction, not page-count refusal.** A huge PDF stays usable through a range; memory is bounded by the range (≤ 500 pages, ≤ 1M chars), not the file.
-- **Text files are capped at 3,000,000 bytes before decoding**, and `RNFS.readFile` utf8 is lossy (Buffer); a NUL in the first 8 KB means binary, unless the file starts with a UTF-16 byte order mark (LE or BE), which is decoded as UTF-16 (`atob` on the base64 read).
+- **Text files are capped at 3,000,000 bytes before decoding**, and `RNFS.readFile` utf8 is lossy (Buffer); a NUL in the first 8 KB means binary, unless the file starts with a UTF-16 byte order mark (LE or BE), which is decoded as UTF-16 (`atob` on the base64 read). Text that is not valid UTF-8 (the UTF-8 read has U+FFFD the bytes do not encode) is decoded as Windows-1252 instead.
 - **Virtual Android files** convert to PDF when offered, else `text/plain`, else refuse.
 - **Cap first, window second.** The clarified intent rejects window-sized stuffing: a 26B model on a large remote window must not receive whole large documents.
 - **Unknown window sends without a window check**: remote servers without `/props` have nothing to compare against; the caps still bound the request.
