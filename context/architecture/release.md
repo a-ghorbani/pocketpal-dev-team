@@ -56,7 +56,7 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 
 **The Phonon add-on**
 - **A missing Phonon library ships silently.** The probe reports `library-missing` or `unsupported-abi` and the engine is just hidden, so check the artifact: both `.so` in `lib/arm64-v8a/`, `Stored`, `zipalign -c -P 16` OK. The payload manifest does not cover them.
-- **The add-on peers a narrow core range** (0.1.1: `>=2.7.0 <2.9.0`): its engine SDK is experimental, so a core bump outside it is an ERESOLVE; bump core and add-on together.
+- **The add-on peers a narrow core range** (0.1.2: `>=2.7.0 <2.9.0`): its engine SDK is experimental, so a core bump outside it is an ERESOLVE; bump core and add-on together.
 
 **The variant ladder**
 - **Rung 6 (`rnllama_v8`) is not a duplicate of the generic `rnllama`.** Non-generic arches add optimised ARM sources; dropping rung 6 silently demotes pre-fp16 devices to portable C.
