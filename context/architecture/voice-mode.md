@@ -1,6 +1,6 @@
 # Voice Mode Flow
 
-> **Status:** on `main` since #1007. On-device ASR (#786, `asr.md`) is on main. Voice mode on the in-use Whisper tier (instead of base): pending PR.
+> **Status:** on `main` since #1007. On-device ASR (#786, `asr.md`) is on main. Voice mode on the in-use Whisper tier (instead of base): on `main` since #1017.
 
 ## Purpose
 

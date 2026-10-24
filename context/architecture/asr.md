@@ -1,6 +1,6 @@
 # Voice Input (ASR) Flow
 
-> **Status:** on `main` since #786 (whisper.rn 0.7.4). `whisperFits.ts` / `deviceMemory.ts`, the rule shared with voice mode, are on `main` since #1007. One in-use tier shared with voice mode, base by default, and the mic's in-place setup sheet: pending PR.
+> **Status:** on `main` since #786 (whisper.rn 0.7.4). `whisperFits.ts` / `deviceMemory.ts`, the rule shared with voice mode, are on `main` since #1007. One in-use tier shared with voice mode, base by default, and the mic's in-place setup sheet: on `main` since #1017.
 
 ## Purpose
 
