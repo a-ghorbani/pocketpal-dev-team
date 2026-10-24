@@ -12,7 +12,7 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 | --- | --- |
 | `scripts/android-payload-manifest.json` | What an artifact must contain, per ABI (libs, DSP assets, required symbols). Also the source of the gradle variant allowlist. |
 | `scripts/verify-android-payload.js` | The payload gate; `--print-variants` emits the allowlist. |
-| `scripts/__tests__/` | `verify-android-payload`, `android-ladder-coverage` (manifest vs llama.rn's CMake and `RNLlama.java`), `hexagon-sdk-coverage` (SDK digest vs CMake). |
+| `scripts/__tests__/` | `verify-android-payload`, `android-ladder-coverage` (manifest vs llama.rn's CMake and `RNLlama.java`), `hexagon-sdk-coverage` (SDK digest vs CMake), `whisper-dotprod-ladder` (pending PR #1019: whisper.rn's arm64 CMake targets vs `RNWhisper.java` rungs, and the dotprod rung's guards). |
 | `.github/actions/setup-hexagon-sdk/action.yml` | Provisions and verifies the SDK. The only home of its version and both digests. |
 | `.github/workflows/{release,ci,e2e-tests}.yml` | The three Android building jobs; each gates the artifact it uploads. |
 | `android/fastlane/Fastfile` | `build_android_release` and `upload_android_alpha` (explicit `aab:`). |
@@ -94,7 +94,7 @@ How PocketPal's Android artifacts get their llama.rn native payload (build mode,
 - **On each llama.rn upgrade**, re-check the podspec hunk, the lookup hunk, `GGML_METAL_LIBS` and the `-mtargetos` value; on a whisper.rn upgrade, its lookup names.
 
 **whisper.rn variants** (pending PR #1019)
-- **The Java predicate is the only SIGILL guard.** whisper.rn's ggml has no runtime CPU dispatch on Android (`ggml-cpu/arch/arm/cpu-feats.cpp` is not compiled; the dotprod paths are compile-time `__ARM_FEATURE_DOTPROD`), so a rung must require every feature in its `-march`. The ladder is dotprod → fp16 → v8 → generic, one library per process; a failed load falls through.
+- **The Java predicate is the only SIGILL guard.** whisper.rn's ggml has no runtime CPU dispatch on Android (`ggml-cpu/arch/arm/cpu-feats.cpp` is not compiled; the dotprod paths are compile-time `__ARM_FEATURE_DOTPROD`), so a rung must require every feature in its `-march`; `whisper-dotprod-ladder.test.js` pins the dotprod rung's guards and flags. The ladder is dotprod → fp16 → v8 → generic, one library per process; a failed load falls through.
 - **The payload gate does not cover whisper libraries.** A missing dotprod library ships silently and only slows transcription, so check the artifact. Until #1016 lands, `postinstall.sh` swallows a patch-package failure: read the `whisper.rn@<ver> ✔` line.
 - **Upstream 0.8 builds prebuilts from one shared variant list** (`android/src/main/cmake/rnwhisper-build-options.cmake`), and its `_hexagon` rung outranks every CPU rung on Snapdragon 8-series phones with fp16-only flags. Dropping the patch needs the dotprod variant in the published jniLibs and a dotprod-compiled `_hexagon` (prepared on the `a-ghorbani/whisper.rn` branch `android-dotprod-variant`, not proposed upstream yet), confirmed by logcat on a Hexagon-eligible phone and on a Pixel.
 
