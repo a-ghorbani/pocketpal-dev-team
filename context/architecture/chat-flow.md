@@ -155,7 +155,7 @@ any ─step_started (initial or follow-up)→ prefill
 - On the local wire, `reasoning_format` is always `'auto'` so think markers don't leak into content. `chat_template_kwargs` carries `enable_thinking: false`, sent only to reasoning-capable models, and `reasoning_effort` (`prepareCompletion` in `useChatSession.ts`).
 - "Off" is only a hint: any reasoning the model returns is still displayed. `src/services/tts/thinkingStripper.ts` strips it from audio only.
 - Effort values are stored in `EFFORT_LEVELS` order. The pill steps through them from off and back to off, and is hidden when axis 1 is `'no'`.
-- The stored effort is never rewritten to fit a model: it can come from another model. The pill (at render) and `prepareCompletion` (on `params.reasoning`, which the remote engines read too) both apply `clampEffort` against the active model's `effortValues`: kept if supported, else the nearest lower level, else the lowest; none for a model without effort values (**pending PR #1002**).
+- The stored effort is never rewritten to fit a model: it can come from another model. The pill (at render) and `prepareCompletion` (on `params.reasoning`, which the remote engines read too) both apply `clampEffort` against the active model's `effortValues`: kept if supported, else the nearest lower level, else the lowest; none for a model without effort values (#1002).
 
 **Keyboard**
 
