@@ -105,7 +105,7 @@ Before the permission prompt, `asrStore.hasMemoryForCapture()` (the rule is `whi
   | Pixel 9 | 1.9 / 3.7 s | 5.9 / 11.1 s | 41 s |
   | OnePlus 6 | 3.5 / 6.9 s | 13.9 / 27.7 s | 131 s |
 
-  Peak RSS of whisper alone: 270 / 560 / 960 MB against `runtimeBytes` 330 / 650 / 1200 MB; the estimates stay, conservative. whisper.rn's Android build is `armv8.2-a+fp16` only (no dotprod), so Small is slow on every phone.
+  Peak RSS of whisper alone: 270 / 560 / 960 MB against `runtimeBytes` 330 / 650 / 1200 MB; the estimates stay, conservative. The table was measured with whisper.rn's `armv8.2-a+fp16` library. Phones listing `asimddp` now load a dotprod library (`release.md`, whisper.rn variants; pending PR #1019): on the Pixel 9, base 1.9 / 3.7 s → ~1.2 / 2.2 s and small 5.9 / 11.1 s → ~3.1 / 5.7 s (CLI bench, identical transcripts). The OnePlus 6 has no dotprod and keeps its times. Base stays the default.
 - **A persisted `'small'` proves no choice.** The old default was persisted with no install behind it, so reconcile treats only a ready tier as chosen (only installs wrote one). A choice that reads not-installed, from a stale sentinel or an `isInstalled` read error (both swallowed), falls back to the first ready tier; accepted.
 - **Base is `ggml-base-q8_0.bin`**: measured exact and faster than q5_1. ASR had not shipped to stores when base changed, so no installed copy exists and no migration is needed.
 - **Gate per frame, not per buffer.** Whole-buffer RMS let the silence before and after speech pull quiet, clear speech under the floor (a phone speaker at arm's length measured 0.0091 against 0.01), so it was rejected.
