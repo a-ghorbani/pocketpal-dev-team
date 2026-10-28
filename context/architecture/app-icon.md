@@ -1,4 +1,4 @@
-# App icon (pending PR)
+# App icon
 
 ## Purpose
 
