@@ -18,12 +18,12 @@ The launcher icon on Android and iOS: three SVG sources, one generator, and the 
 
 ## How it works
 
-Edit a source, run `yarn icons:generate`, commit both. The generator parses all sources and builds every output before writing any, then deletes any other appiconset file. Text outputs are pure functions of the sources; PNGs come from `@resvg/resvg-js` (dev dependency, loaded only to rasterize). `--preview <dir>` writes full-canvas and themed/tinted previews outside the repo.
+Edit a source, run `yarn icons:generate`, commit both. The generator parses all sources and builds every output before writing any, then deletes any other appiconset file (a subfolder there fails the run before any write). Text outputs are pure functions of the sources; PNGs come from `@resvg/resvg-js` (dev dependency, loaded only to rasterize). `--preview <dir>` writes full-canvas and themed/tinted previews outside the repo (compared by realpath, so a symlink into the repo is refused).
 
 ## Contracts and invariants
 
 - Canvas `viewBox -28 -28 168 168`; its central `[0,112]²` is the 72 dp viewport: the Figma frame and the iOS icon. Inside it, the foreground is Figma path data verbatim.
-- Sources use only the subset that maps 1:1 onto a VectorDrawable (`path`, `g` with one translate/rotate/scale and an optional `clip-path`, clips only as one-path `clipPath` in `defs`, explicit `fill`). Anything else fails the run, naming it.
+- Sources use only the subset that maps 1:1 onto a VectorDrawable (`path`, `g` with one translate/rotate/scale and an optional `clip-path`, clips only as one-path `clipPath` in `defs`, explicit `fill`). Path data is space- or comma-separated plain numbers after one of `MLHVCSQTAZ`, with standalone `0`/`1` arc flags, so Android's PathParser and resvg read it alike. Anything else fails the run, naming it.
 - The pal (body, band, face, highlights) sits in one `<g id="pal">` per source and inside the 66 dp safe circle; only rim, pocket, road and pocket edge cross it.
 - Both manifest names resolve on every API level: `anydpi-v26` XML on 26+, density PNGs on 24-25.
 - No output is hand-edited. The iOS any-appearance 1024 (App Store icon) has no alpha.
