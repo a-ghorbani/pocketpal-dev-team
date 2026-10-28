@@ -37,6 +37,7 @@ One file per **flow**, bounded by a single user-facing concept. Per-component is
 | `deep-linking.md` | inbound `pocketpal://` links and the Hugging Face User-Agent attribution wire | `useDeepLinking`, `hubRunLink`, `HubRunSheetHost`, `hfResolve`, `hfUserAgent` |
 | `benchmark-matrix.md` | on-device benchmark matrix runner and its config / merge / compare toolchain | `src/__automation__/`, `e2e/helpers/bench-runner.ts`, `e2e/scripts/` |
 | `local-api-server.md` | PocketPal serving its loaded model over an OpenAI-compatible HTTP API: listener lifecycle, HTTP guards, sharing the lease with chat (**pending PR**) | `LocalApiServerStore`, `src/services/localApiServer/`, `LocalApiServerCard` |
+| `app-icon.md` | launcher icon sources, generator, Android adaptive/themed and iOS appearances (**pending PR**) | `scripts/generate-app-icons.js`, `scripts/app-icon/`, `AppIcon.appiconset` |
 | `release.md` | Android native build, llama.rn payload variants (incl. Hexagon), payload gate; iOS RN build mode, native dependency patches, RN-upgrade audits | `scripts/verify-android-payload.js`, `scripts/android-payload-manifest.json`, `android/fastlane/`, `.github/actions/setup-hexagon-sdk/` |
 
 A flow file appears here once a story has produced a vetted WHAT for it; the library accrues lazily. Adding a flow doc means adding its row. Flow docs describe `main`; a doc marked with a branch or PR describes code that hasn't landed yet.
