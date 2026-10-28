@@ -38,4 +38,4 @@ Edit a source, run `yarn icons:generate`, commit both. The generator parses all 
 
 ## Verification
 
-`scripts/__tests__/generate-app-icons.test.js`: parser, VD mapping, text-output freshness, PNG sizes and colour type, safe circle. Idempotence: `yarn icons:generate` twice leaves `git status` clean. APK: `aapt2 dump resources` shows both mipmap names with `anydpi-v26` plus five densities. On device: themed icons off and on, drawer, splash; iOS home in light, dark, tinted.
+`scripts/__tests__/generate-app-icons.test.js`: parser, VD mapping, freshness of every output (PNGs by decoded pixels with a small tolerance, so arm64 and x64 agree), PNG sizes and colour type, opaque-pixel and `--preview` guards, safe circle. Idempotence: `yarn icons:generate` twice leaves `git status` clean. APK: `aapt2 dump resources` shows both mipmap names with `anydpi-v26` plus five densities. On device: themed icons off and on, drawer, splash; iOS home in light, dark, tinted.
