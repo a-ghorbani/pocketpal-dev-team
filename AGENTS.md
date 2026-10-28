@@ -32,6 +32,14 @@ These apply to work that becomes an app PR.
   - the architect runs a drift check first, because drift is a bug.
 - **Native changes.** Work touching `package.json`, native modules, `ios/`, `android/`, a Podfile, or `build.gradle` is `NATIVE_CHANGES=YES`. It needs `pod install`, an iOS build, and an Android build before it is ready.
 - **Visual evidence.** A PR that changes visible UI carries durable captures posted to the PR (`docs/workflows/visual-capture.md`).
+- **Device verification before ready.** Derive the runs from the diff and run them on the PR's CI APK (`/run-pr-e2e`) once the draft PR exists. Compare any red against main before calling it.
+
+  | Diff touches | Needed |
+  | --- | --- |
+  | a surface an existing spec drives (grep `e2e/specs` for the changed screens, stores, services) | those specs |
+  | llama.rn, whisper.rn, native inference, model loading | `bench` + `memory-profile` against the baseline (iPhone A/B interleaved) |
+  | TTS/ASR engines, voice mode | `tts-memory-profile` + the voice specs |
+  | purchases, Plus | `iap-plus` |
 - **Comments.** Default to none. A comment is usually a symptom:
   - of a redundant line: delete it;
   - of unclear code: fix the code;
