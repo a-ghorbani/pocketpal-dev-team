@@ -17,7 +17,7 @@ This doc covers how the preset model list comes from device rules, how capabilit
 | `src/utils/ggufHeader.ts` | in-repo range-fetching GGUF header reader for the pre-download MTP probe |
 | `src/utils/modelCaps.ts` | `resolveModelCaps`, the single capability read-point |
 | `src/store/generationLease.ts` | `GenerationSlot` (FIFO lease slot) and the `GenerationLease` type; `ModelStore` composes it (`acquireGeneration`, `tryAcquireGeneration`, `abortActiveGeneration`, `isGenerationBusy`) |
-| `patches/llama.rn+0.13.0-rc.8.patch` (pending PR; rc.7 on `main`) | native context ownership and the llama abort callback; build and payload contract in `release.md` |
+| `patches/llama.rn+0.13.0-rc.8.patch` | native context ownership and the llama abort callback; build and payload contract in `release.md` |
 | `src/utils/deviceSelection.ts` | `resolveDeviceSelection`, `getDeviceOptions`, the canonical Hexagon pick |
 | `src/utils/index.ts` | `hfAsModel` (HF file to `Model`) |
 | `src/utils/pathGuard.ts` | (pending PR) `isModelFilePath`, the model sink guard; `isSafePathSegment` (`pals-and-talents.md`) |
@@ -112,7 +112,7 @@ Generation lease: a chat run holds one for its whole `runAgent` run; a local API
 - **The classifier is pure and total.** Any unclassifiable device gets `low`.
 - **Remote-attached images are inlined as `data:` URIs** in `openai.ts`, because a server cannot read device paths.
 - **Single-session Hexagon is deliberate.** Requesting several `HTP` sessions engages the multi-session pipeline, whose compute buffers amplify memory. Registry discovery does not prove which sessions execute; the native init arguments and model/compute allocation logs do. CPU, OpenCL and every iOS selection skip the discovery call.
-- **llama.rn is the published npm pin in `package.json`, not a git ref.** Speculative needs ≥ 0.12.5 (MTP) and ≥ 0.12.7 (speculative-correct native timings); ≥ 0.13.0-rc.5 is unprefixed ggml; ≥ 0.13.0-rc.6 serialises claimed JSI ops per context. Both platforms compile llama.rn from source; on Android that is what silently dropped the Hexagon backend once. The build contract lives in `release.md`. 0.13.0-rc.7 runs on Hermes V1 (forced by RN 0.87); stop, send-again and release mid-prefill were re-checked on device against `main` for that move. (pending PR) ≥ 0.13.0-rc.8 (llama.cpp b11804) reads `prism.hadamard.*` (Bonsai 2; b11556, llama.cpp #29600); rc.7 ignored the keys silently and produced gibberish on every backend.
+- **llama.rn is the published npm pin in `package.json`, not a git ref.** Speculative needs ≥ 0.12.5 (MTP) and ≥ 0.12.7 (speculative-correct native timings); ≥ 0.13.0-rc.5 is unprefixed ggml; ≥ 0.13.0-rc.6 serialises claimed JSI ops per context. Both platforms compile llama.rn from source; on Android that is what silently dropped the Hexagon backend once. The build contract lives in `release.md`. 0.13.0-rc.7 runs on Hermes V1 (forced by RN 0.87); stop, send-again and release mid-prefill were re-checked on device against `main` for that move. ≥ 0.13.0-rc.8 (#1033, llama.cpp b11804) reads `prism.hadamard.*` (Bonsai 2; b11556, llama.cpp #29600); rc.7 ignored the keys silently and produced gibberish on every backend.
 
 ## Verification
 
