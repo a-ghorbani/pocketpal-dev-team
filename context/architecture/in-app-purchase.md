@@ -20,7 +20,7 @@ Voice mode's paywall is Plus: hands-free voice is the `handsFreeVoice` feature, 
 | `src/services/iap/bindingSource.ts` | The Buy binding, fetched only for a signed-in Pal purchase |
 | `src/services/plus/catalog.ts` | `PLUS_PRODUCT_IDS`, the only Plus product list, and `PLUS_FEATURES`, the bundled feature table |
 | `src/services/plus/features.ts`, `deviceRam.ts`, `shipOverride.ts`, `shipped.ts` | Feature status rows, the one RAM read per process, the `__E2E__`-only "shipped" override; `shipped.ts` (`shippedPlusFeatures`, `plusFeatureRows`) is the one derived source the gate, sidebar item and screen read. Feature ids are typed as the `plus.features` keys of `en.json` |
-| `src/services/plus/gate.ts` | `isPlusUnlocked`, `isPlusAvailable`, `openPlus`, `dismissPlus`, `plusGate.request`; (pending PR) the only reader of `__PLUS_STORE_GATE__`, and `PLUS_STORE_GATE_MARKER`, the literal the artifact check greps |
+| `src/services/plus/gate.ts` | `isPlusUnlocked`, `isPlusAvailable`, `openPlus`, `dismissPlus`, `plusGate.request`; the only reader of `__PLUS_STORE_GATE__`, and `PLUS_STORE_GATE_MARKER`, the literal the artifact check greps |
 | `src/screens/PlusScreen/` | The Plus screen; `plusScreenState.ts` is its state table |
 | `src/components/PlusHost/`, `src/components/SidebarContent/PlusDrawerItem/` | Global host and sidebar entry (`app-shell.md`) |
 | `src/services/palshub/apiBase.ts`, `palEvents.ts` | API base and client headers; funnel events |
@@ -90,7 +90,7 @@ unlocking ─Android, successful query no longer lists it→ deleted
 
 Plus:
 
-- **Store gate** (pending PR). `__PLUS_STORE_GATE__` is a babel define from the bundling env (`babel.config.js`): true for `PLUS_STORE_GATE=true`, or an E2E build unless `PLUS_STORE_GATE=false`; anything else is ungated. Only the store release jobs set it. Ungated (plain clone, debug, `ci.yml` artifacts, any from-source build such as F-Droid's `assembleProdRelease`): `isPlusUnlocked()` is true and `isPlusAvailable()` false, so no sidebar entry, no host, no voice lock or teaser. `gate.ts` reads it at call time (jest flips the global). `PurchaseStore` runs the same in both, so Pal purchases, Restore and Settings › Purchases are untouched, and an ungated build still fetches Plus products when billing becomes ready. Features read the two gate functions, never `purchaseStore.plusUnlocked`; review holds this, not lint.
+- **Store gate**. `__PLUS_STORE_GATE__` is a babel define from the bundling env (`babel.config.js`): true for `PLUS_STORE_GATE=true`, or an E2E build unless `PLUS_STORE_GATE=false`; anything else is ungated. Only the store release jobs set it. Ungated (plain clone, debug, `ci.yml` artifacts, any from-source build such as F-Droid's `assembleProdRelease`): `isPlusUnlocked()` is true and `isPlusAvailable()` false, so no sidebar entry, no host, no voice lock or teaser. `gate.ts` reads it at call time (jest flips the global). `PurchaseStore` runs the same in both, so Pal purchases, Restore and Settings › Purchases are untouched, and an ungated build still fetches Plus products when billing becomes ready. Features read the two gate functions, never `purchaseStore.plusUnlocked`; review holds this, not lint.
 - **Store-only.** No Plus transaction reaches verify, refresh, link, `palEvents` or the ledger; Buy sends a null binding. PalsHub sees zero Plus traffic.
 - **Persist before finish, never consume.** The doc write resolves before `finish` (only for `unfinished`); a failed write skips it, so recovery re-delivers. Pending is never finished. Delivery skips the write when a valid doc is already on disk (never judged from memory; a read that throws counts as absent), keeping the first `productId`/`unlockedAt`. It still bumps `plusRevision` and finishes an unfinished transaction.
 - **Only a clean query relocks:** `ok`, no purchased Plus transaction listed, and `plusRevision` equal to the snapshot taken before the query. Memory clears before the doc delete.
@@ -122,7 +122,7 @@ Plus:
 - **iOS needs glog's textual module map** (`ios/Podfile` `post_install`). Without it, NitroModules fails to build.
 - **Labels follow the store apps.** The price alone on Buy; a progress indicator with no text while paying or unlocking; `Pending`; `Open` / `Install`; `Purchased`.
 - **Plus traps**:
-  - (pending PR) The store gate is folded at bundle time. On a debug build, Metro's dev cache keeps the old value until `yarn start --reset-cache`. E2E builds default gated so the Plus specs keep working; an ungated E2E build with `unlock::off` shows the teaser, and its Get Plus does nothing.
+  - The store gate is folded at bundle time. On a debug build, Metro's dev cache keeps the old value until `yarn start --reset-cache`. E2E builds default gated so the Plus specs keep working; an ungated E2E build with `unlock::off` shows the teaser, and its Get Plus does nothing.
   - RAM factor 0.85, decimal: a phone sold with X GB reports under X GiB, and the next size down is at most 0.75 of it.
   - The revision snapshot exists because a delivery or pending purchase can land mid-query; that query must not relock or clear what it never saw.
   - `plusChecked` stops a reinstalling owner being offered Buy before recovery lists the purchase; a failed query releases it so offline users can buy.
