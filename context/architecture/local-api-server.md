@@ -51,7 +51,7 @@ Per connection (`handleConnection`): bytes → `createRequestReader` → framing
 - **Only a local model is served:** no model, release in progress or benchmark → `acquireGeneration` null; a remote model → the lease's engine is not a `LocalCompletionEngine`, ended unused. Both 503 `no_model`. Never proxy a remote server or its key.
 - **`lanAddress` is only a usable IPv4** (`usableAddress`: not `0/8`, `127/8`, `169.254/16`, octets ≤ 255); none → loopback URL plus "not on Wi-Fi".
 - **The accept event never aborts natively nor becomes a server-id `error`** (JS `Server` closes the listener on one). A socket whose peer already left arrives with empty addresses and closes through `onClosed`, never admitted.
-- **Key entry is a `Sheet`;** `Sheet.Actions` lifts Cancel / Save above the keyboard, every close clears the draft, the key is never pre-filled.
+- **Key entry is a `Sheet`, rendered beside the card, not inside it** (Paper's `Card` injects `index` into its children, which the sheet would take as an out-of-range snap index and never open); `Sheet.Actions` lifts Cancel / Save above the keyboard, every close clears the draft, the key is never pre-filled.
 - **Loopback unless `lanEnabled`.** `enabled` is never persisted (off at launch); `port` and `lanEnabled` persist and change only while stopped.
 - **The key lives in Keychain service `local_api_server_key` and in the store's private field while started;** never logged, persisted elsewhere, or rendered.
 - **One request per connection, `Connection: close`.**
@@ -62,7 +62,7 @@ Per connection (`handleConnection`): bytes → `createRequestReader` → framing
 
 - **`react-native-tcp-socket` is a legacy bridge module running on the interop layer** (no TurboModule). Only a device build proves its events arrive; the fallback is an own TurboModule listener.
 - **llama.rn's stream callback `content` / `reasoning_content` are cumulative snapshots,** not deltas (`TokenData`: "parsed content from accumulated text"). `completeStreaming` sends only the unsent suffix, skips a snapshot that rewrote sent text, and flushes the tail from the final result before the finish chunk.
-- **Servers are created with `allowHalfOpen: true`:** the library otherwise `end()`s a socket when the client half-closes after its request (toybox `nc`, some scripts), before the reply is written.
+- **Servers are created with `allowHalfOpen: true`:** the library otherwise `end()`s a socket when the client half-closes after its request (toybox `nc`, some scripts), before the reply is written. A client that half-closes before sending any byte is destroyed at once, so it does not hold a connection slot until the 30 s deadline.
 - **The native `error` event carries a string** (Android `e.getMessage()`), not an `Error`. It maps by pattern to a `LocalApiServerError` kind and goes to `console.warn`; the card renders only localized copy for the kind, never the native text.
 - **iOS host getters are nil once the accepted peer has left,** and a nil in the accept event's dictionary literal throws; the tcp-socket patch substitutes `""` (upstream guards only the client `onConnect`). The later `close` reaches JS keyed by `[sock userData]`, never `self.id`. Android's accepted `java.net.Socket` keeps its addresses: no hunk.
 - **Upstream iOS `getIpAddress` returns the last `en0`/`en1` address of any family** (often `169.254.x.x` or IPv6); the device-info patch fixes the source, the JS filter still guards. Both packages are pinned exact, so a bump fails `yarn install` rather than dropping a patch.
