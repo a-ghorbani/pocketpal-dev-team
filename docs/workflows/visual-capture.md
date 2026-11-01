@@ -1,6 +1,6 @@
 # Visual Capture Workflow
 
-When a story has `Visual Evidence Required: YES`, the pipeline creates or verifies durable visual evidence before approval.
+When a story's `evidence.md` has rows whose receipt is a capture, the pipeline creates durable visual evidence before approval.
 
 Visual evidence is an artifact requirement, not a request for the user to inspect the UI. Do not ask the user to inspect UI manually unless the required capture infrastructure, device, simulator, or design source is unavailable after documented attempts.
 
@@ -22,7 +22,7 @@ Decision rule:
 
 | Step | Owner |
 | --- | --- |
-| Decide whether evidence is required | `pocketpal-intake` sets `Visual Evidence Required=YES`; `pocketpal-pipeline-reviewer` **re-derives it from the actual diff** so a missed flag can't skip the gate. Any change under `src/` to a screen, component, style, theme, or rendering path ⇒ required. |
+| Decide whether evidence is required | `pocketpal-intake` adds capture rows to `evidence.md` from the claim; the architect and implementer add rows for surfaces they touch; `pocketpal-pipeline-reviewer` **re-derives it from the actual diff** so a missing row can't skip the gate. Any change under `src/` to a screen, component, style, theme, or rendering path ⇒ required. |
 | Produce captures (Flavour A / B) | `pocketpal-tester` writes the PNGs and hands their paths to the reviewer in the Test Report. |
 | Produce captures (Flavour C) | `pocketpal-implementer` via the `figma-implement` skill (committed side-by-sides under the story dir). |
 | Post captures to the PR | `pocketpal-pipeline-reviewer`, immediately after `gh pr create`, via `tools/post-pr-visual-evidence.sh`. |
@@ -102,7 +102,7 @@ The helper uploads each PNG to GitHub's `user-attachments` CDN via the `gh image
 
 ## Flavour A — Parametrized (chat output)
 
-1. Read the `Visual evidence` section in the story for the `VISUAL_CAPTURES` JSON.
+1. Build the `VISUAL_CAPTURES` JSON from the chat-output capture rows in `evidence.md`.
 2. Run from the task worktree:
 
 ```bash
@@ -180,7 +180,7 @@ When light + dark + RTL are in scope, capture each variant separately (`<screen>
 
 ### Why this lives in the story dir (not `e2e/debug-output/`)
 
-`e2e/debug-output/` is gitignored — captures vanish with the worktree. Flavour C captures need to survive the PR review and are referenced from the parity-review subagent's report, so they live alongside `intent-brief.md` / `what.md` / `how.md`.
+`e2e/debug-output/` is gitignored — captures vanish with the worktree. Flavour C captures need to survive the PR review and are referenced from the parity-review subagent's report, so they live alongside `intent-brief.md` / `what.md` / `evidence.md`.
 
 ### Review gate
 

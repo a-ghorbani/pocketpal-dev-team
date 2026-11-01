@@ -1,10 +1,10 @@
 # Agent Instructions
 
-This repo is the workflow control plane for PocketPal AI. The app lives in the read-only submodule `repos/pocketpal-ai`; all app work happens in worktrees created from it. The delivery runbook (pipeline, handoff block, routing, complexity, critic loops) is [`docs/workflows/pipeline.md`](docs/workflows/pipeline.md).
+This repo is the workflow control plane for PocketPal AI. The app lives in the read-only submodule `repos/pocketpal-ai`; all app work happens in worktrees created from it. The delivery runbook (handoff block, routing, evidence, decisions, restarts) is [`docs/workflows/pipeline.md`](docs/workflows/pipeline.md).
 
 ## Guardrails
 
-These hold for every agent and every task. Most are hook-enforced.
+These hold for every agent and task; most are hook-enforced.
 
 - **Submodule read-only.** Inside `repos/pocketpal-ai/`, never edit, build, test, commit, or switch branches, and never use its build artifacts or upload its files as generated assets. Read it with absolute paths (`git -C "$ROOT/repos/pocketpal-ai" …`, `grep -rn … "$ROOT/repos/pocketpal-ai/src"`); after a `cd`, the harness can't resolve relative paths.
 - **Worktrees.**
@@ -24,22 +24,17 @@ These hold for every agent and every task. Most are hook-enforced.
 
 These apply to work that becomes an app PR.
 
-- **Keep the four stages intact:** Intent → WHAT → HOW → Implementation. Implementation and independent review never collapse into one role. The orchestrator runs stages without interactive prompts; the stop conditions are in `pipeline.md`.
-- **Story gate.** Trivial work needs `intent-brief.md`; quick work adds `how.md`; standard and complex work add `what.md`.
+- **Never review your own work:** implementation and independent review stay separate roles. The orchestrator never prompts between stages; its stops are in `pipeline.md`.
+- **Story gate.** Every task has `intent-brief.md`, `evidence.md`, and `decisions.md`; standard and complex work add `what.md`; `PLAN=YES` adds `how.md`.
+- **Facts are proven, product calls are the operator's.** A design premise is read from code or proven by a spike. User-visible behaviour the request leaves open, or accepting a regression, is logged as a product call with a recommended default, never decided by an agent.
+- **A wrong design goes back.** A stage that finds a premise false or a decision wrong replies `DESIGN_INVALIDATED` instead of patching around it (`pipeline.md`, Going back).
 - **Architecture docs** (`context/architecture/`, one per flow; lifecycle in its README):
-  - a change to behaviour a flow doc describes updates that doc in the same round. The doc lives in this repo, so the update is a path-scoped commit here, not part of the app PR;
+  - a change to behaviour a flow doc describes updates that doc in the same round. that update is a path-scoped commit in this repo, not part of the app PR;
+  - a line describing code not yet on `main` carries `(pending #<PR>)` (`(pending <TASK_ID>)` until the PR exists);
   - for standard and complex work, WHAT is a detailed delta on the flow doc, and the implementer distills it into the doc;
-  - the architect runs a drift check first, because drift is a bug.
+  - the architect runs a drift check first; drift is a bug.
 - **Native changes.** Work touching `package.json`, native modules, `ios/`, `android/`, a Podfile, or `build.gradle` is `NATIVE_CHANGES=YES`. It needs `pod install`, an iOS build, and an Android build before it is ready.
-- **Visual evidence.** A PR that changes visible UI carries durable captures posted to the PR (`docs/workflows/visual-capture.md`).
-- **Device verification before ready.** Derive the runs from the diff and run them on the PR's CI APK (`/run-pr-e2e`) once the draft PR exists. Compare any red against main before calling it.
-
-  | Diff touches | Needed |
-  | --- | --- |
-  | a surface an existing spec drives (grep `e2e/specs` for the changed screens, stores, services) | those specs |
-  | llama.rn, whisper.rn, native inference, model loading | `bench` + `memory-profile` against the baseline (iPhone A/B interleaved) |
-  | TTS/ASR engines, voice mode | `tts-memory-profile` + the voice specs |
-  | purchases, Plus | `iap-plus` |
+- **Evidence.** Intake plans what a change must show in `evidence.md`, including CI-APK device runs (risk table: `pipeline.md`, Evidence plan); every row closes with a receipt. A PR that changes visible UI carries durable captures (`docs/workflows/visual-capture.md`).
 - **Comments.** Default to none. A comment is usually a symptom:
   - of a redundant line: delete it;
   - of unclear code: fix the code;
@@ -51,7 +46,7 @@ These apply to work that becomes an app PR.
 
 This repo is one checkout on `main`, shared by parallel sessions (`worktrees/` belong to the *app* repo).
 
-- **Architecture docs.** A lost update here is silent (last writer wins, and the diff looks clean). So:
+- **Architecture docs** (last writer wins silently):
   - before editing `context/architecture/`, run `git status --porcelain -- context/architecture/`;
   - a foreign modification means stop;
   - commit your change at once, path-scoped (`git commit -- <file>`, never `add -A`).
@@ -112,7 +107,6 @@ Generated by [PocketPal Dev Team](https://github.com/a-ghorbani/pocketpal-dev-te
 
 ## Key references
 
-- Pipeline runbook: `docs/workflows/pipeline.md`
 - Templates: `templates/`
 - Architecture library: `context/architecture/README.md`
 - Project context: `context/patterns.md`, `context/pocketpal-overview.md`

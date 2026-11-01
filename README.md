@@ -4,51 +4,47 @@ An agentic dev team for [PocketPal AI](https://github.com/a-ghorbani/pocketpal-a
 
 ## How it works
 
-A four-stage pipeline — **Intent → WHAT → HOW → Implementation** — followed by an independent review loop and a human merge gate.
+Intent → WHAT → Implementation, then an independent review loop and a human merge gate. Design premises are proven by running something, evidence is planned before any code, and a wrong design goes back to the architect.
 
 ```text
   Issue / description
          │
          ▼
-  ┌──────────────┐  builds a self-contained intent-brief.md, classifies complexity
-  │   intake     │  (trivial / quick / standard / complex), and stops with
-  └──────┬───────┘  NEEDS_INPUT if required answers are missing
+  ┌──────────────┐  intent-brief.md, evidence.md (claim, platforms, risk rows),
+  │   intake     │  decisions.md (product calls with defaults); classifies by
+  └──────┬───────┘  riskiest contract; NEEDS_INPUT for contract-shaping calls
          │
-         │   complexity decides which design stages run:
-         │     • trivial          → straight to implementer
-         │     • quick            → planner only
-         │     • standard/complex → architect + planner
+         │     • trivial / quick  → implementer
+         │     • standard/complex → architect
          ▼
-  ┌──────────────┐  revise   ┌───────────────────┐
-  │  architect   │ ◄───────► │ architect-critic  │   what.md — design delta on
-  └──────┬───────┘  max 2    └───────────────────┘   context/architecture/<flow>.md
-         ▼          rounds
-  ┌──────────────┐  revise   ┌───────────────────┐
-  │   planner    │ ◄───────► │   plan-critic     │   how.md — step-by-step plan
+  ┌──────────────┐  revise   ┌───────────────────┐   what.md: delta on context/architecture/<flow>.md,
+  │  architect   │ ◄───────► │ architect-critic  │   premises proven by spikes
   └──────┬───────┘  max 2    └───────────────────┘
-         ▼          rounds
-  ┌──────────────┐  code + commits + architecture-doc update
-  │ implementer  │
+         │
+         │  (planner ⇄ plan-critic only when sequencing is a risk: multi-PR, migration, staged native)
+         ▼
+  ┌──────────────┐  tracer slice ─► architect-reviewer ─► finish; flow-doc update.
+  │ implementer  │  A false premise → DESIGN_INVALIDATED → architect
   └──────┬───────┘
          ▼
-  ┌──────────────┐  tests + coverage + visual captures
-  │   tester     │
+  ┌──────────────┐  a receipt per evidence.md row: mutation-checked tests,
+  │   tester     │  device / store / server / capture runs
   └──────┬───────┘
          ▼
-  ┌──────────────┐  opens a DRAFT PR  (REQUEST_CHANGES → back to implementer)
+  ┌──────────────┐  receipts + simplicity check → DRAFT PR + evidence comment
   │  pipeline-   │
   │  reviewer    │
   └──────┬───────┘
-         ▼
-  ┌──────────────┐  /review-pr → role reviewers → final verdict
-  │ independent  │  BLOCKER / CONCERN findings → PR-fix loop
-  │   review     │  (max 2 rounds, then escalate)
+         ▼  tools/pr-gates.sh (CI green, evidence posted)
+  ┌──────────────┐  /review-pr → role reviewers → refutation (real? worth it?) → verdict
+  │ independent  │  findings → fix brief → plan-critic → fix → re-verify
+  │   review     │  (2 rounds total, then escalate)
   └──────┬───────┘
          ▼
    HUMAN REVIEW & MERGE
 ```
 
-The full runbook (stage outputs, complexity matrix, critic loops, stop conditions) is [`docs/workflows/pipeline.md`](docs/workflows/pipeline.md). The rules every agent obeys are in [`AGENTS.md`](AGENTS.md).
+The full runbook (complexity, routing, evidence, decisions, restarts, stop conditions) is [`docs/workflows/pipeline.md`](docs/workflows/pipeline.md). The rules every agent obeys are in [`AGENTS.md`](AGENTS.md).
 
 ## Getting started
 

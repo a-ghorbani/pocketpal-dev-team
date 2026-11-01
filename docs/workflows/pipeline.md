@@ -1,24 +1,24 @@
 # Delivery Pipeline Playbook
 
-Orchestrator runbook for the top-level `/start-task` session (and the PR-fix loop it drives): how to run a task end to end. The always-on invariants every agent obeys are in `AGENTS.md`.
+Runbook for the orchestrator: the top-level `/start-task` session and the PR-fix loop it drives. Invariants every agent obeys are in `AGENTS.md`.
 
 ## Dispatching a role
 
-"Use `pocketpal-<role>`" anywhere in this pipeline means: run that role as a subagent, passing the handoff block as its prompt.
+Run each role as a subagent with the handoff block as its prompt:
 
 | Harness | Dispatch |
 | --- | --- |
 | Claude Code | `Agent` tool, `subagent_type: pocketpal-<role>` |
 | Codex | `spawn_agent` with agent `pocketpal-<role>` |
 | opencode | `task` tool with `pocketpal-<role>` (or `@pocketpal-<role>`) |
-| pi | `subagent` tool: `agent: pocketpal-<role>`, `agentScope: "project"`, `confirmProjectAgents: false` (it defaults to user-scope agents and to prompting) |
+| pi | `subagent` tool: `agent: pocketpal-<role>`, `agentScope: "project"`, `confirmProjectAgents: false` |
 | no subagent support | start a fresh session, have it read `agents/pocketpal-<role>.md`, and give it the handoff block |
 
-Roles are leaves: they do not dispatch further roles. The orchestrating session does all routing.
+Roles are leaves: only the orchestrator dispatches.
 
 ## Handoff block
 
-Intake creates it. Every stage ends its reply with it, updating `VERDICT` and any key it learned. The orchestrator passes the returning stage's whole reply (its report plus the block) verbatim to the next role, so the tester sees the implementation report and the pipeline-reviewer sees the test report. Critics are the exception: they get the block alone (paths only, never the producer's reasoning). Omit keys that don't apply to the task.
+Intake creates it; every stage ends its reply with it, updating `VERDICT` and any key it learned. Pass the returning stage's whole reply (report plus block) verbatim to the next role. Critics get the block alone (paths only, never the producer's reasoning) and may rerun any spike receipt. Omit keys that don't apply.
 
 ```text
 VERDICT: <the stage's verdict — see Routing>
@@ -27,211 +27,178 @@ WORKTREE: ./worktrees/TASK-YYYYMMDD-HHMM | ./worktrees/PR-<n>
 BRANCH: feature/TASK-YYYYMMDD-HHMM | pr-<n>
 STORY_DIR: ./workflows/stories/<TASK_ID>
 COMPLEXITY: trivial | quick | standard | complex
+PLAN: YES | NO                                 # planner runs (see Shape)
 NATIVE_CHANGES: YES | NO
-VISUAL_EVIDENCE: YES | NO
 DESIGN_EXPLORATION: YES | NO
-PLAN_EXPLORATION: YES | NO
 INTENT_BRIEF: <STORY_DIR>/intent-brief.md
+EVIDENCE: <STORY_DIR>/evidence.md
+DECISIONS: <STORY_DIR>/decisions.md
 WHAT: <STORY_DIR>/what.md                      # standard / complex
-HOW: <STORY_DIR>/how.md                        # quick / standard / complex
+HOW: <STORY_DIR>/how.md                        # PLAN=YES only
+FIX_BRIEF: <STORY_DIR>/review-feedback-round-<N>.md   # PR-fix rounds
 ARCHITECTURE_DOCS: ./context/architecture/<flow>.md, ...
 FIGMA_FILE: <file key>                         # Figma-pinned slices
 NODE_IDS: <node id>, ...                       # Figma-pinned slices
 VISUAL_CAPTURE_PATHS: <png> <png> ...          # tester, when captures exist
 PR: #<n>                                       # pipeline-reviewer, once the draft PR exists
+INVALIDATED: <decision or premise id>: <one line>     # with DESIGN_INVALIDATED
 ```
 
-Take `WORKTREE`, `BRANCH` and `STORY_DIR` from the block; never rebuild them from `TASK_ID` (a PR fix uses worktree `PR-<n>`, branch `pr-<n>`, story `PR-<n>-fix`).
+Take `WORKTREE`, `BRANCH` and `STORY_DIR` from the block; never rebuild them from `TASK_ID`. Intake's prompt is self-contained: full request text, acceptance criteria, constraints, known baseline/version context; answers to its `NEEDS_INPUT` go in a new invocation.
+
+## Shape
+
+| Level | When | Stages |
+| --- | --- | --- |
+| **trivial** | Single-file copy / config / typo / version bump. < 20 lines. No new contract. | intake → implementer → tester → pipeline-reviewer |
+| **quick** | 1–3 files; a bug fix or small enhancement inside an existing flow doc's contracts. | as trivial |
+| **standard** | Touches a contract (data model, single-writer, rendering, persistence, wire format, trust boundary). | intake → architect ⇄ critic → implementer (slice → slice review → finish) → tester → pipeline-reviewer |
+| **complex** | Cross-flow, new flow, architecture-changing. | standard, with `DESIGN_EXPLORATION=YES` |
+
+Intake classifies by the **riskiest contract touched**, not size. Security, schema, and breaking-API changes are at least standard, and so is a task whose flow doc visibly contradicts the code.
+
+**Planner (`PLAN=YES`, set by intake or the architect)** runs after the architect-critic only when sequencing is itself a risk: several PRs, a data migration, a native build change that must land in steps, or a feature-flag rollout. Otherwise the implementer sequences its own work.
+
+**Slicing.** When the projected diff exceeds ~1,500 lines or WHAT can't fit its length budget, the architect proposes slices and replies `NEEDS_INPUT`; each slice becomes its own task.
 
 ## Routing
 
-The orchestrator picks the next role from the returning stage's verdict:
+Dispatch the next role from the returning stage's verdict at once, with no interactive prompt or approval gate:
 
 | Stage | Verdict | Next |
 | --- | --- | --- |
 | intake | `NEEDS_INPUT` | stop; surface the questions |
-| intake | `READY`, trivial | implementer |
-| intake | `READY`, quick | planner |
+| intake | `READY`, trivial / quick | implementer |
 | intake | `READY`, standard / complex | architect |
+| intake | `READY`, PR fix | orchestrator writes the fix brief → plan-critic (fix-brief mode) |
 | architect | `DRAFTED` | architect-critic |
-| architect-critic | `LGTM` | planner |
+| architect-critic | `LGTM` | planner when `PLAN=YES`, else implementer |
 | architect-critic | `HAS_CONCERNS` / `HAS_BLOCKERS` | architect (revision; max 2 rounds) |
 | planner | `DRAFTED` | plan-critic |
 | plan-critic | `LGTM` | implementer |
-| plan-critic | `HAS_CONCERNS` / `HAS_BLOCKERS` | planner (revision; max 2 rounds) |
-| planner or plan-critic | `ARCHITECTURE_DRIFT` | architect (standard / complex) or intake to re-classify (quick) |
+| plan-critic | `HAS_CONCERNS` / `HAS_BLOCKERS` | the producer revises: planner for HOW, the orchestrator for a fix brief (max 2 rounds) |
+| implementer | `SLICE_READY` | architect-reviewer, slice mode (see Tracer slice) |
+| architect-reviewer (slice) | `LGTM` / `HAS_FINDINGS` | implementer, to finish (addressing findings first) |
 | implementer | `COMPLETE` | tester |
-| implementer | `BLOCKED` | planner or architect when the block is a plan/design conflict; otherwise stop |
 | tester | `COMPLETE` | pipeline-reviewer (redesign slices: design-parity-reviewer first) |
 | tester | `IMPLEMENTATION_BUG` | implementer |
 | design-parity-reviewer | `APPROVED` / `NEEDS_FIXES` | pipeline-reviewer / implementer (max 2 rounds) |
-| pipeline-reviewer | `APPROVED` (with `PR`) | independent review (`review-pr`) |
+| pipeline-reviewer | `APPROVED` (with `PR`) | tester in post-PR mode when `evidence.md` has CI-APK rows; then the gates |
+| `tools/pr-gates.sh` | `ci` or `evidence` FAIL | implementer (CI) or tester (evidence); max 2, then `BLOCKED` |
+| `tools/pr-gates.sh` | all PASS | independent review (`review-pr`) |
+| review-pr | `NOT_READY` | as a gate FAIL above; no round consumed |
 | pipeline-reviewer | `REQUEST_CHANGES` | implementer |
 | pipeline-reviewer | `ESCALATE` (branch already on `origin/main`) | stop; the merge gate was bypassed |
-| any stage | `NEEDS_INPUT` / `ESCALATE` | stop |
+| any stage after intake | `DESIGN_INVALIDATED` | architect (amendment). Trivial / quick: the orchestrator re-classifies to standard and dispatches the architect in the same worktree |
+| any stage | `NEEDS_INPUT` / `ESCALATE` / `BLOCKED` | stop |
 
 ## Autonomous-run contract
 
-After each stage returns, the calling session immediately invokes the next agent in the chain, with no interactive prompt and no human approval gate between stages. Stop ONLY for:
+Stop only for:
 
-- `NEEDS_INPUT` from any stage (unanswered questions)
-- `ESCALATE` from any stage
-- `BLOCKED` from the implementer that is not a plan or design conflict
-- `HAS_BLOCKERS` persisting after round 2 of either critic loop
+- `NEEDS_INPUT` (each question carries a recommended answer), `ESCALATE`, or `BLOCKED` (environment or tooling; design conflicts are `DESIGN_INVALIDATED`) from any stage
+- `HAS_BLOCKERS` persisting after round 2 of a critic loop
 - incomplete required independent review artifacts
 - failed mandatory verification
-- `BLOCKER` or `CONCERN` findings persisting after round 2 of the independent review/fix loop
+- `BLOCKER` or `CONCERN` findings persisting after review round 2
 
-Keep the four-stage pipeline intact: **Intent → WHAT → HOW → Implementation**. The delivery loop may wrap it, but must not collapse implementation and independent review into the same role.
+When a PM session runs the queue, these stops go to the PM first (`skills/pm`).
 
-## Pipeline
+## Evidence plan
 
-Pipeline (each arrow is "produces and hands off to"):
+`evidence.md` (`templates/evidence-template.md`) lists what the change must show to count as done:
 
-```text
-Issue
-  │
-  ▼
-intake ── intent-brief.md  (builds a self-contained brief; emits `NEEDS_INPUT` and stops if required answers are missing; classifies)
-  │
-  ├── trivial ───────────────────────────────────────────────────────┐
-  │                                                                  │
-  ├── quick ──────────────────────────────────────────┐              │
-  │                                                   │              │
-  └── standard / complex                              │              │
-              │                                       │              │
-              ▼                                       │              │
-       architect ── what.md ──┐                       │              │
-              ▲               │                       │              │
-              │ revise on     ▼                       │              │
-              └── architect-critic                    │              │
-                       │                              │              │
-                       │ LGTM                         │              │
-                       ▼                              ▼              │
-                     planner ── how.md ──┐ ◄──────────┘              │
-                       ▲                 │                           │
-                       │ revise on       ▼                           │
-                       └── plan-critic ──┘                           │
-                              │                                      │
-                              │ LGTM                                 │
-                              │ (or ARCHITECTURE_DRIFT → architect)  │
-                              ▼                                      │
-                        implementer ◄────────────────────────────────┘
-                              │      (code + commits + architecture-doc update)
-                              ▼
-                            tester ── tests + coverage + visual captures
-                              │
-                              ▼
-                       pipeline-reviewer ── draft PR (+ visual-evidence comment) | REQUEST_CHANGES
-                              │
-                              ▼
-                       independent review ── final.md
-                              │
-                ┌─────────────┴─────────────┐
-                ▼                           ▼
-          review feedback              HUMAN REVIEW & MERGE
-          intake + PR-fix
-                │
-                └────────────── back to implementation pipeline
-```
+1. **The claim.** A bug: the reporter's symptom reproduced on `main` (red) before the fix, then the same steps on the branch (green). A feature: the done check in the requester's words, one that can fail.
+2. **Where** it must hold: platforms; real system vs fake.
+3. Every risk row below that matches what the request touches.
 
-The delivery loop is coordinated by the top-level `/start-task` session. It starts the implementation pipeline, invokes the independent review pipeline after a draft PR exists, normalizes `REQUEST_CHANGES` into a review-feedback artifact, and routes fixes through the PR-fix pipeline. The independent reviewer remains separate from the implementation agents.
+| The change touches | It always needs |
+| --- | --- |
+| a surface an existing e2e spec drives (grep `e2e/specs` for the changed screens, stores, services) | those specs, on the PR's CI APK (`/run-pr-e2e`) |
+| llama.rn, whisper.rn, native inference, model loading, backends | `bench` on the full matrix and `memory-profile`; a device run with a stateful (hybrid / recurrent) and a multimodal model as well as a transformer |
+| native dependencies, Gradle, Podfile, ProGuard / dependency trims | iOS and Android release builds; a real-store `.e2e` smoke build plus a negative control |
+| purchases, store, entitlements, Plus | `iap-plus` and a real store sandbox run, not only FakeStore |
+| remote-server wire format | a strict OpenAI-compatible server as well as llama-server; read what the server applied (`/slots`), not the status code |
+| downloads, network resilience | the slow-network proxy (stall, resume, terminal failure) and a permission decline |
+| sheets, keyboard, layout | iOS and Android, rotation, multi-window or tablet width (`wm density`), dark mode, from a focused input |
+| a heuristic that filters, blocks, or parses | false-positive cases that must still pass, alongside the hostile ones |
+| imported or external data reaching a file, network, or render sink | a hostile input at each sink that is reachable on `main` |
+| voice, audio, mic, TTS / ASR engines | the voice specs and `tts-memory-profile`; a device run covering first-time setup, interruption, and a model that does not fit |
+| iOS-only code paths | a run through `ios-router`; this host has no iOS |
+| render-heavy paths, perf claims | the Reassure gate; an on-device A/B for any claimed speed-up |
 
-**Finalization after the human merges.** Once the PR is merged, the `/start-task` session finishes the task without asking again: drop any "not on `main`" banners for the PR from `context/architecture/` (path-scoped commit), add a closing note to the story, tell sessions whose PRs depend on the change, and remove the task's worktrees (`<TASK-ID>`, `PR-<n>`, `PR-<n>-e2e`) with `./tools/remove-worktree.sh <name> --yes`. Check each worktree is clean first; stop and report one that has uncommitted or unpushed work.
+| Stage | Evidence work |
+| --- | --- |
+| intake | writes the claim, the platforms, the matching rows |
+| architect | adds an item per canonical scenario and per required WHAT section it fills |
+| implementer, fix rounds | add items for touched surfaces the plan didn't foresee |
+| tester | runs each item as a command, spec, or device run and records the receipt. **CI APK** rows (e2e specs, bench, memory profiles, store runs) run post-PR on the draft PR's CI APK; compare any red against `main` before calling it |
+| pipeline-reviewer | checks every pre-PR item has a receipt or a documented reason it could not run; posts the **evidence comment** (what was proven and its receipt, public references only, captures inline); the tester appends post-PR rows. `tools/pr-gates.sh` fails without it |
 
-## Stage outputs
+Any stage may add an item; dropping one needs a reason in its row. A capture is an evidence item whose receipt is an image.
 
-| Stage | Agent | Output |
+## Decisions and product calls
+
+`decisions.md` logs every decision except the architect's engineering ones (WHAT §8); later stages and reviewers read it.
+
+| Kind | Who decides | Rule |
 | --- | --- | --- |
-| Intent | `pocketpal-intake` | `workflows/stories/<TASK-ID>/intent-brief.md` or a `NEEDS_INPUT` stop with explicit unanswered questions |
-| WHAT | `pocketpal-architect` | `workflows/stories/<TASK-ID>/what.md` (delta on `context/architecture/<flow>.md`) |
-| WHAT review | `pocketpal-architect-critic` | LGTM / HAS_CONCERNS / HAS_BLOCKERS |
-| HOW | `pocketpal-planner` | `workflows/stories/<TASK-ID>/how.md` |
-| HOW review | `pocketpal-plan-critic` | LGTM / HAS_CONCERNS / HAS_BLOCKERS / ARCHITECTURE_DRIFT |
-| Implementation | `pocketpal-implementer` | code + commits + architecture-doc update |
-| Test | `pocketpal-tester` | tests + coverage + visual captures + durable command/results notes |
-| Final review | `pocketpal-pipeline-reviewer` | draft PR or REQUEST_CHANGES, with artifact-backed verification evidence + visual-evidence PR comment |
-| Independent review | `review-pr` skill / `pocketpal-code-reviewer` + role reviewers | `workflows/reviews/<TARGET-ID>/round-<N>/final.md` |
-| Review feedback intake | `/start-task` top-level session | `workflows/stories/<TASK-ID>/review-feedback-round-<N>.md` |
+| **Fact** (library behaviour, platform limit, what a server accepts) | nobody: it is proven | `(C)` read from code at `file:line`, or `(F)` proven by a spike with its receipt |
+| **Product call** (user-visible behaviour the request leaves open, copy, accepting a limitation or regression) | the operator | logged with a recommended default; one that shapes the contract is `NEEDS_INPUT`, the rest proceed on the default and are listed in the stage reply |
+| **Engineering choice** | the architect | a WHAT (D) row, defended against a real alternative |
+| **Operator or PM ruling** | as given | logged verbatim with its date |
+| **Review dismissal** | the review's refutation | logged from `final.md` by the orchestrator, its only writer; later rounds don't re-raise it without new evidence |
 
-## Headless invocation contract
+A decision is reversed only by a new row that names the one it replaces.
 
-- Every intake invocation must be a self-contained brief. Include the full request text, acceptance criteria, constraints, and any known baseline/version context in the prompt itself.
-- If information is missing, intake replies `VERDICT: NEEDS_INPUT` with the exact questions, each with the answer it would pick, and does not classify or route. A new invocation supplies the answers.
+## Tracer slice
 
-## Complexity matrix
+Standard and complex work: the implementer first commits the thinnest end-to-end slice of the WHAT's core path; `pocketpal-architect-reviewer` reviews the slice diff against the WHAT. A finding that contradicts a WHAT decision or premise comes back as `DESIGN_INVALIDATED`.
 
-| Level | When | Pipeline applied |
-| --- | --- | --- |
-| **trivial** | Single-file copy / config / typo / version bump. < 20 lines. No new contract. | Intent → Implementer (skip WHAT, HOW, plan-critic). |
-| **quick** | 1–3 files. Bug fix or small enhancement that doesn't change a contract; existing flow doc covers the area. | Intent → Planner → Plan-critic → Implementer (skip WHAT). |
-| **standard** | Touches a contract (data model, single-writer, rendering, persistence, wire format). Multi-file. Existing flow doc may need a delta. | Full pipeline. |
-| **complex** | Cross-flow, new flow, architecture-changing. Likely creates a new flow doc. | Full pipeline; expect both critic loops to use the full 2-round budget. |
+## Going back: `DESIGN_INVALIDATED` and restarts
 
-Intake picks the level once the brief is written. If `Status: approved` (no clarifications needed) it classifies and emits the first handoff; if `Status: needs-input` it emits `NEEDS_INPUT` and stops. When in doubt, classify up.
+Any stage after intake replies `DESIGN_INVALIDATED` (with `INVALIDATED:`) when:
 
-## Exploration policy
+- a load-bearing `(C)` or `(F)` premise turns out false;
+- a fix would contradict a recorded decision;
+- a second fix on the same premise has failed;
+- most findings in a review round were introduced by the previous round's fixes;
+- an operator ruling reverses part of the contract.
 
-Design and plan exploration are lightweight candidate passes before the final contract artifacts:
+The architect amends WHAT (one critic pass) and names the code the amendment obsoletes. Code built on an invalidated premise is removed, not adapted.
 
-- **Design exploration** is required for complex tasks and optional for standard tasks with competing architecture shapes, persistence/migration risk, native/model execution changes, security/trust-boundary changes, or cross-store ownership uncertainty.
-- **Plan exploration** is required for complex tasks and optional for standard tasks with risky sequencing, broad verification uncertainty, native build changes, migrations, feature-flag rollout, or cross-flow commit boundaries.
-- Candidate artifacts live beside the story as `design-candidate-*.md` or `plan-candidate-*.md`.
-- Critics review only the synthesized `what.md` or `how.md`, not every candidate.
-- Final WHAT/HOW stay concise: WHAT may include bounded alternatives bullets; HOW uses a one-line sequencing note.
+**Restart** (new branch and worktree, fresh agents, the old PR closed with a one-line public pointer to its replacement) when:
 
-## Critic loop semantics
+| Observed | Restart at |
+| --- | --- |
+| the claim was wrong (the repro or done check isn't what the requester meant) | intake |
+| an invalidated premise carries most of the design | architect |
+| finding counts in one area don't fall from one review or critic round to the next | architect, for that area |
+| the diff far exceeds what WHAT projected, or carries machinery with no reader | architect, or intake to slice |
+| `main` moved under the design: a sibling landed that breaks an assumption | architect, on the new `main` |
+| the PR sat for weeks far behind `main` with no review | intake, to re-slice |
 
-Both critic loops follow the same shape:
-
-- **LGTM** → producer's output advances to the next stage.
-- **HAS_CONCERNS / HAS_BLOCKERS** → back to the same producer (architect or planner) in revision mode.
-- **ARCHITECTURE_DRIFT** (plan-critic only) → back to the **architect**, not the planner. A bug in WHAT is fixed in WHAT.
-- **Max 2 critic rounds.** If round 2 still has BLOCKERs, escalate to human.
-- The critic is invoked with **paths only** — never the producer's reasoning. It forms its own view from the codebase.
+A restart keeps `evidence.md` and its receipts, spike receipts, behaviour tests, `decisions.md` (the reversed row marked), and review findings as scenarios the new design must handle; it discards the implementation of the invalidated part. Not restart triggers: a local bug in a sound design, one finding however severe, taste tweaks that leave the contract alone, "it's almost done".
 
 ## Independent review loop
 
-After `pocketpal-pipeline-reviewer` opens a draft PR, the top-level `/start-task` session invokes the independent review pipeline:
+`review-pr <PR>` runs only once `tools/pr-gates.sh <PR>` passes. Output: `workflows/reviews/PR-<n>/round-<N>/final.md`. Every round counts toward the cap of 2, whatever the previous verdict; a third round needs an operator or PM ruling, logged in `decisions.md`.
 
-```text
-review-pr <PR number>
-```
+- `APPROVE` with only SUGGESTIONs ends the review. Suggestions go to the PR body's follow-ups; none triggers a round.
+- `REQUEST_CHANGES`, in order:
+  1. Intake sets up the PR-fix story `PR-<n>-fix` (first round only: it carries `evidence.md` and `decisions.md` over and points `INTENT_BRIEF`, `WHAT`, `HOW` at the original story).
+  2. The orchestrator writes the **fix brief** `<STORY_DIR>/review-feedback-round-<N>.md` from `templates/review-feedback-template.md` and logs the round's review dismissals in `decisions.md`. A finding that contradicts `decisions.md` or WHAT, or that a previous round already fixed once, goes to the architect as `DESIGN_INVALIDATED` instead of into the brief.
+  3. `pocketpal-plan-critic` reviews the brief (fix-brief mode, paths only) before any code.
+  4. implementer → tester (re-running the brief's evidence rows and the surfaces each fix touched) → pipeline-reviewer → gates → review.
 
-Review output is durable:
+## Finalization after the human merges
 
-```text
-workflows/reviews/PR-<n>/round-<N>/final.md
-```
+Once the PR is merged, the `/start-task` session finishes the task without asking again: replace `(pending #<n>)` markers for the PR in `context/architecture/` with current-truth wording (path-scoped commit), add a closing note to the story, tell sessions whose PRs depend on the change, and remove the task's worktrees (`<TASK-ID>`, `PR-<n>`, `PR-<n>-e2e`) with `./tools/remove-worktree.sh <name> --yes`. Check each worktree is clean first; stop and report one that has uncommitted or unpushed work.
 
-If the verdict is `REQUEST_CHANGES`, the top-level `/start-task` session creates:
+## Design exploration
 
-```text
-workflows/stories/<TASK-ID>/review-feedback-round-<N>.md
-```
+`DESIGN_EXPLORATION=YES`: required for complex tasks; optional for standard ones with competing architecture shapes, persistence or migration risk, native or model-execution changes, or trust-boundary changes. The architect explores; the critic reviews only the synthesized `what.md`.
 
-Only `BLOCKER` and `CONCERN` findings are mandatory fix scope. `SUGGESTION` findings are out of scope unless required by a mandatory fix. The PR-fix pipeline consumes the feedback artifact and the independent review repeats. Max 2 external review/fix rounds, then escalate if blockers or concerns persist.
+## Redesign slices (Figma-pinned work)
 
-## Disambiguation: similar agent names
-
-| Agent | When | What it reviews |
-| --- | --- | --- |
-| `pocketpal-architect` | After intent, before HOW | Produces `what.md` |
-| `pocketpal-architect-critic` | After WHAT drafted | `what.md` (design) |
-| `pocketpal-architect-reviewer` | During PR review | CODE diffs (architecture lens) |
-| `pocketpal-plan-critic` | After HOW drafted | `how.md` (plan) |
-| `pocketpal-pipeline-reviewer` | After impl + tests | Everything; gates draft PR |
-| `pocketpal-code-reviewer` | Standalone | Branch or PR, independent of pipeline state |
-| `pocketpal-design-parity-reviewer` | Redesign slices only, after implementer | Committed Figma-vs-sim visual diffs; node-for-node parity |
-
-Pipeline progression: **architect → architect-critic → planner → plan-critic → implementer → tester → pipeline-reviewer**.
-
-## Redesign-slice sub-pipeline (Figma-pinned work)
-
-For any task that implements a Figma node id (FOU-112 redesign rollout, or any task pinning a canonical Figma file), the implementer follows the `figma-implement` skill (metadata-first inspection, design-context translation, committed side-by-side captures), then an extra gate runs before the pipeline-reviewer:
-
-```text
-implementer (figma-implement skill) → pocketpal-design-parity-reviewer → pipeline-reviewer
-```
-
-The parity reviewer compares each committed `*-figma.png`/`*-sim.png` pair and walks the Figma node tree for silently-dropped children; max 2 parity rounds before human escalation. See `docs/workflows/visual-capture.md` (Flavour C).
+For a task that implements a Figma node id, the implementer follows the `figma-implement` skill and the design-parity-reviewer runs as routed above (`docs/workflows/visual-capture.md`, Flavour C).
