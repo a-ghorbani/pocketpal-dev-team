@@ -41,7 +41,7 @@ One file per **flow**, bounded by a single user-facing concept. Per-component is
 | `app-icon.md` | launcher icon sources, generator, Android adaptive/themed and iOS appearances | `scripts/generate-app-icons.js`, `scripts/app-icon/`, `AppIcon.appiconset` |
 | `release.md` | Android native build, llama.rn payload variants (incl. Hexagon), payload gate; iOS RN build mode, native dependency patches, RN-upgrade audits | `scripts/verify-android-payload.js`, `scripts/android-payload-manifest.json`, `android/fastlane/`, `.github/actions/setup-hexagon-sdk/` |
 
-A flow file appears here once a story has produced a vetted WHAT for it; the library accrues lazily. Adding a flow doc means adding its row. Flow docs describe `main`; a doc marked with a branch or PR describes code that hasn't landed yet.
+A flow file appears here once a story has produced a vetted WHAT for it; the library accrues lazily. Adding a flow doc means adding its row. Flow docs describe `main`. A line describing code that hasn't landed carries `(pending #<PR>)` (or `(pending <TASK_ID>)` until the PR exists); a whole doc for unlanded code says so under its title. A bare `(pending PR)` can't be resolved by finalization, so don't write one.
 
 ---
 
