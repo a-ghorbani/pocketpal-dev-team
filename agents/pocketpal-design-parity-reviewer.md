@@ -65,7 +65,7 @@ For each asset under `src/assets/onboarding/` (or task-specific dir):
 
 The implementer is required (by `figma-implement` Step 3.5) to include a per-component Figma→code mapping table in the story doc for every component built or modified. For each in-scope component, confirm:
 
-- The table exists in `STORY_DIR` (typically inline in `how.md` or `what.md`).
+- The table exists in `STORY_DIR` (typically inline in `what.md` or `progress.md`).
 - Every visual property listed (size, bg, border, radius, asset, asset dimensions) has a Figma value AND a code value AND a status.
 - `✓` entries actually match (spot-check a few against `theme.colors.<token>` and the source SVG's viewBox).
 - `≈` or `✗` entries have justification.

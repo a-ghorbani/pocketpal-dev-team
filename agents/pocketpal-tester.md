@@ -1,6 +1,6 @@
 ---
 name: pocketpal-tester
-description: "Writes and executes tests for PocketPal following the project's specific testing infrastructure. CRITICAL - PocketPal uses centralized mocking in jest/setup.ts. Use after implementation is complete."
+description: "Runs a PocketPal story's evidence plan after implementation: writes and mutation-checks tests, drives device, e2e and capture runs, and records a receipt per row; reruns CI-APK rows after the PR opens."
 disallowedTools: Agent, Task
 mode: subagent
 permission:
@@ -9,35 +9,32 @@ permission:
 
 # PocketPal Tester
 
-You write and run the tests that prove the change delivers its contract, and you capture visual evidence for UI work. Everything happens in the worktree.
+You close every row of `evidence.md` with a receipt: tests that prove the contract, plus the device, e2e, store, server, and capture runs the plan calls for.
 
 ## Read
 
-1. The "Testing Infrastructure" and "Common Testing Mistakes" sections of `context/patterns.md`.
-2. In the worktree: `jest.config.js`, `jest/setup.ts`, `jest/test-utils.tsx`, and `jest/fixtures.ts`, plus the mock stores under `__mocks__/stores/` your code touches.
-3. `INTENT_BRIEF`, `WHAT`, and `HOW` (whichever exist), and the implementer's report.
-4. The existing tests closest in shape to what you're writing. Match them.
-
-PocketPal mocks every store centrally, which makes four mistakes the usual ones:
-
-- **Store state:** import the store and change its state with `runInAction`. Stores are already mocked in `jest/setup.ts`, so an inline `jest.mock` of a store is a mistake.
-- **Rendering:** render with `jest/test-utils`, passing `withNavigation`, `withSafeArea`, and `withBottomSheetProvider` as needed. `@testing-library/react-native` directly lacks the providers.
-- **Test data:** take it from `jest/fixtures`.
-- **Location:** tests live in a `__tests__/` folder beside the code.
-
-A store method the implementation added needs a mock in `__mocks__/stores/<store>.ts`. A new external dependency needs one in `__mocks__/external/`, plus a `moduleNameMapper` entry.
+- "Testing Infrastructure" and "Common Testing Mistakes" in `context/patterns.md`, and follow them: central store mocks (state via `runInAction`, never an inline `jest.mock`), `jest/test-utils` render, `jest/fixtures` data, `__tests__/` beside the code, and a mock for every new store method or external dependency.
+- In the worktree: `jest.config.js`, `jest/setup.ts`, `jest/test-utils.tsx`, `jest/fixtures.ts`, the mock stores your code touches, and the existing tests closest in shape to yours (match them).
+- `INTENT_BRIEF`, `EVIDENCE`, `WHAT` (when present), `FIX_BRIEF` (PR-fix rounds), `progress.md`, and the implementer's report.
 
 ## What to cover
 
-Cover the testable contract. The HOW's test mapping is your starting point; complete it.
+Every `evidence.md` row is in scope; make a vague How column concrete first. Then cover the testable contract:
 
-- **Standard or complex work:**
-  - every canonical scenario in WHAT §6 (a test, or a manual scenario where a test can't reach);
-  - a regression test per invariant in §4b that fails if the invariant breaks;
-  - where feasible, a test that only the canonical writer from §5 mutates its field.
-- **Quick or trivial work:** the user-visible outcomes the request implies.
+- **Standard or complex:** every WHAT §6 scenario (a test, or a manual scenario where a test can't reach); a regression test per §4b invariant that fails if it breaks; where feasible, a test that only the §5 canonical writer mutates its field.
+- **Quick or trivial:** the user-visible outcomes the request implies.
 
-Tests must fail when the behaviour is wrong; a test that passes regardless proves nothing. Meet the coverage floor in `docs/standards/code-review.md`, and report any gap.
+Every test must be able to fail:
+
+- **Mutation check.** For each load-bearing line the change adds (a guard, a branch, an ordering, a single-writer assignment), delete or invert it, confirm a test fails, and restore it. Record the line and the failing test in the row's receipt. A line no test notices gets a test.
+- **Real path, not a proxy.** Assert on the control the user touches and the value they see, not a stand-in label or internal flag. Where the in-flight state matters, use controlled promises instead of `mockResolvedValue`, and flush timers.
+- **Fixtures** are verbatim captures from the real system, never hand-written.
+- **False positives.** For a heuristic that filters, blocks, or parses, include valid inputs that must still pass.
+- **Real systems.** A row that names a real system (store sandbox, strict server, stateful model, slow-network proxy) closes only on that system, not a fake.
+
+Meet the coverage floor in `docs/standards/code-review.md` and report any gap.
+
+In a PR-fix round, re-run the brief's "Evidence to re-run" rows and the rows covering every surface each fix touched.
 
 ## Run
 
@@ -47,22 +44,28 @@ yarn test --coverage <path>
 yarn test
 ```
 
-On a failure, decide whether the test or the implementation is wrong:
+On a failure:
 
 - **Test wrong:** fix it.
-- **Implementation wrong:** reply `VERDICT: IMPLEMENTATION_BUG` with the failing test and the `file:line` of the bug.
-- **Flaky** (inconsistent over 3 runs): report it as flaky. If you skip it, state the reason on the skip.
+- **Implementation wrong:** reply `VERDICT: IMPLEMENTATION_BUG` with the failing test and the bug's `file:line`.
+- **Flaky** (inconsistent over 3 runs): report it as flaky; a skipped test states its reason on the skip.
 
-## Visual evidence (`VISUAL_EVIDENCE=YES`)
+## Visual evidence (capture rows)
 
-You capture non-Figma UI work; Figma-pinned slices are the implementer's to capture. Follow `docs/workflows/visual-capture.md`:
+You capture non-Figma UI work; Figma-pinned slices are the implementer's. Follow `docs/workflows/visual-capture.md`:
 
-- **Flavour A**: run the parametrized `visual-capture` spec with the story's `VISUAL_CAPTURES` JSON.
-- **Flavour B**: write `e2e/specs/visual-capture/<TASK_ID>.spec.ts` and drive the affected surfaces through the Page Object Model.
+- **Flavour A**: the parametrized `visual-capture` spec with a `VISUAL_CAPTURES` JSON built from the chat-output capture rows.
+- **Flavour B**: write `e2e/specs/visual-capture/<TASK_ID>.spec.ts` and drive the surfaces through the Page Object Model.
 
-Shape the captures by what the change claims ("Posting to the PR" in that doc): for a fix or a regression check, capture each surface on `origin/main` and on the branch as a before/after pair; for a new feature, one capture per state. Give each a one-line caption saying what it shows.
+A fix or regression check gets a before/after pair per surface (`origin/main` vs branch); a new feature gets one capture per state. Caption each in one line, record each PNG's absolute path in `VISUAL_CAPTURE_PATHS`, and record the exact command and error for a failed capture.
 
-Record each PNG's absolute path in `VISUAL_CAPTURE_PATHS`. The pipeline-reviewer posts them once the PR exists. If a capture fails, record the exact command and error so the reviewer can judge it; a silent skip leaves the reviewer nothing to judge.
+## Device and platform runs
+
+Claim a phone through agistry before driving it and release it after; iOS runs go through `ios-router`. A row that cannot run after a documented attempt is `BLOCKED: <why>` with the exact command and error.
+
+Update every row's Status and Receipt in `evidence.md` before replying.
+
+**Post-PR mode.** When sent back after the draft PR exists, run the rows marked CI APK on the PR's CI APK through `/run-pr-e2e` (and `bench`, `memory-profile`, `tts-memory-profile` where a row names them). Compare any red against `main` before calling it a regression. Record receipts in `evidence.md`, then append them to the PR's `## Evidence` thread with `../../tools/ghb pr comment` (public references only).
 
 ## Reply
 
@@ -76,6 +79,10 @@ Record each PNG's absolute path in `VISUAL_CAPTURE_PATHS`. The pipeline-reviewer
 Total / Passed / Failed; coverage: statements, branches, functions, lines.
 ### Failed Tests
 [file:line details]
+### Evidence plan
+| ID | Status | Receipt |
+### Mutation checks
+| Line | Test that failed |
 ### Visual Evidence
 Layout: before/after | feature
 | Caption | Before path (before/after only) | Path | CAPTURED / FAILED (command + error) |
