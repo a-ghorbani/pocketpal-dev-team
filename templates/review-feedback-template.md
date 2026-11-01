@@ -1,6 +1,6 @@
-# Review Feedback Intake: <PR or task> Round <N>
+# Fix brief: <PR or task> Round <N>
 
-Normalized input for a PR-fix pipeline. Import actionable findings from `workflows/reviews/<TARGET_ID>/round-<N>/final.md`; do not paste reviewer reasoning that is not needed to implement the fix.
+Actionable findings from `workflows/reviews/<TARGET_ID>/round-<N>/final.md`, without reviewer reasoning the fix doesn't need.
 
 ---
 
@@ -24,20 +24,22 @@ Normalized input for a PR-fix pipeline. Import actionable findings from `workflo
 
 ## Fix Scope
 
-Only `BLOCKER` and `CONCERN` findings are mandatory. `SUGGESTION` findings are out of scope unless needed to fix a mandatory item.
+`BLOCKER` and `CONCERN` findings only; `SUGGESTION`s go to the PR's follow-ups. A finding that contradicts `decisions.md` or WHAT, or that an earlier round already fixed, is `DESIGN_INVALIDATED`, not a row.
 
-| ID | Severity | Lens | Path | Line | Required fix |
-| --- | --- | --- | --- | --- | --- |
-| R1 | BLOCKER | Correctness | `src/...` | 123 | <one-sentence fix> |
+| ID | Severity | Path:line | State touched | Owned at | Writers / callers checked | Required fix |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1 | BLOCKER | `src/...:123` | <field, file, or lifecycle> | <where that state is decided> | <each writer and caller, file:line> | <one sentence, applied at the owner> |
 
 ---
 
-## Verification Required
+## Evidence to re-run
 
-- <command or manual check from review final.md>
+Each finding's own check, plus the `evidence.md` rows covering every surface a fix touches.
+
+- <E-id or new row>
 
 ---
 
 ## Out Of Scope
 
-- <suggestions or deferred items not required for this fix round>
+- <suggestions or deferred items>
