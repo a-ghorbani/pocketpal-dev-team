@@ -39,6 +39,10 @@ Resolve these before classification:
 
 If essential target information is missing and cannot be found locally or from GitHub, stop and ask for the missing target.
 
+## Readiness
+
+For a PR produced by this pipeline (a story exists for its branch), run `tools/pr-gates.sh <PR>` first. If `ci` or `evidence` fails, reply `NOT_READY` with the gate output and stop without creating a round folder. A standalone review the user asked for (an external PR, a branch) proceeds and records the gate output in `verification.md`.
+
 ## Worktree Setup
 
 For PR targets, fetch the PR branch from `repos/pocketpal-ai`, then create or reuse a dedicated review worktree from that fetched ref.
@@ -71,6 +75,8 @@ Read only the context that applies to the review target.
 - `docs/standards/architecture.md` for app boundaries, runtime surfaces, and data-flow orientation.
 - `context/patterns.md` for local implementation and test conventions.
 - `docs/workflows/visual-capture.md` when UI screenshots or visual evidence are relevant.
+- The story's `evidence.md`, `decisions.md`, and `what.md` when the change came from this pipeline; pass their paths to every role reviewer (how they are used: `docs/standards/code-review.md`, Canonical Inputs).
+- Earlier rounds' `final.md` for this target: report a finding already fixed once and now back as a design problem, not another fix.
 
 ## Review Artifact Folder
 

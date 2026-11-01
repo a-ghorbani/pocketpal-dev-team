@@ -24,6 +24,7 @@ Load whatever is available:
 
 - the change set (PR diff, branch diff, worktree diff)
 - the story, issue, or acceptance criteria
+- the story's `evidence.md` (what was proven, with receipts), `decisions.md`, and WHAT §8 (what was decided). Re-raise a decided item only with new evidence that it is wrong, and name that evidence.
 - `context/patterns.md`
 - project-local standards referenced by the change
 - existing CI or implementation verification output
@@ -38,7 +39,8 @@ If critical context is missing, state it explicitly.
 4. Skip minor style churn unless it affects safety, readability, or consistency.
 5. Separate confirmed defects from unproven verification.
 6. Review for the next engineer too — call out hidden invariants and future traps.
-7. Prefer the simpler fix and don't grow the scope. Close a finding with the smallest change that handles it correctly; prefer an existing state or path when it does the job.
+7. Prefer the simpler fix and don't grow the scope. Close a finding with the smallest change that handles it correctly; prefer an existing state or path when it does the job. Hardening, defence in depth, or an improvement whose fix costs more than the risk it removes is a SUGGESTION; a real, reachable defect (wrong behaviour, data loss, a reachable security sink) keeps its severity whatever the fix costs (see Adversarial verification).
+8. Code with no reader in the change, no trace to the request, or guarding a path nothing reaches is a finding too (Architecture lens). Removing it is a valid fix.
 
 ## Role Reviewers
 
@@ -92,7 +94,7 @@ The `local-invariants` role reviews changed lines for small contract breaks defi
 - **Maintainability and readability** _(Architect)_: duplication, naming, fragile logic, magic constants, hard-to-test design. (Owned by the architect role in high-risk reviews; the lead applies it against the diff directly when no architect subreview ran.)
 - **Comment load** _(Architect)_: over-commenting is a recurring defect in this repo, so review it explicitly rather than waiting to be asked. Classify every questionable comment with the four-case test under "Comments" below. A finding **must name which case**: "too many comments" is not actionable, "this is case 2 — the comment exists because the function does three things" is. Volume itself is evidence: a diff that needs heavy commentary is reporting a clarity or design problem, and the remedy is the code, not better prose. Also flag task narrative in source (naming the bug just fixed, round numbers, plan-step restatements) — that rots into archaeology.
 - **Tests and verification** _(QA)_: missing coverage, weak assertions, mocks that hide contracts, skipped tests, manual validation gaps. **Coverage floor: 60%** (statements, branches, functions, lines) for the changed surface; below it is a `BLOCKER` unless explicitly waived.
-- **Security and privacy** _(Security)_: PocketPal is an **on-device app, not a server** — review against the mobile threat model, not a server perimeter. The real trust boundaries are: (a) model-generated content reaching render/execution surfaces (markdown/HTML/WebView/JS, tool-call/JSON parsing); (b) external content entering the app (downloaded GGUF models, web-search/internet results, deep links / App Intents / Shortcuts params, PalsHub rows); (c) on-device data at rest and in logs (chat history, API keys, server/auth tokens, crash reports); (d) the native bridge and capability allowlist (Pals-as-apps WebView bridge); (e) debug/E2E hooks reachable in production builds. A security finding on a trust-boundary diff must name an untrusted **source** and the **sink** it reaches unsanitized.
+- **Security and privacy** _(Security)_: PocketPal is an **on-device app, not a server** — review against the mobile threat model, not a server perimeter. The real trust boundaries are: (a) model-generated content reaching render/execution surfaces (markdown/HTML/WebView/JS, tool-call/JSON parsing); (b) external content entering the app (downloaded GGUF models, web-search/internet results, deep links / App Intents / Shortcuts params, PalsHub rows); (c) on-device data at rest and in logs (chat history, API keys, server/auth tokens, crash reports); (d) the native bridge and capability allowlist (Pals-as-apps WebView bridge); (e) debug/E2E hooks reachable in production builds. A security finding on a trust-boundary diff must name an untrusted **source** and the **sink** it reaches unsanitized, and show the sink is **reachable on `main`** with that input (the call path, `file:line` per hop). A guard on a path no attacker-controlled input reaches is defence in depth: at most a SUGGESTION, whatever the theoretical impact.
 - **Data and migration safety** _(Data, Security)_: schema changes, persisted state, cache invalidation, backward compatibility, rollback.
 - **Performance and resources** _(Perf, Mobile Platform)_: hot paths, unbounded work, repeated I/O, memory, storage, startup time, battery. PocketPal runs LLMs on phones; any change that could plausibly increase RAM/heap, model load time, bundle size, startup, or battery use must be flagged at `CONCERN` minimum.
 - **UX and accessibility** _(UX/A11y)_: user-visible flows, honest states, error messages, accessibility, copy consistency, lost affordances.
@@ -129,7 +131,7 @@ Nothing about the task belongs in source: no "we hit X", no round numbers, no st
 
 - `BLOCKER`: incorrect behavior, broken contract, exploitable security issue, unsafe data change, missing mandatory verification, missing critical test.
 - `CONCERN`: real issue that should not merge yet but is below blocker.
-- `SUGGESTION`: legitimate improvement, deferrable.
+- `SUGGESTION`: legitimate improvement, deferrable to the PR's follow-ups; never triggers a fix round.
 
 `NOTHING_FOUND` is a valid outcome. Do not invent issues.
 
@@ -145,12 +147,17 @@ Severity is impact-if-real; confidence is likelihood-it's-real. Never collapse t
 
 ## Adversarial verification
 
-Before any `BLOCKER` or `CONCERN` is accepted into the final review, attempt to **refute** it: argue from the code and contracts why it might NOT be a real defect — wrong, already handled elsewhere, unreachable, or masked by an invariant. The refutation must be performed by someone other than the role reviewer that produced the finding (the lead synthesizer, or a dedicated skeptic subreview for the highest-stakes findings).
+Before any `BLOCKER` or `CONCERN` is accepted into the final review, attempt to **refute** it on two questions:
+
+1. **Is it real?** Argue from the code and contracts why it might NOT be a defect — wrong, already handled elsewhere, unreachable on `main`, masked by an invariant, or already decided in `decisions.md` / WHAT §8.
+2. **Is the fix worth it?** For hardening and improvements only: name the fix's cost (new states, guards, tests, the surfaces it touches) against the risk it removes; a fix bigger than its risk makes it a SUGGESTION.
+
+The refutation must be performed by someone other than the role reviewer that produced the finding (the lead synthesizer, or a dedicated skeptic subreview for the highest-stakes findings).
 
 Record the outcome on the finding:
 
 - `refutation: stands` — survived the attempt; it ships.
-- `refutation: withdrawn — <reason>` — drop or downgrade it, with the reason.
+- `refutation: withdrawn — <reason>` — drop or downgrade it, with the reason. The delivery orchestrator copies these into the story's `decisions.md`; reviewers don't write story files.
 
 A finding that cannot survive a genuine refutation attempt must not ship as a `BLOCKER`/`CONCERN`. This is false-positive suppression with an audit trail, not silent dropping.
 
@@ -166,7 +173,7 @@ A finding that cannot survive a genuine refutation attempt must not ship as a `B
 
 ## Verdict
 
-- `APPROVE` — no unresolved blockers or concerns, verification complete or N/A, residual risk acceptable.
+- `APPROVE` — no unresolved blockers or concerns, verification complete or N/A, residual risk acceptable. An `APPROVE` that carries only suggestions ends the review.
 - `REQUEST_CHANGES` — any blocker, serious unresolved concern, missing mandatory verification, or unproven acceptance criteria.
 - `ESCALATE` — needs human product/architecture judgment, or the diff is too ambiguous to review safely.
 

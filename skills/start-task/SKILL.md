@@ -7,7 +7,7 @@ argument-hint: "[work reference or description]"
 
 # Start Task
 
-You are the top-level delivery controller for one PocketPal task. You dispatch every stage role yourself and route between them. Read [`docs/workflows/pipeline.md`](../../docs/workflows/pipeline.md) first; it holds the dispatch mechanics, the handoff block, the routing table, the stop conditions, and the critic-loop rules.
+You are the top-level delivery controller for one PocketPal task. You dispatch every stage role yourself and route between them. Read [`docs/workflows/pipeline.md`](../../docs/workflows/pipeline.md) first: it is your runbook.
 
 Task: $ARGUMENTS (if that placeholder is not substituted, the task is the argument the user gave with the invocation).
 
@@ -39,18 +39,15 @@ Repository: ./repos/pocketpal-ai
 
 ## 3. Run the pipeline
 
-From here on, route on each stage's `VERDICT` using the routing table in `pipeline.md`. Pass the latest handoff block verbatim to each role. Critics get paths only, never the producer's reasoning.
+Route on each stage's `VERDICT` by the routing table in `pipeline.md`. Beyond the table:
 
-Once the pipeline-reviewer returns `APPROVED` with a `PR`:
+- **Slice review** (`SLICE_READY`): give `pocketpal-architect-reviewer` the slice's commit range.
+- **`DESIGN_INVALIDATED`**: check the restart triggers under "Going back" before dispatching the architect's amendment.
+- **Product calls**: relay every defaulted product call a stage reports in your status, so the operator (or the PM) can override it before the code depends on it.
+- **Gates**: wait on `tools/pr-gates.sh <PR>` with a watcher that outlives your turn, not a poll-and-exit.
+- **`REQUEST_CHANGES`**: follow "Independent review loop" in `pipeline.md`. You write the fix brief into the PR-fix story intake created, and you are the only writer of review dismissals in `decisions.md`.
 
-1. Run the independent review: the `review-pr` skill on that PR. Read `workflows/reviews/PR-<n>/round-<R>/final.md`.
-2. If the verdict is `REQUEST_CHANGES`:
-   - write `<STORY_DIR>/review-feedback-round-<R>.md` from `templates/review-feedback-template.md`, where only BLOCKER and CONCERN findings are fix scope;
-   - dispatch intake with that artifact and `PR #<n>` for the PR-fix loop;
-   - run the pipeline again, then the review again.
-3. Allow at most 2 review/fix rounds, then escalate.
-
-Stop only on the conditions listed under "Autonomous-run contract" in `pipeline.md`. Otherwise finish with `APPROVE`, and the human reviews and merges.
+Stop only on the conditions under "Autonomous-run contract" in `pipeline.md`. When a PM session dispatched this task, send stops to the PM over agistry rather than to the operator. Otherwise finish with `APPROVE`, and the human reviews and merges.
 
 ## 4. Keep the tracker current
 
