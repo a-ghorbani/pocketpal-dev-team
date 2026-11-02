@@ -62,7 +62,7 @@ This repo is one checkout on `main`, shared by parallel sessions (`worktrees/` b
   - commit your change at once, path-scoped (`git commit -- <file>`, never `add -A`).
 - **Story files.** `workflows/stories/*` and `workflows/reviews/*` exist only on the machine that wrote them. Put their content inline in a PR instead of citing the path.
 - **Follow-ups.** An agent can only arm a mechanism that outlives it. "I will do X when the build finishes", followed by exiting, arms nothing.
-- **Review subagents.** The user authorises delegated subreviews (architect, QA, security, performance, mobile, data, UX, local-invariants) wherever the review workflow requires them.
+- **Review subagents.** The user authorises delegated subreviews (architect, QA, security, performance, mobile, data, UX, local-invariants, and the code-reviewer when no role subreviews are needed) and the review-map helpers (review-map-architect, flow-analyst, requirements-mapper) wherever the review workflow requires them.
 
 ## Harness layout
 
