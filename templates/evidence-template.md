@@ -6,6 +6,8 @@ What must be shown for this change to count as done (`docs/workflows/pipeline.md
 
 - **Bug**: repro steps on `main` → observed result (red); the same steps on the branch → expected result (green).
 - **Feature**: the done check(s), each able to pass or fail.
+- **Repro on `main`** (bugs; tester, repro mode): <receipt>
+- **Cause** (bugs): <mechanism, file:line>; regression: introduced by #<PR> (<what it intended>)
 
 ## Where
 

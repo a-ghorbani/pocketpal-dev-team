@@ -36,7 +36,9 @@ mkdir -p "$STORY_DIR"
 
 If worktree creation fails, stop and report the error; never fall back to the submodule.
 
-**PR fix.** The request is the review round's `final.md`.
+### PR fix
+
+The request is the review round's `final.md`.
 
 - Set up the worktree and `STORY_DIR`, then skip steps 3–5's drafting; the orchestrator writes the fix brief next.
 - Find the original task from the PR's branch.
@@ -77,7 +79,8 @@ Seed `<STORY_DIR>/decisions.md` from its template with the product calls from st
 
 Record each in the brief's metadata and in the handoff block.
 
-- **`COMPLEXITY`**: the Shape table in `docs/workflows/pipeline.md`. When a flow doc visibly contradicts the code, say so in your reply.
+- **`CLAIM`**: `bug` or `feature`, as in `evidence.md`.
+- **`COMPLEXITY`**: the Shape table in `docs/workflows/pipeline.md`. For a bug it is provisional; the tester's repro sets it from the cause. When a flow doc visibly contradicts the code, say so in your reply.
 - **`PLAN=YES`** only when sequencing is itself a risk (pipeline.md, Shape).
 - **`DESIGN_EXPLORATION`**: per pipeline.md, Design exploration.
 - **`NATIVE_CHANGES=YES`** when the work likely touches native dependencies in `package.json` (`llama.rn`, `react-native-*`), `ios/`, `android/`, a Podfile, or `build.gradle`.

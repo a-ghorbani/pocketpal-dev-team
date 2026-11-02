@@ -26,7 +26,8 @@ TASK_ID: TASK-YYYYMMDD-HHMM | PR-<n>-fix
 WORKTREE: ./worktrees/TASK-YYYYMMDD-HHMM | ./worktrees/PR-<n>
 BRANCH: feature/TASK-YYYYMMDD-HHMM | pr-<n>
 STORY_DIR: ./workflows/stories/<TASK_ID>
-COMPLEXITY: trivial | quick | standard | complex
+COMPLEXITY: trivial | quick | standard | complex   # for a bug, set by the repro
+CLAIM: bug | feature
 PLAN: YES | NO                                 # planner runs (see Shape)
 NATIVE_CHANGES: YES | NO
 DESIGN_EXPLORATION: YES | NO
@@ -57,6 +58,8 @@ Take `WORKTREE`, `BRANCH` and `STORY_DIR` from the block; never rebuild them fro
 
 Intake classifies by the **riskiest contract touched**, not size. Security, schema, and breaking-API changes are at least standard, and so is a task whose flow doc visibly contradicts the code.
 
+**Bugs reproduce first.** For `CLAIM: bug`, the tester's repro mode runs right after intake, before any design or code: it reproduces the symptom on `main`, finds the cause (and, for a regression, the change that introduced it), and sets `COMPLEXITY` from that cause.
+
 **Planner (`PLAN=YES`, set by intake or the architect)** runs after the architect-critic only when sequencing is itself a risk: several PRs, a data migration, a native build change that must land in steps, or a feature-flag rollout. Otherwise the implementer sequences its own work.
 
 **Slicing.** When the projected diff exceeds ~1,500 lines or WHAT can't fit its length budget, the architect proposes slices and replies `NEEDS_INPUT`; each slice becomes its own task.
@@ -68,8 +71,10 @@ Dispatch the next role from the returning stage's verdict at once, with no inter
 | Stage | Verdict | Next |
 | --- | --- | --- |
 | intake | `NEEDS_INPUT` | stop; surface the questions |
+| intake | `READY`, bug | tester, repro mode |
 | intake | `READY`, trivial / quick | implementer |
 | intake | `READY`, standard / complex | architect |
+| tester (repro) | `REPRODUCED` | implementer (trivial / quick) or architect (standard / complex) |
 | intake | `READY`, PR fix | orchestrator writes the fix brief → plan-critic (fix-brief mode) |
 | architect | `DRAFTED` | architect-critic |
 | architect-critic | `LGTM` | planner when `PLAN=YES`, else implementer |
@@ -131,6 +136,7 @@ When a PM session runs the queue, these stops go to the PM first (`skills/pm`).
 | Stage | Evidence work |
 | --- | --- |
 | intake | writes the claim, the platforms, the matching rows |
+| tester, repro mode (bugs) | runs the claim on `main` before any code and records the red receipt and the cause |
 | architect | adds an item per canonical scenario and per required WHAT section it fills |
 | implementer, fix rounds | add items for touched surfaces the plan didn't foresee |
 | tester | runs each item as a command, spec, or device run and records the receipt. **CI APK** rows (e2e specs, bench, memory profiles, store runs) run post-PR on the draft PR's CI APK; compare any red against `main` before calling it |
@@ -147,6 +153,7 @@ Any stage may add an item; dropping one needs a reason in its row. A capture is 
 | **Fact** (library behaviour, platform limit, what a server accepts) | nobody: it is proven | `(C)` read from code at `file:line`, or `(F)` proven by a spike with its receipt |
 | **Product call** (user-visible behaviour the request leaves open, copy, accepting a limitation or regression) | the operator | logged with a recommended default; one that shapes the contract is `NEEDS_INPUT`, the rest proceed on the default and are listed in the stage reply |
 | **Engineering choice** | the architect | a WHAT (D) row, defended against a real alternative |
+| **Prior decision** (existing code shaped that way on purpose) | its original PR | logged by the repro with the PR; a fix that undoes it is a product call |
 | **Operator or PM ruling** | as given | logged verbatim with its date |
 | **Review dismissal** | the review's refutation | logged from `final.md` by the orchestrator, its only writer; later rounds don't re-raise it without new evidence |
 

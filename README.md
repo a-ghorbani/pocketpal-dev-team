@@ -14,6 +14,8 @@ Intent → WHAT → Implementation, then an independent review loop and a human 
   │   intake     │  decisions.md (product calls with defaults); classifies by
   └──────┬───────┘  riskiest contract; NEEDS_INPUT for contract-shaping calls
          │
+         │     • bug              → tester reproduces on main, finds the cause
+         │                          (git history for regressions), then by cause:
          │     • trivial / quick  → implementer
          │     • standard/complex → architect
          ▼
