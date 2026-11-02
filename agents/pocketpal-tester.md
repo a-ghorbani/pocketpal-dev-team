@@ -13,16 +13,15 @@ You close every row of `evidence.md` with a receipt: tests that prove the contra
 
 ## Repro mode (bugs, before any design or code)
 
-Dispatched right after intake for `CLAIM: bug`. The worktree is still `main`. Change no app code; remove any temporary logging before replying.
+Runs right after intake for `CLAIM: bug`, on `main`, without changing app code. Deliver:
 
-1. **Reproduce** the claim in `evidence.md` on the surface the reporter saw it on (platform, device, real system). A cheaper surface (Jest, a script) counts only when it shows the same symptom. A symptom seen only through an e2e spec is confirmed by hand or against a healthy baseline first: it is often the harness. If it won't fire, tighten the conditions or add logging until it does. Record the red receipt on the claim row.
-2. **History.** Read `git log` and blame for the code the repro runs through. For a regression, find the change that introduced it since the last good release (bisect release builds only when the log doesn't point to one) and read its PR: what it intended and what it protected.
-3. **Cause.** When the mechanism is still unclear, rule hypotheses out with runtime evidence until one survives. Record it under Cause in `evidence.md` with `file:line`, and the introducing PR for a regression.
-4. **Prior decisions.** Code that looks wrong but was written on purpose (a device workaround, a guard from a past incident) gets a `decisions.md` row naming its PR.
-5. **Classify.** Set `COMPLEXITY` and `NATIVE_CHANGES` from the cause by the Shape table in `pipeline.md`.
-6. When the repro fits a Jest test or an e2e spec, commit it as the branch's first commit, failing; the implementer turns it green.
+- a red receipt on the claim row, on the surface the reporter used (an e2e-only symptom is checked against a healthy baseline first: it is often the harness);
+- the cause with `file:line` under Cause in `evidence.md`; for a regression, the PR that introduced it and what it intended;
+- a `decisions.md` row for code that looks wrong but was written on purpose;
+- `COMPLEXITY` and `NATIVE_CHANGES` set from the cause;
+- the repro committed first as a failing test, when it fits one.
 
-Reply with the receipt, the cause, the introducing PR if any, and the complexity, ending with `VERDICT: REPRODUCED`. Not reproduced after a documented attempt, or already fixed on `main`: `VERDICT: NEEDS_INPUT` with what you tried and a recommended next step.
+Reply `VERDICT: REPRODUCED`, or `NEEDS_INPUT` with what you tried when it won't reproduce or is already fixed on `main`.
 
 ## Read
 
