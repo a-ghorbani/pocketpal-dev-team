@@ -31,7 +31,9 @@ CLAIM: bug | feature
 PLAN: YES | NO                                 # planner runs (see Shape)
 NATIVE_CHANGES: YES | NO
 DESIGN_EXPLORATION: YES | NO
+NEEDS_RESEARCH: YES | NO
 INTENT_BRIEF: <STORY_DIR>/intent-brief.md
+RESEARCH: <STORY_DIR>/research.md             # when the researcher ran
 EVIDENCE: <STORY_DIR>/evidence.md
 DECISIONS: <STORY_DIR>/decisions.md
 WHAT: <STORY_DIR>/what.md                      # standard / complex
@@ -60,6 +62,8 @@ Intake classifies by the **riskiest contract touched**, not size. Security, sche
 
 **Bugs reproduce first.** For `CLAIM: bug`, the tester's repro mode runs right after intake, before any design or code: it reproduces the symptom on `main`, finds the cause (and, for a regression, the change that introduced it), and sets `COMPLEXITY` from that cause.
 
+**Research before choices.** With `NEEDS_RESEARCH=YES` (set by intake when a product call is open or the work is complex), the researcher runs next, after the repro for a bug: what users need (issues, discussions, feedback, reviews, forums) and how comparable products solve it, in `research.md`. Product-call defaults and the architect's hard choices cite it.
+
 **Planner (`PLAN=YES`, set by intake or the architect)** runs after the architect-critic only when sequencing is itself a risk: several PRs, a data migration, a native build change that must land in steps, or a feature-flag rollout. Otherwise the implementer sequences its own work.
 
 **Slicing.** When the projected diff exceeds ~1,500 lines or WHAT can't fit its length budget, the architect proposes slices and replies `NEEDS_INPUT`; each slice becomes its own task.
@@ -72,9 +76,10 @@ Dispatch the next role from the returning stage's verdict at once, with no inter
 | --- | --- | --- |
 | intake | `NEEDS_INPUT` | stop; surface the questions |
 | intake | `READY`, bug | tester, repro mode |
-| intake | `READY`, trivial / quick | implementer |
-| intake | `READY`, standard / complex | architect (with `DESIGN_EXPLORATION=YES`, the design arena first) |
-| tester (repro) | `REPRODUCED` | implementer (trivial / quick) or architect (standard / complex) |
+| intake, or tester (repro) `REPRODUCED` | `NEEDS_RESEARCH=YES` | researcher |
+| intake, tester (repro) `REPRODUCED`, or researcher `DONE` | trivial / quick | implementer |
+| intake, tester (repro) `REPRODUCED`, or researcher `DONE` | standard / complex | architect (with `DESIGN_EXPLORATION=YES`, the design arena first) |
+| researcher | `NEEDS_INPUT` (a contract-shaping product call, with its researched default) | stop; the answers are logged as rulings in `decisions.md`, then route as for `DONE` |
 | intake | `READY`, PR fix | orchestrator writes the fix brief → plan-critic (fix-brief mode) |
 | architect | `DRAFTED` | architect-critic |
 | architect-critic | `LGTM` | planner when `PLAN=YES`, else implementer |
@@ -151,7 +156,7 @@ Any stage may add an item; dropping one needs a reason in its row. A capture is 
 | Kind | Who decides | Rule |
 | --- | --- | --- |
 | **Fact** (library behaviour, platform limit, what a server accepts) | nobody: it is proven | `(C)` read from code at `file:line`, or `(F)` proven by a spike with its receipt |
-| **Product call** (user-visible behaviour the request leaves open, copy, accepting a limitation or regression) | the operator | logged with a recommended default; one that shapes the contract is `NEEDS_INPUT`, the rest proceed on the default and are listed in the stage reply |
+| **Product call** (user-visible behaviour the request leaves open, copy, accepting a limitation or regression) | the operator | logged with a recommended default, citing `research.md` when it ran; one that shapes the contract is `NEEDS_INPUT`, the rest proceed on the default and are listed in the stage reply |
 | **Engineering choice** | the architect | a WHAT (D) row, defended against a real alternative |
 | **Prior decision** (existing code shaped that way on purpose) | its original PR | logged by the repro with the PR; a fix that undoes it is a product call |
 | **Operator or PM ruling** | as given | logged verbatim with its date |

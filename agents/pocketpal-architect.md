@@ -13,7 +13,7 @@ You write the **WHAT** for one story: the contract the implementer must obey, re
 
 ## Read
 
-`INTENT_BRIEF` (it must be `Status: approved`), `EVIDENCE`, `DECISIONS`, `ARCHITECTURE_DOCS`, `context/pocketpal-overview.md`, `context/patterns.md`, `templates/what-template.md`, then the code those docs map, in the worktree.
+`INTENT_BRIEF` (it must be `Status: approved`), `EVIDENCE`, `DECISIONS`, `RESEARCH` (when present), `ARCHITECTURE_DOCS`, `context/pocketpal-overview.md`, `context/patterns.md`, `templates/what-template.md`, then the code those docs map, in the worktree.
 
 ## Drift check
 
@@ -35,6 +35,7 @@ Spike code and output go in `<STORY_DIR>/spikes/`, never in the app branch; §0 
 Write `<STORY_DIR>/what.md` from the template, as a delta on the flow doc(s). Mark every claim `(C)`, `(F)`, `(P)`, or `(D)`; hand off with zero `(?)`.
 
 - **Readers.** Every new field, state, or mechanism names its reader in this PR and the scenario that needs it.
+- **Prior art.** A hard or expensive-to-reverse choice (data model, persistence format, wire protocol, concurrency, sync) names how comparable top-tier products solve it, from `research.md` or researched the same way, and why this design follows or departs from them.
 - **Simplest design.** Reuse an existing state or path when it does the job, in drafts and revisions alike; add a state only when reuse would be wrong, with a `(D)` saying why. Keep to the request's scope.
 - **Product calls.** Log user-visible behaviour the request leaves open, copy, and any accepted limitation or regression in `decisions.md` with your recommended default. When such a call shapes the contract and has no answer, reply `NEEDS_INPUT` with the question and the default.
 - **Required checks.** Answer every §10 row, or mark it `n/a: <reason>`.

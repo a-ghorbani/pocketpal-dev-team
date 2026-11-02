@@ -12,10 +12,13 @@ Intent → WHAT → Implementation, then an independent review loop and a human 
          ▼
   ┌──────────────┐  intent-brief.md, evidence.md (claim, platforms, risk rows),
   │   intake     │  decisions.md (product calls with defaults); classifies by
-  └──────┬───────┘  riskiest contract; NEEDS_INPUT for contract-shaping calls
+  └──────┬───────┘  riskiest contract; NEEDS_INPUT only for an unclear request
          │
          │     • bug              → tester reproduces on main, finds the cause
-         │                          (git history for regressions), then by cause:
+         │                          (git history for regressions)
+         │     • open product calls or complex work → researcher: user need
+         │       (issues, feedback, reviews, forums) and how others solve it
+         │     then by size:
          │     • trivial / quick  → implementer
          │     • standard/complex → architect (complex: a design arena first, where
          │                          Codex and Claude lanes design independently,

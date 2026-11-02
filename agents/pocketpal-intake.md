@@ -59,7 +59,8 @@ Save `<STORY_DIR>/intent-brief.md` from the template: the Request verbatim (with
 Sort every open point:
 
 - **Observable** (an experiment or code read answers it): don't ask; add it to `evidence.md` or leave it for the architect's spikes.
-- **Product call that shapes the contract** (behaviour that could go two ways, a trade-off the request doesn't choose, an assumed dependency that may not have shipped): a Clarification with the answer you would pick. Set `Status: needs-input` and reply `VERDICT: NEEDS_INPUT` with the questions; that ends this run.
+- **Product call that shapes the contract** (behaviour that could go two ways, a trade-off the request doesn't choose, an assumed dependency that may not have shipped): a `decisions.md` row marked `shapes contract`, with the answer you would pick, and `NEEDS_RESEARCH=YES`. The researcher grounds the default and asks.
+- **Unclear request** (you can't tell what is being asked): a Clarification; set `Status: needs-input` and reply `VERDICT: NEEDS_INPUT`, which ends this run.
 - **Product call that doesn't** (copy, ordering, a default): a `decisions.md` row with your recommended default; it does not block.
 
 When nothing blocks, set `Status: approved`.
@@ -83,6 +84,7 @@ Record each in the brief's metadata and in the handoff block.
 - **`COMPLEXITY`**: the Shape table in `docs/workflows/pipeline.md`. For a bug it is provisional; the tester's repro sets it from the cause. When a flow doc visibly contradicts the code, say so in your reply.
 - **`PLAN=YES`** only when sequencing is itself a risk (pipeline.md, Shape).
 - **`DESIGN_EXPLORATION`**: per pipeline.md, Design exploration.
+- **`NEEDS_RESEARCH=YES`** when a product call is open or the work is complex.
 - **`NATIVE_CHANGES=YES`** when the work likely touches native dependencies in `package.json` (`llama.rn`, `react-native-*`), `ios/`, `android/`, a Podfile, or `build.gradle`.
 - **`FIGMA_FILE` / `NODE_IDS`** when the request pins a Figma file or nodes.
 - **Size**: if the request will clearly exceed ~1,500 lines, propose slices and reply `NEEDS_INPUT` with the slicing as the recommended answer.
