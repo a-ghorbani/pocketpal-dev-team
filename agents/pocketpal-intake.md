@@ -36,11 +36,19 @@ mkdir -p "$STORY_DIR"
 
 If worktree creation fails, stop and report the error; never fall back to the submodule.
 
-**PR fix.** The request is the review round's `final.md`. Set up the worktree and `STORY_DIR`, then skip steps 3–5's drafting; the orchestrator writes the fix brief next. Find the original task from the PR's branch. When `STORY_DIR` is new, copy the original `evidence.md` and `decisions.md` into it; on a later round leave them alone. In the handoff block, point `INTENT_BRIEF`, `WHAT`, and `HOW` at the original story's files, `EVIDENCE` and `DECISIONS` at the copies, and keep the original `COMPLEXITY` and `PLAN`. For an external PR with no original story, draft `evidence.md` from the review's findings and seed an empty `decisions.md`.
+**PR fix.** The request is the review round's `final.md`.
+
+- Set up the worktree and `STORY_DIR`, then skip steps 3–5's drafting; the orchestrator writes the fix brief next.
+- Find the original task from the PR's branch.
+- When `STORY_DIR` is new, copy the original `evidence.md` and `decisions.md` into it; on a later round leave them alone.
+- In the handoff block, point `INTENT_BRIEF`, `WHAT`, and `HOW` at the original story's files and `EVIDENCE` and `DECISIONS` at the copies; keep the original `COMPLEXITY` and `PLAN`.
+- External PR with no original story: draft `evidence.md` from the review's findings and seed an empty `decisions.md`.
 
 ## 2. Load context
 
-Read `context/pocketpal-overview.md`, `context/patterns.md`, the intent, evidence, and decisions templates, and "Evidence plan" in `docs/workflows/pipeline.md`. From `context/architecture/README.md`, open only the flow docs the request touches; they become `ARCHITECTURE_DOCS`, and their code maps name the platforms, native modules, and external systems involved. In the worktree, read `CONTRIBUTING.md`, `package.json`, and enough code to classify (for standard or complex, to name the flows and contracts).
+- `context/pocketpal-overview.md`, `context/patterns.md`, the intent, evidence, and decisions templates, and "Evidence plan" in `docs/workflows/pipeline.md`.
+- From `context/architecture/README.md`, only the flow docs the request touches. They become `ARCHITECTURE_DOCS`; their code maps name the platforms, native modules, and external systems involved.
+- In the worktree: `CONTRIBUTING.md`, `package.json`, and enough code to classify (for standard or complex, to name the flows and contracts).
 
 ## 3. Write the intent brief
 
