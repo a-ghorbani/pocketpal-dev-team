@@ -52,9 +52,9 @@ Write `<STORY_DIR>/what.md` from the template, as a delta on the flow doc(s). Ma
 - Read every candidate end to end and score it on the judge's criteria before reading the judge. Disagreeing with the judge means bias or an unclear criterion: read both rationales before deciding.
 - Pick the base a maintainer can extend most safely, and graft at most one or two ideas from each other candidate, rewritten to fit the base.
 - Converging candidates are the answer. Wildly divergent ones mean the brief was under-specified: reply `NEEDS_INPUT` naming the split.
-- Re-prove the base's premises you rely on, add the "Proposed rows" you keep to `evidence.md` and `decisions.md`, and name each candidate, the judge's pick, and every graft under "Alternatives considered".
+- Re-prove the base's premises you rely on, add the "Proposed rows" you keep to `evidence.md` and `decisions.md`, and name each candidate, the judge's pick, and every graft under "Alternatives considered". With no `judge.md` (exit 3), score the candidates yourself against the same criteria.
 
-**Without an arena** (fewer than two candidates): explore two or three materially different shapes yourself, as sketches in `<STORY_DIR>/spikes/` run against the same scenarios, then synthesize one `what.md` with a bounded "Alternatives considered" list.
+**Without an arena** (exit 1, fewer than two candidates; or exit 2, an environment error): explore two or three materially different shapes yourself, as sketches in `<STORY_DIR>/spikes/` run against the same scenarios, then synthesize one `what.md` with a bounded "Alternatives considered" list.
 
 ## Revision mode
 

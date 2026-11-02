@@ -28,6 +28,8 @@ A prompt containing `PR #` or `PR Branch:` is a **PR fix**; anything else is a *
 # PR fix, when ./worktrees/PR-<n> does not exist yet
 git -C ./repos/pocketpal-ai fetch origin "+pull/<n>/head:refs/remotes/pr/<n>"
 ./tools/create-worktree.sh "PR-<n>" --branch "pr-<n>" --ref "refs/remotes/pr/<n>"
+# PR fix, when it exists (review-pr fetched the head): fast-forward to it; stop on a dirty tree or commits not on the ref
+git -C "$WORKTREE" merge --ff-only "refs/remotes/pr/<n>"
 # both
 ./tools/sync-worktree-config.sh "$WORKTREE"
 mkdir -p "$STORY_DIR"

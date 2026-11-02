@@ -18,7 +18,7 @@ set -euo pipefail
 #   native    native files changed -> native builds are required (WARN only)
 #   gh-image  the gh image session token is valid when captures must be posted
 #
-# Exit codes: 0 all pass, 1 a gate failed, 2 bad usage.
+# Exit codes: 0 all pass, 1 a gate FAILed, 4 none failed but CI PEND, 2 bad usage or gh error.
 
 repo="a-ghorbani/pocketpal-ai"
 mode="pr"

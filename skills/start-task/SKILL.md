@@ -46,11 +46,11 @@ Route on each stage's `VERDICT` by the routing table in `pipeline.md`. Beyond th
 - **Design arena** (`DESIGN_EXPLORATION=YES`): before the architect's first draft, write the handoff block to `<STORY_DIR>/handoff.txt`, run `tools/design-arena.sh run <STORY_DIR>` in the background (it takes up to a few hours), then dispatch the architect in merge mode with its exit code.
 - **Slice review** (`SLICE_READY`): give `pocketpal-architect-reviewer` the slice's commit range.
 - **`DESIGN_INVALIDATED`**: check the restart triggers under "Going back" before dispatching the architect's amendment.
-- **Questions for the operator** (AGENTS.md, Asking the operator): send a stage's `NEEDS_INPUT` questions and its defaulted product calls to `operator` in one message, each with its default and the research behind it, or to the PM when a PM dispatched this task. Contract-shaping calls wait for the reply; the rest proceed on their defaults. Log each answer in `decisions.md` as a ruling, then resume.
+- **Questions for the operator** (AGENTS.md, Asking the operator): send a stage's `NEEDS_INPUT` questions and its defaulted product calls to `operator` in one message, each with its default and the research behind it, or to the PM (`pm:pm`) when a PM dispatched this task. Contract-shaping calls wait for the reply; the rest proceed on their defaults. Log each answer in `decisions.md` as a ruling (in a PM run the PM logs it), then resume.
 - **Gates**: wait on `tools/pr-gates.sh <PR>` with a watcher that outlives your turn, not a poll-and-exit.
 - **`REQUEST_CHANGES`**: follow "Independent review loop" in `pipeline.md`. You write the fix brief into the PR-fix story intake created, and you are the only writer of review dismissals in `decisions.md`.
 
-Stop only on the conditions under "Autonomous-run contract" in `pipeline.md`. When a PM session dispatched this task, send stops to the PM over agistry rather than to the operator. Otherwise finish with `APPROVE`, and the human reviews and merges.
+Stop only on the conditions under "Autonomous-run contract" in `pipeline.md`. When a PM session dispatched this task, send stops to the PM (`pm:pm`) over agistry rather than to the operator. Otherwise finish with `APPROVE`, and the human reviews and merges.
 
 ## 4. Keep the tracker current
 

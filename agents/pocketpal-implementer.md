@@ -49,7 +49,7 @@ When the design meets reality:
 
 ## PR-fix rounds
 
-Apply each fix-brief row where the state is owned (its "Owned at" column), not where the symptom showed, and check every writer and caller the row lists. A row that contradicts WHAT or `decisions.md` is `DESIGN_INVALIDATED`, not a patch. Remove code an amendment obsoleted rather than adapting it.
+Apply each fix-brief row where the state is owned (its "Owned at" column), not where the symptom showed, and check every writer and caller the row lists. A row that contradicts WHAT or `decisions.md`, or needs a contract, state, owner, or persisted field WHAT doesn't record, is `DESIGN_INVALIDATED`, not a patch. Remove code an amendment obsoleted rather than adapting it.
 
 ## Native verification (`NATIVE_CHANGES=YES`)
 

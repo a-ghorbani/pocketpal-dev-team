@@ -77,9 +77,9 @@ Dispatch the next role from the returning stage's verdict at once, with no inter
 | --- | --- | --- |
 | intake | `NEEDS_INPUT` | stop; surface the questions |
 | intake | `READY`, bug | tester, repro mode |
-| intake, or tester (repro) `REPRODUCED` | `NEEDS_RESEARCH=YES` | researcher |
-| intake, tester (repro) `REPRODUCED`, or researcher `DONE` | trivial / quick | implementer |
-| intake, tester (repro) `REPRODUCED`, or researcher `DONE` | standard / complex | architect (with `DESIGN_EXPLORATION=YES`, the design arena first) |
+| intake (new task, not a bug), or tester (repro) `REPRODUCED` | `NEEDS_RESEARCH=YES` | researcher |
+| intake (new task), tester (repro) `REPRODUCED`, or researcher `DONE`, once no row above applies | trivial / quick | implementer |
+| intake (new task), tester (repro) `REPRODUCED`, or researcher `DONE`, once no row above applies | standard / complex | architect (with `DESIGN_EXPLORATION=YES`, the design arena first) |
 | researcher | `NEEDS_INPUT` (a contract-shaping product call, with its researched default) | stop; the answers are logged as rulings in `decisions.md`, then route as for `DONE` |
 | intake | `READY`, PR fix | orchestrator writes the fix brief → plan-critic (fix-brief mode) |
 | architect | `DRAFTED` | architect-critic |
@@ -97,7 +97,8 @@ Dispatch the next role from the returning stage's verdict at once, with no inter
 | design-parity-reviewer | `APPROVED` / `NEEDS_FIXES` | pipeline-reviewer / implementer (max 2 rounds) |
 | pipeline-reviewer | `APPROVED` (with `PR`) | tester in post-PR mode when `evidence.md` has CI-APK rows; then the gates |
 | `tools/pr-gates.sh` | `ci` PEND (exit 4) | wait (a watcher, `skills/start-task`); no attempt consumed |
-| `tools/pr-gates.sh` | `ci`, `evidence`, or `hygiene` FAIL | implementer (CI; hygiene in code or commits), tester (evidence), or pipeline-reviewer (hygiene in PR text); max 2, then `BLOCKED` |
+| `tools/pr-gates.sh` | `ci`, `evidence`, or `hygiene` FAIL (exit 1) | implementer (CI; hygiene in code or commits), pipeline-reviewer (hygiene in PR text; a missing evidence comment or captures), or tester (a failing receipt); max 2, then `BLOCKED` |
+| `tools/pr-gates.sh` | exit 2 (usage or `gh` error) | `BLOCKED` |
 | `tools/pr-gates.sh` | all PASS | independent review (`review-pr`) |
 | review-pr | `NOT_READY` | as a gate FAIL above; no round consumed |
 | pipeline-reviewer | `REQUEST_CHANGES` | implementer |
@@ -176,7 +177,8 @@ Standard and complex work: the implementer first commits the thinnest end-to-end
 Any stage after intake replies `DESIGN_INVALIDATED` (with `INVALIDATED:`) when:
 
 - a load-bearing `(C)` or `(F)` premise turns out false;
-- a fix would contradict a recorded decision;
+- a fix would contradict a recorded decision, or needs a contract, state, owner, or persisted field WHAT doesn't record (on trivial or quick work, any new contract);
+- sequencing needs a decision WHAT doesn't make (planner);
 - a second fix on the same premise has failed;
 - most findings in a review round were introduced by the previous round's fixes;
 - an operator ruling reverses part of the contract.

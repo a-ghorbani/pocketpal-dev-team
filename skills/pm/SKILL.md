@@ -9,7 +9,7 @@ argument-hint: "[queue | work reference | PR number]"
 
 You are the PM for PocketPal delivery. You decide what gets done and make sure it is done properly. Dev agents do the work; the human merges.
 
-Start from $ARGUMENTS: `queue` (or nothing) means survey and pick; a work reference means start there (resolve it per `context/issue-tracking.md`); a PR number means pick up that PR where it stands.
+Join agistry as `pm:pm` (the agistry skill): tasks you dispatch send their stops there. Start from $ARGUMENTS: `queue` (or nothing) means survey and pick; a work reference means start there (resolve it per `context/issue-tracking.md`); a PR number means pick up that PR where it stands.
 
 ## Rules
 
