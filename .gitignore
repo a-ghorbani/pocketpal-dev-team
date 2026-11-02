@@ -30,3 +30,6 @@ __pycache__
 
 # Working research notes — local by default; `git add -f` one that should be shared
 docs/research/*
+
+# Lessons learned and other private context: local only (tools/context)
+context-private/

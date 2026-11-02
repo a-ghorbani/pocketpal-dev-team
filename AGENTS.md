@@ -20,6 +20,16 @@ These hold for every agent and task; most are hook-enforced.
   - task IDs;
   - story anchors (`I_DSn`, `Dn`, `§4x`, `Scenario X`, `WHAT/HOW`, `round N`).
 
+## Lessons
+
+Lessons learned live in `context-private/`: local only, never committed here, published, or quoted in public text.
+
+- **Read.** When the handoff block has `CONTEXT`, read it first. Outside the pipeline, run `tools/context search <terms>` before working on a device, e2e, native, build, or release surface.
+- **Write.** When you learn something a future task would otherwise rediscover (a trap, a false premise, a tool quirk, an operator ruling of general scope), update the lesson that covers it or add one, then run `tools/context sync`.
+  - One fact per file in `context-private/lessons/`, with frontmatter `name` (the file name), `description`, and `type`.
+  - A rule carries **Why:** and **How to apply:** lines.
+  - Leave out what git, the code, or a flow doc already holds.
+
 ## Delivery rules
 
 These apply to work that becomes an app PR.

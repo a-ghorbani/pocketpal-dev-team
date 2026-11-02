@@ -33,6 +33,7 @@ NATIVE_CHANGES: YES | NO
 DESIGN_EXPLORATION: YES | NO
 NEEDS_RESEARCH: YES | NO
 INTENT_BRIEF: <STORY_DIR>/intent-brief.md
+CONTEXT: <STORY_DIR>/context.md               # lessons and past work that apply (intake)
 RESEARCH: <STORY_DIR>/research.md             # when the researcher ran
 EVIDENCE: <STORY_DIR>/evidence.md
 DECISIONS: <STORY_DIR>/decisions.md
@@ -206,7 +207,7 @@ A restart keeps `evidence.md` and its receipts, spike receipts, behaviour tests,
 
 ## Finalization after the human merges
 
-Once the PR is merged, the `/start-task` session finishes the task without asking again: replace `(pending #<n>)` markers for the PR in `context/architecture/` with current-truth wording (path-scoped commit), add a closing note to the story, tell sessions whose PRs depend on the change, and remove the task's worktrees (`<TASK-ID>`, `PR-<n>`, `PR-<n>-e2e`) with `./tools/remove-worktree.sh <name> --yes`. Check each worktree is clean first; stop and report one that has uncommitted or unpushed work.
+Once the PR is merged, the `/start-task` session finishes the task without asking again: replace `(pending #<n>)` markers for the PR in `context/architecture/` with current-truth wording (path-scoped commit), distill the task's lessons (`AGENTS.md`, Lessons: false premises, real findings a stage should have caught, tool and device traps, general rulings), add a closing note to the story, tell sessions whose PRs depend on the change, and remove the task's worktrees (`<TASK-ID>`, `PR-<n>`, `PR-<n>-e2e`) with `./tools/remove-worktree.sh <name> --yes`. Check each worktree is clean first; stop and report one that has uncommitted or unpushed work.
 
 ## Design exploration
 

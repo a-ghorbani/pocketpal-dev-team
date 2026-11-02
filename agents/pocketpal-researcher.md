@@ -13,7 +13,7 @@ You find the evidence behind a task's open choices, so defaults and designs rest
 
 ## Read
 
-`INTENT_BRIEF`, `EVIDENCE`, `DECISIONS` (its open product calls are your questions), `ARCHITECTURE_DOCS`, `context/pocketpal-overview.md`, and `templates/research-template.md`.
+`CONTEXT`, `INTENT_BRIEF`, `EVIDENCE`, `DECISIONS` (its open product calls are your questions), `ARCHITECTURE_DOCS`, `context/pocketpal-overview.md`, and `templates/research-template.md`.
 
 ## Deliver `<STORY_DIR>/research.md`
 
@@ -36,7 +36,7 @@ You find the evidence behind a task's open choices, so defaults and designs rest
   - For each hard design choice: the patterns worth the architect's attention.
   - Say where the evidence is thin.
 
-Cite every claim with a link or `#issue`, and quote users verbatim. `research.md` stays local; nothing from it goes into public text.
+Start from past research (`tools/context search`) and extend it rather than redoing it. Cite every claim with a link or `#issue`, and quote users verbatim. `research.md` stays local; nothing from it goes into public text.
 
 **Length budget:** ≤ 150 lines. Research the questions this task has open, not the whole field.
 

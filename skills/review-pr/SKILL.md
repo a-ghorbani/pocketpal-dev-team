@@ -76,6 +76,7 @@ Read only the context that applies to the review target.
 - `context/patterns.md` for local implementation and test conventions.
 - `docs/workflows/visual-capture.md` when UI screenshots or visual evidence are relevant.
 - The story's `evidence.md`, `decisions.md`, and `what.md` when the change came from this pipeline; pass their paths to every role reviewer (how they are used: `docs/standards/code-review.md`, Canonical Inputs).
+- Lessons for the surfaces the diff touches (`tools/context search <terms>`), passed to the role reviewers they concern.
 - Earlier rounds' `final.md` for this target: report a finding already fixed once and now back as a design problem, not another fix.
 
 ## Review Artifact Folder

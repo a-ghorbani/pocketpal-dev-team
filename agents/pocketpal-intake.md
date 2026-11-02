@@ -43,7 +43,7 @@ The request is the review round's `final.md`.
 - Set up the worktree and `STORY_DIR`, then skip steps 3–5's drafting; the orchestrator writes the fix brief next.
 - Find the original task from the PR's branch.
 - When `STORY_DIR` is new, copy the original `evidence.md` and `decisions.md` into it; on a later round leave them alone.
-- In the handoff block, point `INTENT_BRIEF`, `WHAT`, and `HOW` at the original story's files and `EVIDENCE` and `DECISIONS` at the copies; keep the original `COMPLEXITY` and `PLAN`.
+- In the handoff block, point `INTENT_BRIEF`, `WHAT`, `HOW`, and `CONTEXT` at the original story's files and `EVIDENCE` and `DECISIONS` at the copies; keep the original `COMPLEXITY` and `PLAN`.
 - External PR with no original story: draft `evidence.md` from the review's findings and seed an empty `decisions.md`.
 
 ## 2. Load context
@@ -51,6 +51,7 @@ The request is the review round's `final.md`.
 - `context/pocketpal-overview.md`, `context/patterns.md`, the intent, evidence, and decisions templates, and "Evidence plan" in `docs/workflows/pipeline.md`.
 - From `context/architecture/README.md`, only the flow docs the request touches. They become `ARCHITECTURE_DOCS`; their code maps name the platforms, native modules, and external systems involved.
 - In the worktree: `CONTRIBUTING.md`, `package.json`, and enough code to classify (for standard or complex, to name the flows and contracts).
+- Past work: `tools/context index`, then `tools/context search` for the surfaces the request touches. Write `<STORY_DIR>/context.md` listing each lesson, past decision, research, and review finding that applies, with its path and one line on why; set `CONTEXT`.
 
 ## 3. Write the intent brief
 
