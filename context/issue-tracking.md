@@ -2,7 +2,7 @@
 
 How this dev team picks up work. The team is **agnostic to the issue tracker**: you hand it a reference, it resolves the source from the reference's *shape*, fetches the issue with the matching tool, then runs the normal pipeline. The orchestrator does not care which tracker the work came from.
 
-> If the tracker ever changes, update **this file** (and the relevant tool script). Nothing else — skills, agents, CLAUDE.md — should hardcode tracker details; they all point here.
+> If the tracker ever changes, update **this file** (and the relevant tool script). Nothing else — skills, agents, AGENTS.md — should hardcode tracker details; they all point here.
 
 ## Resolve a reference by its shape
 

@@ -101,7 +101,7 @@ Each task gets its own git worktree under `worktrees/`, so several tasks can run
 
 | | Claude Code | Codex | opencode | pi |
 | --- | --- | --- | --- | --- |
-| Instructions | `CLAUDE.md` → `AGENTS.md` | `AGENTS.md` | `AGENTS.md` | `AGENTS.md` |
+| Instructions | `AGENTS.md` (v2.1.277+) | `AGENTS.md` | `AGENTS.md` | `AGENTS.md` |
 | Roles | `.claude/agents/` (symlinks) | `.codex/agents/*.toml` (stubs) | `.opencode/agents/` (symlinks) | `.pi/agents/` (symlinks; needs pi's subagent extension) |
 | Skills | `.claude/skills/` (symlinks) | `.agents/skills/` (symlinks) | both | `.agents/skills/` |
 | Guards | hooks in `.claude/settings.json` | `.codex/hooks.json` + `.codex/rules/` | `.opencode/plugins/guards.ts` | `.pi/extensions/guards/` |
