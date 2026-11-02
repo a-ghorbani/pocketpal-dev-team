@@ -13,8 +13,8 @@ set -euo pipefail
 #   ci        PR checks green (PEND: still running or not reported yet; not a pass)
 #   hygiene   no internal tracker IDs, task IDs, story paths or story anchors in
 #             the PR title, body, commit messages, or added source lines
-#   evidence  an evidence comment (a "## ...evidence..." heading) is on the PR;
-#             UI changes need it to carry captures
+#   evidence  an evidence section (a "## ...evidence..." heading) in the PR body or a comment;
+#             UI changes need captures somewhere on the PR
 #   native    native files changed -> native builds are required (WARN only)
 #   gh-image  the gh image session token is valid when captures must be posted
 #
@@ -55,7 +55,8 @@ if [[ "$mode" == "pr" ]]; then
   commit_text=$(gh pr view "$pr" --repo "$repo" --json commits \
     --jq '.commits[] | select(.messageHeadline | startswith("Merge ") | not) | .messageHeadline, .messageBody') || die "gh pr view commits failed"
   diff=$(gh pr diff "$pr" --repo "$repo") || die "gh pr diff failed (very large diffs return HTTP 406; run --branch from the worktree)"
-  comments=$(gh pr view "$pr" --repo "$repo" --json comments --jq '.comments[].body') || die "gh pr view comments failed"
+  # The evidence may be a PR comment or a section of the PR body.
+  comments=$(gh pr view "$pr" --repo "$repo" --json body,comments --jq '.body, .comments[].body') || die "gh pr view comments failed"
 else
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "--branch must run inside a worktree"
   files=$(git diff --name-only "$base"...HEAD)
@@ -97,11 +98,11 @@ fi
 evidence_comments=$(awk 'BEGIN{RS="\n## "} /^[^\n]*[Ee]vidence/' <<<"$(printf '\n%s' "$comments")" || true)
 if [[ "$mode" == "pr" ]]; then
   if [[ -z "$evidence_comments" ]]; then
-    report evidence FAIL "no evidence comment (a '## ... evidence' heading) on the PR"
-  elif [[ -n "$ui_files" ]] && ! grep -qE '!\[|<img|user-attachments' <<<"$evidence_comments"; then
-    report evidence FAIL "UI changed ($(head -2 <<<"$ui_files" | paste -sd, -)); evidence comment has no captures"
+    report evidence FAIL "no evidence section (a '## ... evidence' heading) in the PR body or comments"
+  elif [[ -n "$ui_files" ]] && ! grep -qE '!\[|<img|user-attachments' <<<"$comments"; then
+    report evidence FAIL "UI changed ($(head -2 <<<"$ui_files" | paste -sd, -)); no captures in the PR body or comments"
   else
-    report evidence PASS "evidence comment present${ui_files:+, with captures}"
+    report evidence PASS "evidence present${ui_files:+, with captures}"
   fi
 else
   report evidence WARN "post the evidence comment once the PR exists${ui_files:+ (UI changed: captures required)}"
