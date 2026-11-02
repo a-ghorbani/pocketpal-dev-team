@@ -39,7 +39,7 @@ Repository: ./repos/pocketpal-ai
 
 ## 3. Run the pipeline
 
-Once intake returns `TASK_ID`, join agistry as `<TASK_ID>:orchestrator` (`skills/agistry`), so the operator's replies reach this task even if the session is replaced.
+Once intake returns `TASK_ID`, join agistry as `<TASK_ID>:orchestrator` (the agistry skill), so the operator's replies reach this task even if the session is replaced.
 
 Route on each stage's `VERDICT` by the routing table in `pipeline.md`. Beyond the table:
 
