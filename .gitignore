@@ -23,6 +23,7 @@ workflows/reconcile/
 repos/pocketpal-ai.configs/
 
 .DS_Store
+._.DS_Store
 
 __pycache__
 
@@ -33,3 +34,8 @@ docs/research/*
 
 # Lessons learned and other private context: local only (tools/context)
 context-private/
+
+temp/
+
+# Ad-hoc investigation output (store data, device captures): local only
+reports/
