@@ -1,168 +1,38 @@
 # PocketPal Architecture Standards
 
-Reference document for architectural decisions and standards in PocketPal AI.
+Architectural rules for PocketPal AI. Stack, project layout, and the store list: `context/pocketpal-overview.md`. Code patterns (store, component, hook, tests, navigation, file layout): `context/patterns.md`. Per-flow contracts: `context/architecture/`.
 
----
+## State management (MobX)
 
-## Tech Stack
+Stores are singleton instances, independently instantiated (no root store). `ServerStore` keeps credentials in the keychain; `TTSStore` covers the Kitten, Kokoro, and Supertonic engines.
 
-| Layer            | Technology                           |
-| ---------------- | ------------------------------------ |
-| Framework        | React Native                         |
-| State Management | MobX                                 |
-| UI Components    | React Native Paper                   |
-| Navigation       | React Navigation (Drawer + Stack)    |
-| Database         | WatermelonDB                         |
-| LLM Runtime      | llama.rn (llama.cpp bindings)        |
-| Testing          | Jest + React Native Testing Library  |
-| Build            | Metro, Gradle (Android), Xcode (iOS) |
+1. **Single source of truth**: each domain has one store.
+2. **Singleton**: export the instance, not the class.
+3. **Observable state**: all state properties observable.
+4. **Actions for mutations**: no direct state modification.
+5. **Async = `runInAction`**: wrap state updates after an `await`.
 
----
+An error a store surfaces lives in its own `error: string | null`, set in `runInAction` (`e instanceof Error ? e.message : "Unknown error"`).
 
-## Project Structure
+## Components
 
-```
-pocketpal-ai/
-├── src/
-│   ├── components/       # Reusable UI components
-│   ├── screens/          # Screen-level components
-│   ├── store/            # MobX stores
-│   ├── hooks/            # Custom React hooks
-│   ├── services/         # Business logic services
-│   ├── utils/            # Utility functions
-│   ├── api/              # API clients
-│   ├── types/            # TypeScript types
-│   └── config/           # App configuration
-├── ios/                  # iOS native code
-├── android/              # Android native code
-├── jest/                 # Test infrastructure
-├── __mocks__/            # Mock implementations
-└── e2e/                  # End-to-end tests
-```
+| Type | Location | Purpose |
+| --- | --- | --- |
+| Screen | `src/screens/` | Full-screen views, navigation targets |
+| Component | `src/components/` | Reusable UI building blocks |
+| Sheet | `src/components/*Sheet/` | Bottom sheet modals |
 
----
+1. **Functional only**: no class components.
+2. **`observer()`**: wrap components that read store state.
+3. **Theme from `useTheme()`**, never hardcoded colors.
+4. **Styles**: per `context/patterns.md`, Component Pattern (`styles.ts` with `createStyles({theme})`).
+5. **`testID`** on every interactive element.
 
-## State Management (MobX)
+Errors: React error boundaries for component-level recovery.
 
-### Store Architecture
+## Localization (l10n)
 
-All stores are singleton instances, independently instantiated (no root store pattern):
-
-```
-ModelStore        - Model lifecycle, loading, inference
-ChatSessionStore  - Chat sessions, messages, history
-UIStore           - Theme, language, UI preferences
-PalStore          - AI personas, system prompts
-HFStore           - HuggingFace API, model downloads
-BenchmarkStore    - Performance benchmarking
-FeedbackStore     - User feedback collection
-DeepLinkStore     - Deep link handling
-ServerStore       - OpenAI-compatible remote servers
-TTSStore          - Text-to-speech engines and runtime
-```
-
-### Store Responsibilities
-
-| Store | Responsibility |
-| --- | --- |
-| `ModelStore` | Model lifecycle, loading, inference context |
-| `ChatSessionStore` | Chat sessions, message history, active conversation |
-| `UIStore` | UI state, language, theme, user preferences |
-| `PalStore` | Pal configurations, system prompts |
-| `HFStore` | HuggingFace integration, model downloads |
-| `BenchmarkStore` | Performance benchmarking |
-| `FeedbackStore` | User feedback collection |
-| `DeepLinkStore` | Deep link handling |
-| `ServerStore` | Remote OpenAI-compatible servers, model selection, keychain-backed credentials |
-| `TTSStore` | TTS engines (Kitten/Kokoro/Supertonic), voices, streaming state |
-
-### Store Rules
-
-1. **Single source of truth**: Each domain has ONE store
-2. **Singleton pattern**: Export instance, not class
-3. **Observable state**: All state properties observable
-4. **Actions for mutations**: No direct state modification
-5. **Async = runInAction**: Wrap async state updates
-
-```typescript
-// CORRECT store pattern
-class ExampleStore {
-  items: Item[] = [];
-  isLoading = false;
-
-  constructor() {
-    makeAutoObservable(this);
-  }
-
-  async fetchItems() {
-    this.isLoading = true;
-    try {
-      const items = await api.getItems();
-      runInAction(() => {
-        this.items = items;
-        this.isLoading = false;
-      });
-    } catch (e) {
-      runInAction(() => {
-        this.isLoading = false;
-      });
-    }
-  }
-}
-
-export const exampleStore = new ExampleStore();
-```
-
----
-
-## Component Architecture
-
-### Component Types
-
-| Type      | Location                 | Purpose                               |
-| --------- | ------------------------ | ------------------------------------- |
-| Screen    | `src/screens/`           | Full-screen views, navigation targets |
-| Component | `src/components/`        | Reusable UI building blocks           |
-| Sheet     | `src/components/*Sheet/` | Bottom sheet modals                   |
-
-### Component Structure
-
-```typescript
-// Functional component with observer HOC
-export const MyComponent: React.FC<Props> = observer(({prop1, prop2}) => {
-  const theme = useTheme();
-
-  // Styles inside component (theme-aware)
-  const styles = StyleSheet.create({
-    container: {
-      padding: theme.spacing.md,
-      backgroundColor: theme.colors.surface,
-    },
-  });
-
-  return (
-    <View style={styles.container} testID="my-component">
-      {/* content */}
-    </View>
-  );
-});
-```
-
-### Component Rules
-
-1. **Functional only**: No class components
-2. **observer() HOC**: Wrap components that read store state
-3. **Theme from hook**: Use `useTheme()`, not hardcoded colors
-4. **Styles inside**: StyleSheet.create inside component for theme access
-5. **testID required**: All interactive elements need testID
-
----
-
-## Localization (L10n)
-
-### Structure
-
-L10n lives in `src/locales/` as per-language JSON files plus a TypeScript loader. Translations for non-English languages are lazy-loaded on first access via getters (Metro bundles them at build time, but `require()` doesn't run until the property is read).
+`src/locales/` holds per-language JSON files and a TypeScript loader:
 
 ```
 src/locales/
@@ -172,38 +42,23 @@ src/locales/
 └── <code>.json     # Other languages, managed by translators on Weblate
 ```
 
-`languageRegistry` in `src/locales/index.ts` is the single source of truth for keys, display names, and the `supportedLanguages` array. Non-English files fall back to English via `_.merge({}, enData, langData)` (overlay semantics).
+Non-English translations are lazy-loaded on first access through getters (Metro bundles them; `require()` runs when the property is read). `languageRegistry` in `src/locales/index.ts` is the single source of truth for keys, display names, and `supportedLanguages`. Non-English files fall back to English via `_.merge({}, enData, langData)` (overlay).
 
-### Supported Languages
-
-`languageRegistry` lists them; `en` is the only file edited directly, the rest come from Weblate.
-
-### L10n Rules
-
-1. **No hardcoded strings**: all UI text lives in `src/locales/en.json`
-2. **Edit only `en.json`**: other languages are synced from Weblate, do not hand-edit
-3. **Semantic keys**: `section.descriptiveKey`
-4. **Placeholders**: use `{{variable}}` syntax and the `t()` helper instead of manual `.replace()`
-5. **Adding a language**: update `languageRegistry`, `requireLanguageData()`, the getter on the `l10n` object, the `dayjs` locale require in `initLocale`, and the related test/E2E lists (`tools/context search l10n`)
+1. **No hardcoded strings**: all UI text lives in `src/locales/en.json`.
+2. **Edit only `en.json`**: other languages sync from Weblate; never hand-edit them.
+3. **Semantic keys**: `section.descriptiveKey`.
+4. **Placeholders**: `{{variable}}` with the `t()` helper, not manual `.replace()`.
+5. **Adding a language**: update `languageRegistry`, `requireLanguageData()`, the getter on the `l10n` object, the `dayjs` locale require in `initLocale`, and the related test/E2E lists (`tools/context search l10n`).
 
 ```typescript
-// Usage in component
 import { l10n, t } from "../../locales";
 import { uiStore } from "../../store";
 
 const cancel = l10n[uiStore.language].common.cancel;
-
-// With placeholder
-const progressText = t(l10n[uiStore.language].models.downloadProgress, {
-  progress: "45%",
-});
+const progressText = t(l10n[uiStore.language].models.downloadProgress, { progress: "45%" });
 ```
 
----
-
 ## Navigation
-
-### Structure
 
 ```
 DrawerNavigator (Root)
@@ -216,237 +71,62 @@ DrawerNavigator (Root)
 └── DevToolsScreen (debug only)
 ```
 
-### Navigation Patterns
+Typed `useNavigation<DrawerNavigationProp<RootDrawerParamList>>()`; example in `context/patterns.md`, Navigation Pattern.
+
+## Native integration (llama.rn)
+
+Model lifecycle: Download → Load → Initialize Context → Inference → Release.
+
+| Concept | Description |
+| --- | --- |
+| Context | llama.cpp inference context, holds model state |
+| Completion | Text generation from prompt |
+| Tokenization | Converting text to/from tokens |
+| GPU Layers | Number of layers offloaded to GPU |
 
 ```typescript
-import { useNavigation } from "@react-navigation/native";
-import { DrawerNavigationProp } from "@react-navigation/drawer";
+import { initLlama } from "llama.rn";
 
-type NavigationProp = DrawerNavigationProp<RootDrawerParamList>;
-
-const navigation = useNavigation<NavigationProp>();
-navigation.navigate("ScreenName", { param: "value" });
-```
-
----
-
-## Native Integration (llama.rn)
-
-### Model Lifecycle
-
-```
-Download → Load → Initialize Context → Inference → Release
-```
-
-### Key Concepts
-
-| Concept      | Description                                    |
-| ------------ | ---------------------------------------------- |
-| Context      | llama.cpp inference context, holds model state |
-| Completion   | Text generation from prompt                    |
-| Tokenization | Converting text to/from tokens                 |
-| GPU Layers   | Number of layers offloaded to GPU              |
-
-### Native Module Access
-
-```typescript
-import { initLlama, LlamaContext } from "llama.rn";
-
-// Initialize context
-const context = await initLlama({
-  model: modelPath,
-  n_ctx: contextSize,
-  n_gpu_layers: gpuLayers,
-});
-
-// Run completion
-const result = await context.completion({
-  prompt: "Hello",
-  n_predict: 100,
-});
-
-// Release when done
+const context = await initLlama({ model: modelPath, n_ctx: contextSize, n_gpu_layers: gpuLayers });
+const result = await context.completion({ prompt: "Hello", n_predict: 100 });
 await context.release();
 ```
 
-### Platform Considerations
+| Platform | GPU acceleration | Notes |
+| --- | --- | --- |
+| iOS | Metal | Requires iOS 18+ for full Metal |
+| Android | OpenCL (Adreno) | Experimental, Adreno GPUs only |
+| Android | Hexagon NPU | Qualcomm devices only |
 
-| Platform | GPU Acceleration | Notes                           |
-| -------- | ---------------- | ------------------------------- |
-| iOS      | Metal            | Requires iOS 18+ for full Metal |
-| Android  | OpenCL (Adreno)  | Experimental, Adreno GPUs only  |
-| Android  | Hexagon NPU      | Qualcomm devices only           |
+## Testing
 
----
+Centralized mocking (stores mocked globally in `jest/setup.ts`), custom render from `jest/test-utils.tsx` (not raw RNTL) with its provider options, fixtures from `jest/fixtures`, `runInAction` for state changes: `context/patterns.md`, Testing Infrastructure.
 
-## Testing Architecture
+## Errors, performance, security
 
-### Test Infrastructure
+- **User-facing errors**: l10n messages with actionable guidance; log details for debugging, never sensitive data.
+- **Components**: granular `observer()` (smaller components); no inline object/function creation in render; `useMemo`/`useCallback` where they help; `FlatList` with `keyExtractor` for long lists.
+- **Memory**: release llama contexts when not needed; clean up subscriptions in the `useEffect` return; don't hold references to large objects.
+- **Models**: context size fits device memory; GPU offload by device capability; tune batch size for throughput.
+- **Sensitive data**: no secrets in code (use `.env`); no PII in logs; secure storage for tokens.
+- **Input**: validate user inputs; sanitize file paths; validate model files before loading.
+- **Network**: HTTPS only; validate API responses; handle timeouts gracefully.
 
-```
-jest/
-├── setup.ts           # Global mocks (stores, modules)
-├── setupFilesAfterEnv.ts  # Lifecycle hooks
-├── test-utils.tsx     # Custom render with providers
-├── fixtures.ts        # Shared test data
-└── fixtures/          # Domain-specific fixtures
-    ├── models.ts
-    ├── pals.ts
-    └── theme.ts
+## Code style
 
-__mocks__/
-├── stores/            # Mock store implementations
-├── external/          # External package mocks
-└── services/          # Service mocks
-```
+- **TypeScript**: strict mode; explicit parameter types; no `any` (use `unknown`); interfaces for object shapes.
+- **Imports**: external, then internal, then relative, each group separated by a blank line.
 
-### Testing Principles
+| Type | Convention | Example |
+| --- | --- | --- |
+| Components | PascalCase | `ChatInput.tsx` |
+| Hooks | camelCase + use | `useMemoryCheck.ts` |
+| Stores | PascalCase + Store | `ModelStore.ts` |
+| Utils | camelCase | `formatters.ts` |
+| Constants | SCREAMING_SNAKE | `MAX_CONTEXT_SIZE` |
 
-1. **Centralized mocking**: Stores mocked globally in jest/setup.ts
-2. **Custom render**: Use jest/test-utils.tsx, not raw RNTL
-3. **Fixtures over inline data**: Import from jest/fixtures
-4. **MobX awareness**: Use runInAction for state changes
-5. **Provider wrapping**: Use render options for providers
+## Git
 
-See `context/patterns.md` for detailed testing patterns.
-
----
-
-## Error Handling
-
-### Error Boundaries
-
-React error boundaries for component-level recovery.
-
-### Store Error State
-
-```typescript
-class Store {
-  error: string | null = null;
-
-  async doSomething() {
-    try {
-      // ...
-    } catch (e) {
-      runInAction(() => {
-        this.error = e instanceof Error ? e.message : "Unknown error";
-      });
-    }
-  }
-}
-```
-
-### User-Facing Errors
-
-- Use l10n for error messages
-- Provide actionable guidance
-- Log details for debugging (not sensitive data)
-
----
-
-## Performance Guidelines
-
-### Component Performance
-
-- Use `observer()` granularly (smaller components)
-- Avoid inline object/function creation in render
-- Use `useMemo`/`useCallback` appropriately
-- FlatList for long lists with `keyExtractor`
-
-### Memory Management
-
-- Release llama contexts when not needed
-- Clean up subscriptions in useEffect return
-- Avoid holding references to large objects
-
-### Model Performance
-
-- Appropriate context size for device memory
-- GPU offloading based on device capability
-- Batch size tuning for throughput
-
----
-
-## Security Guidelines
-
-### Sensitive Data
-
-- No secrets in code (use .env)
-- No PII in logs
-- Secure storage for tokens
-
-### Input Validation
-
-- Validate user inputs
-- Sanitize file paths
-- Validate model files before loading
-
-### Network
-
-- HTTPS only
-- Validate API responses
-- Handle timeouts gracefully
-
----
-
-## Code Style
-
-### TypeScript
-
-- Strict mode enabled
-- Explicit types for function parameters
-- Avoid `any` (use `unknown` if needed)
-- Interfaces for object shapes
-
-### Naming
-
-| Type       | Convention         | Example             |
-| ---------- | ------------------ | ------------------- |
-| Components | PascalCase         | `ChatInput.tsx`     |
-| Hooks      | camelCase + use    | `useMemoryCheck.ts` |
-| Stores     | PascalCase + Store | `ModelStore.ts`     |
-| Utils      | camelCase          | `formatters.ts`     |
-| Constants  | SCREAMING_SNAKE    | `MAX_CONTEXT_SIZE`  |
-
-### Imports
-
-```typescript
-// Order: external → internal → relative
-import React from "react";
-import { View } from "react-native";
-import { observer } from "mobx-react";
-
-import { useTheme } from "../../hooks";
-import { modelStore } from "../../store";
-
-import { ChildComponent } from "./ChildComponent";
-```
-
----
-
-## Git Workflow
-
-### Branch Naming
-
-See "Worktrees and naming" in `AGENTS.md`.
-
-### Commit Messages
-
-**Format**: `type(scope): subject`
-
-**Types**: `feat`, `fix`, `docs`, `chore` (only these 4)
-
-**Example**:
-
-```
-feat(chat): add voice input button
-fix(model): prevent crash on context release
-chore(deps): upgrade llama.rn to 0.11.0
-```
-
-### PR Requirements
-
-- Descriptive title and body
-- Tests for new code
-- New strings in `en.json` only (other languages come from Weblate)
-- Native builds verified (if applicable)
+- **Branches**: `AGENTS.md`, Worktrees and naming.
+- **Commits**: `type(scope): subject`, type only `feat`, `fix`, `docs`, or `chore` (`commitlint.config.js`), e.g. `fix(model): prevent crash on context release`.
+- **PRs**: descriptive title and body; tests for new code; new strings in `en.json` only; native builds verified when applicable (`AGENTS.md`, Native changes).
