@@ -126,7 +126,7 @@ When a PM session runs the queue, these stops go to the PM first (`skills/pm`).
 | imported or external data reaching a file, network, or render sink | a hostile input at each sink that is reachable on `main` |
 | voice, audio, mic, TTS / ASR engines | the voice specs and `tts-memory-profile`; a device run covering first-time setup, interruption, and a model that does not fit |
 | iOS-only code paths | a run through `ios-router`; this host has no iOS |
-| render-heavy paths, perf claims | the Reassure gate; an on-device A/B for any claimed speed-up |
+| render-heavy paths, perf claims | the Reassure gate; an on-device A/B for any claimed speed-up or regression, interleaved in one session (iOS: A B B A, cooled; `skills/bench`) |
 
 | Stage | Evidence work |
 | --- | --- |

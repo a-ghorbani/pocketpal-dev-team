@@ -21,6 +21,13 @@ Android runs through the WDIO spec or `yarn build:bench-config --push` below. On
 
 **`--app` replaces the App Store PocketPal** (same bundle id `ai.pocketpal`) and wipes its data. Get the user's explicit OK before installing. Keep the iPhone unlocked and on power, and do not lock it mid-run. iOS baselines are separate from Android ones: merge and compare refuse cross-platform input.
 
+**iOS speed swings 2–3x with heat and charging**, so a block-ordered run (all A, then all B) or a comparison against the baseline alone decides nothing. Before calling an iOS regression or speed-up:
+
+- run baseline and candidate interleaved in one session (A B B A), with a cool-down between phases;
+- check `thermalState` is nominal before each phase (WDA `mobile: deviceInfo`);
+- drop the cold first phase and compare means;
+- rerun the baseline last as a drift control. A gap that grows with a model's position in the run is drift: reverse the model order to confirm.
+
 ## Tiers
 
 Single source of truth: `BENCHMARK_FULL_MODELS` in [`e2e/fixtures/benchmark-models.ts`](../../e2e/fixtures/benchmark-models.ts). Smaller tiers are derived as id filters from that list.
