@@ -85,7 +85,7 @@ Record each in the brief's metadata and in the handoff block.
 - **`COMPLEXITY`**: the Shape table in `docs/workflows/pipeline.md`. For a bug it is provisional; the tester's repro sets it from the cause. When a flow doc visibly contradicts the code, say so in your reply.
 - **`PLAN=YES`** only when sequencing is itself a risk (pipeline.md, Shape).
 - **`DESIGN_EXPLORATION`**: per pipeline.md, Design exploration.
-- **`NEEDS_RESEARCH=YES`** when a product call is open or the work is complex.
+- **`NEEDS_RESEARCH=YES`** when a product call shapes the contract or the work is complex.
 - **`NATIVE_CHANGES=YES`** when the work likely touches native dependencies in `package.json` (`llama.rn`, `react-native-*`), `ios/`, `android/`, a Podfile, or `build.gradle`.
 - **`FIGMA_FILE` / `NODE_IDS`** when the request pins a Figma file or nodes.
 - **Size**: if the request will clearly exceed ~1,500 lines, propose slices and reply `NEEDS_INPUT` with the slicing as the recommended answer.

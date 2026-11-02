@@ -18,7 +18,7 @@ Runs right after intake for `CLAIM: bug`, on `main`, without changing app code. 
 - a red receipt on the claim row, on the surface the reporter used (an e2e-only symptom is checked against a healthy baseline first: it is often the harness);
 - the cause with `file:line` under Cause in `evidence.md`; for a regression, the PR that introduced it and what it intended;
 - a `decisions.md` row for code that looks wrong but was written on purpose;
-- `COMPLEXITY` and `NATIVE_CHANGES` set from the cause;
+- `COMPLEXITY` and `NATIVE_CHANGES` set from the cause, and `NEEDS_RESEARCH` and `DESIGN_EXPLORATION` re-derived when `COMPLEXITY` changes (`pipeline.md`);
 - the repro committed first as a failing test, when it fits one.
 
 Reply `VERDICT: REPRODUCED`, or `NEEDS_INPUT` with what you tried when it won't reproduce or is already fixed on `main`.

@@ -42,4 +42,4 @@ Start from past research (`tools/context search`) and extend it rather than redo
 
 ## Reply
 
-A few lines: the strongest need signal, the dominant pattern elsewhere, and each recommended default. Update each open product call's default in `decisions.md` to cite its research row. End with the handoff block, with `VERDICT: DONE` and `RESEARCH` set.
+A few lines: the strongest need signal, the dominant pattern elsewhere, and each recommended default. Update each open product call's default in `decisions.md` to cite its research row. End with the handoff block, with `RESEARCH` set and `VERDICT: NEEDS_INPUT` while a `shapes contract` row has no operator answer (each question with its researched default), else `VERDICT: DONE`.
