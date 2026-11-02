@@ -17,6 +17,8 @@ Request: $ARGUMENTS
 
 Sweeps `(model × quant × backend)` cells through llama.rn on a real device, recording prompt-processing tok/s (`pp_avg`), token-generation tok/s (`tg_avg`), wall time, peak memory, and the **effective backend** (`cpu` / `opencl` / `cpu+opencl-partial` / `hexagon` / `cpu+hexagon-partial` / `metal` / `cpu+metal-partial` / `unknown`) derived live from native log lines. Compares the resulting report against the device's committed baseline to flag perf regressions or silent backend fallbacks.
 
+Claim a phone through agistry before driving it and release it after. This host has no iOS toolchain: iOS runs go through `ios-router`.
+
 Android runs through the WDIO spec or `yarn build:bench-config --push` below. On a physical iPhone, run `yarn bench:ios --device <udid> [--app ../ios/build/PocketPal.ipa]` from the app worktree's `e2e/` (build with `yarn ios:build:ipa`; `--dry-run` first). It drives the same matrix with `xcrun devicectl` only and pulls, stamps and pass-gates the report itself (`e2e/README.md`, "iOS (physical iPhone)").
 
 **`--app` replaces the App Store PocketPal** (same bundle id `ai.pocketpal`) and wipes its data. Get the user's explicit OK before installing. Keep the iPhone unlocked and on power, and do not lock it mid-run. iOS baselines are separate from Android ones: merge and compare refuse cross-platform input.
@@ -51,7 +53,7 @@ Pick based on the trigger:
 
 - `BenchmarkRunnerScreen` (in `src/__automation__/screens/`) runs the matrix entirely in-app.
 - Reached via deep link: `pocketpal://e2e/benchmark` (E2E flavor only).
-- On-device backend detection: `addNativeLogListener` captures llama.cpp log lines per cell; `src/__automation__/logSignals.ts` parses them into a `LogSignals` struct and a 4-state `effective_backend` enum.
+- On-device backend detection: `addNativeLogListener` captures llama.cpp log lines per cell; `src/__automation__/logSignals.ts` parses them into a `LogSignals` struct and an `effective_backend` enum (states under "Effective backend" below).
 - Reads `bench-config.json` from the e2e flavor's external files dir. Writes `benchmark-report-<timestamp>.json` next to it.
 
 ### WDIO spec (fallback / CI)
@@ -66,22 +68,20 @@ Pick based on the trigger:
 
 ### Baselines (in `e2e/baselines/benchmark/`)
 
-Named `<device-slug>.json`. (Sibling `e2e/baselines/memory/` holds the unrelated memory-profile baselines.) One file per device class; all backends × quants × models live in one report. Current baselines:
-
-- `poco-myron.json` — POCO X9 Pro Myron / Snapdragon 8 Elite Gen 5 / Adreno 840 — **tracked**
-
-When new devices come online, add a row here and a slug for their baseline file.
+Named `<device-slug>.json`, one per device class (all backends × quants × models in one report); the current set is the per-device files in `e2e/baselines/benchmark/` (see its `README.md`). Sibling `e2e/baselines/memory/` holds the unrelated memory-profile baselines.
 
 ### Devices & filter mapping
 
 Low-RAM phones cannot run the full quant ladder for every model — heavy combos (phi-4-mini q8_0, gemma-4-e2b q8_0) get OS-killed. Filter with `BENCH_MODELS=`/`BENCH_QUANTS=` for those devices instead of letting the matrix OOM mid-run.
 
-| Device ID | UDID | RAM tier | Notes |
-| --- | --- | --- | --- |
-| `poco-myron` | `df8fc5ef` | high (16 GB) | Adreno 840; runs full matrix; canonical GPU device |
-| `pixel-9-real` | `45300DLAQ004DH` | high (16 GB) | Tensor G4; runs full matrix |
-| `oneplus-6-real` | `ba5702bf` | low (~6 GB) | Skip phi-4-mini and gemma-4-e2b q8_0 cells |
-| `android-emu` | `emulator-5554` | n/a | Smoke only; no GPU; for spec-shape verification |
+Device IDs and UDIDs come from the worktree's local `e2e/devices.json`. Examples:
+
+| Device | RAM tier | Notes |
+| --- | --- | --- |
+| POCO X9 Pro (`poco-myron` baseline) | high (16 GB) | Adreno 840; runs full matrix; canonical GPU device |
+| `pixel-9-real` | high (16 GB) | Tensor G4; runs full matrix |
+| `oneplus-a6003-real` | low (~6 GB) | Skip phi-4-mini and gemma-4-e2b q8_0 cells |
+| an emulator | n/a | Smoke only; no GPU; for spec-shape verification |
 
 > **Don't change the slug of a tracked baseline** without also re-running against the new slug — comparison is filename-keyed.
 
@@ -91,6 +91,10 @@ Low-RAM phones cannot run the full quant ladder for every model — heavy combos
 - The `prod` flavor has no automation bridge; it cannot run this pipeline.
 
 Use `--skip-build` when the APK is already installed and the bench-config script hasn't changed.
+
+### On the PR's CI APK
+
+CI-APK rows run post-PR on the draft PR's bridge APK from `e2e-tests.yml`: `tools/fetch-pr-apk.sh --e2e <PR>` into the `PR-<N>-e2e` worktree (or `tools/run-pr-e2e.sh <PR> --e2e --specs benchmark-matrix`; `/run-pr-e2e`), then install it and run as below. If `e2e-tests.yml` has not run for the PR's head branch, dispatch it: `tools/ghb workflow run e2e-tests.yml --repo a-ghorbani/pocketpal-ai --ref <head-branch>`.
 
 ## How to Run
 
@@ -128,7 +132,7 @@ When invoking through the multi-device pipeline (e.g. CI):
 
 ```bash
 BENCH_TIER=smoke yarn e2e:android --skip-build \
-  --spec benchmark-matrix --devices <device-id>
+  --spec benchmark-matrix --devices <device-id>   # id from e2e/devices.json
 ```
 
 Reports land in `e2e/reports/<timestamp>/<device-id>/`.

@@ -15,7 +15,7 @@ You are building PocketPal AI from source in a worktree and running E2E specs ag
 2. **Android uses a separate `e2e` flavor**, package `com.pocketpalai.e2e`, output at `android/app/build/outputs/apk/e2e/releaseE2e/app-e2e-releaseE2e.apk`. The prod APK (`outputs/apk/release/app-release.apk`) is non-debuggable and has the `src/__automation__/` bridge DCE-stripped — specs against it silently no-op. Always build via `yarn android:build:e2e`, never `assembleRelease`.
 3. **iOS has no separate flavor.** Same bundleId as prod (`ai.pocketpal`), differentiated only by the `__E2E__` define from `babel.config.js: transform-define` driven by `E2E_BUILD=true`. `yarn ios:build:e2e` is the only correct build command for sim tests; `yarn ios:build:ipa` for iOS devices.
 4. **Reset behaviour differs across platforms.** iOS uses `noReset:false, fullReset:false` — install state (including downloaded models) is preserved across runs. Android uses `fullReset:true` — the app is reinstalled every run and any downloaded model is lost. Plan timing accordingly.
-5. **`e2e/devices.json` is gitignored and per-worktree.** Verify the Android `appPath` matches the e2e-flavor output (`../android/app/build/outputs/apk/e2e/releaseE2e/app-e2e-releaseE2e.apk`). A wrong path surfaces as `WebDriverError: The application at '...' does not exist`, even when the build itself succeeded.
+5. **`e2e/devices.json` is gitignored and per-worktree**, copied from the submodule's local copy by `tools/sync-worktree-config.sh`; that copy may point Android `appPath` at the prod-release path. Each Android `appPath` must match the APK under test: the e2e-flavor output (`../android/app/build/outputs/apk/e2e/releaseE2e/app-e2e-releaseE2e.apk`) for a local `yarn android:build:e2e`. `tools/run-pr-e2e.sh` rewrites it to the APK it fetched. A wrong path surfaces as `WebDriverError: The application at '...' does not exist`, even when the build itself succeeded.
 6. **`TIMEOUTS.appReady = 60s`** in `e2e/fixtures/models.ts`. Most specs block on the `chat-input` testID for 60s before doing anything else. A broken first-paint manifests as `no such element 'chat-input'` after roughly the appReady timeout.
 
 ## Available specs
@@ -44,7 +44,7 @@ Pick the smallest spec that exercises what changed. Defaults to `quick-smoke`.
 | `remote-server` | Adds a remote OpenAI-compatible model from the Models FAB, chats with it, deletes the server. Requires a reachable OpenAI-compatible server. | Remote-model / remote-server changes. |
 | `talent-tool-use` | Creates a Pal with `render_html` enabled, sends a prompt, asserts the HTML preview bubble appears. Uses Qwen3-1.7B with temperature=0/seed=1 for determinism. | Talent registry, tool-use plumbing, HTML preview surface. |
 
-`benchmark-matrix`, `memory-profile`, and `visual-capture` are deliberately excluded from the `/run-pr-e2e` default-spec list because they are measurement infrastructure, not regression gates.
+`benchmark-matrix`, `memory-profile`, `tts-memory-profile`, `visual-capture`, and `diagnostic` are deliberately excluded from the `/run-pr-e2e` default-spec list because they are measurement infrastructure, not regression gates.
 
 ## Parse input
 
@@ -64,6 +64,7 @@ Verify before starting a run:
 - **Local branch is in sync with origin**. Stale checkouts produce results that don't reflect the code being shipped.
 - **iOS simulator is booted** (the runner does not boot it).
 - **Android emulator or device is attached and showing as `device`** in `adb devices`.
+- **Phone claimed.** Claim a phone through agistry before driving it and release it after; iOS runs go through `ios-router` (this host has no iOS toolchain).
 - **Appium ports 4723 and 4724 are free** — the WDIO config spawns Appium on these (see `wdio.{ios,android}.local.conf.ts`); a leftover daemon from a previous run causes session creation to hang.
 
 ## Step 2 — One-time worktree setup
@@ -74,7 +75,7 @@ Each fresh worktree needs three project-specific things beyond root `yarn instal
 - **`ios/` has a `Gemfile`** that pins `xcpretty` and the cocoapods version. Install via Bundler before `pod install`, otherwise `yarn ios:build:e2e` fails opaquely — xcpretty swallows the real xcodebuild error.
 - **`pod install`** after any `Podfile.lock` change (llama.rn upgrades, new native deps).
 
-Then verify `e2e/devices.json` (gitignored, per-worktree, copied from `devices.template.json` on creation). The Android `appPath` must be `../android/app/build/outputs/apk/e2e/releaseE2e/app-e2e-releaseE2e.apk`. Anything else — most often the prod-release path — fails Android session creation with `APK does not exist`.
+Then verify `e2e/devices.json` (gitignored, per-worktree, synced on creation). For a local `yarn android:build:e2e`, each Android `appPath` must be `../android/app/build/outputs/apk/e2e/releaseE2e/app-e2e-releaseE2e.apk`; the synced copy often holds the prod-release path, which fails Android session creation with `APK does not exist`.
 
 ## Step 3 — Run the pipeline
 
@@ -100,7 +101,7 @@ For each failure, open the per-device subdirectory and look at the failure scree
 
 | Symptom | Likely cause |
 |---|---|
-| `WebDriverError: The application at '...app-release.apk' does not exist` | `e2e/devices.json` Android `appPath` points at the prod build instead of the e2e flavor. Fix the path; the build itself is fine. |
+| `WebDriverError: The application at '...app-release.apk' does not exist` | `e2e/devices.json` Android `appPath` does not match the APK that was built or fetched. Fix the path; the build itself is fine. |
 | iOS red box `No script URL provided. unsanitizedScriptURLString = (null)` | The installed app on the sim is a Debug build expecting Metro, not the Release `.app` from the build. Uninstall and reinstall from the new `.app`. |
 | `no such element 'chat-input'` ~appReady seconds after session start (iOS) | First-paint is broken, or the install on the sim is from a different build than the `.app` on disk. Confirm install matches build before deeper investigation. |
 | iOS `BUILD FAILED` with no error text above it | Bundler gems (specifically `xcpretty`) are missing in `ios/`. Install Bundler gems, then retry. |
@@ -110,6 +111,6 @@ For each failure, open the per-device subdirectory and look at the failure scree
 
 ## Notes
 
-- `devices.json` is per-worktree and gitignored — every fresh worktree starts from `devices.template.json`; re-verify the Android `appPath` after copying.
+- `devices.json` is per-worktree and gitignored — every fresh worktree gets the synced local copy; re-verify the Android `appPath` against the APK under test.
 - The runner script is `scripts/run-e2e.ts`. There is no `run-e2e-pipeline.ts`.
 - For real iOS devices use `yarn ios:build:ipa`, not `:e2e`.

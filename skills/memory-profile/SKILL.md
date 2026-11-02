@@ -55,10 +55,14 @@ Override per-run with `--model <id>` if needed; available model IDs are in `e2e/
 ### Builds Required
 
 - iOS real device: `yarn ios:build:ipa` (outputs `ios/build/PocketPal.ipa`)
-- Android: `cd android && ./gradlew assembleRelease` (outputs APK)
+- Android: `yarn android:build:e2e` (outputs the e2e-flavor APK; what `e2e/scripts/memory-profile.sh` builds)
 - iOS simulator: `yarn ios:build:e2e` (outputs .app)
 
 These can be built in parallel. Use `--skip-build` if binaries already exist.
+
+### On the PR's CI APK
+
+CI-APK rows run post-PR on the draft PR's bridge APK from `e2e-tests.yml`: `TEST_MODELS=<model-id> tools/run-pr-e2e.sh <PR> --e2e --specs memory-profile -- --devices <device-id>` (`/run-pr-e2e`), or `tools/fetch-pr-apk.sh --e2e <PR>` then run with `--skip-build`. If `e2e-tests.yml` has not run for the PR's head branch, dispatch it: `tools/ghb workflow run e2e-tests.yml --repo a-ghorbani/pocketpal-ai --ref <head-branch>`.
 
 ## How to Run
 
@@ -90,8 +94,8 @@ npx tsx e2e/scripts/memory-compare.ts <baseline.json> <current.json>
 
 ## Typical Workflow
 
-1. Check if physical devices are connected: `adb devices` and `xcrun xctrace list devices`
-2. For each device you'll run against, look up the model from the mapping table and ensure LM Studio has it loaded (if relevant): `./tools/lmstudio.sh ensure "qwen/qwen3-1.7b"` (etc.) (requires `REMOTE_SERVER_API_KEY` or `LMSTUDIO_API_KEY` env var — sourced from the worktree's `e2e/.env`)
+1. Check if physical devices are connected (`adb devices`). Claim a phone through agistry before driving it and release it after; iOS runs go through `ios-router` (this host has no iOS toolchain).
+2. For each device you'll run against, look up the model from the mapping table and ensure LM Studio has it loaded (if relevant): `./tools/lmstudio.sh ensure "qwen/qwen3-1.7b"` (etc.) (needs `REMOTE_SERVER_API_KEY` or `LMSTUDIO_API_KEY` already in the environment)
 3. Build IPA and APK (in parallel if both platforms needed, skip if already built)
 4. Run profiling on each device with the **device's** `TEST_MODELS` from the mapping (do not use a single global model)
 5. Compare each result against the matching baseline in `e2e/baselines/memory/`
@@ -134,12 +138,7 @@ Include peak memory summary and PASS/FAIL status from the comparison script.
 - `ensure <model-key>` — load model if not already loaded (unloads others first)
 - `load <model-key>` — force load (unloads all first)
 
-Requires `REMOTE_SERVER_API_KEY` or `LMSTUDIO_API_KEY`. Source from worktree `e2e/.env`:
-
-```bash
-export $(grep REMOTE_SERVER_API_KEY worktrees/TASK-xxx/e2e/.env | xargs)
-./tools/lmstudio.sh ensure "qwen/qwen3-1.7b"
-```
+Reads `LMSTUDIO_API_KEY` or `REMOTE_SERVER_API_KEY` from the environment (default `lm-studio`). The operator exports it; agents never read the e2e env file for it. If it is missing, ask the operator.
 
 ## Notes
 

@@ -26,7 +26,8 @@ Four things. Everything else is the same and lives in `/run-e2e`.
 ### 1. Where the APK comes from
 
 - **Default (prod APK from `ci.yml`).** `tools/run-pr-e2e.sh` calls `tools/fetch-pr-apk.sh`, which finds the newest completed `ci.yml` `pull_request` run for the PR, downloads `android-release-apk`, and drops it at `<worktree>/android/app/build/outputs/apk/release/app-release.apk`. This APK is **bridge-stripped** — specs that drive the `src/__automation__/` bridge (memory-snapshot, bench-runner) silently no-op.
-- **`--e2e` flag (bridge-enabled APK from `e2e-tests.yml`).** Required for bridge-driven specs. `e2e-tests.yml` is `workflow_dispatch`-only and matched by head branch — **someone must have dispatched it for this PR's branch first**, otherwise fetch fails with "no completed workflow_dispatch run found for branch".
+- **`--e2e` flag (bridge-enabled APK from `e2e-tests.yml`).** Required for bridge-driven specs. Dropped at `<worktree>/android/app/build/outputs/apk/e2e/releaseE2e/app-e2e-releaseE2e.apk`. `e2e-tests.yml` is `workflow_dispatch`-only and matched by head branch — **it must have been dispatched for this PR's branch first** (`tools/ghb workflow run e2e-tests.yml --repo a-ghorbani/pocketpal-ai --ref <head-branch>`), otherwise fetch fails with "no completed workflow_dispatch run found for branch".
+- **`appPath`.** The wrapper rewrites every Android `appPath` in `e2e/devices.json` to the path of the APK it fetched (or would fetch, with `--no-fetch`).
 
 ### 2. Worktree contract
 
@@ -38,16 +39,17 @@ Always a **fresh `./worktrees/PR-<N>-e2e`** on detached `origin/<head-branch>` �
 
 ### 3. Spec selection
 
-Default is **every `*.spec.ts` minus `visual-capture`, `diagnostic`, `memory-profile`**:
+Default is **every `*.spec.ts` minus `visual-capture`, `diagnostic`, `memory-profile`, `tts-memory-profile`, `benchmark-matrix`**:
 
 - `visual-capture` — screenshot generation driven by story files, not a regression.
 - `diagnostic` — device-state inspector, not a regression.
-- `memory-profile` — has its own pipeline (`/memory-profile`); needs device-specific baselines to be meaningful.
+- `memory-profile`, `tts-memory-profile` — have their own pipeline (`/memory-profile`); need device-specific baselines to be meaningful.
+- `benchmark-matrix` — has its own pipeline (`/bench`).
 
 Enumerate dynamically so new specs on the PR are picked up:
 
 ```bash
-EXCLUDE='^(visual-capture|diagnostic|memory-profile)$'
+EXCLUDE='^(visual-capture|diagnostic|memory-profile|tts-memory-profile|benchmark-matrix)$'
 SPECS=$(find "$WORKTREE/e2e/specs" -type f -name '*.spec.ts' \
   | sed -E 's#.*/##; s#\.spec\.ts$##' | grep -vE "$EXCLUDE" \
   | sort -u | paste -sd, -)
@@ -62,11 +64,14 @@ It's a thin wrapper around `scripts/run-e2e.ts --skip-build`. It handles APK fet
 From the dev-team repo root:
 
 ```bash
+ROOT="$PWD"
 PR=<number>
 PR_BRANCH=$(gh pr view "$PR" --repo a-ghorbani/pocketpal-ai --json headRefName -q .headRefName)
 
-# Create or fast-forward the e2e worktree
-cd ./repos/pocketpal-ai && git fetch origin "$PR_BRANCH" && cd -
+# Fetch the branch into the submodule (read-only use; no cd into it)
+git -C "$ROOT/repos/pocketpal-ai" fetch origin "$PR_BRANCH"
+
+# Create or fast-forward the e2e worktree (reset targets the worktree only)
 if [ -d "./worktrees/PR-${PR}-e2e" ]; then
   git -C "./worktrees/PR-${PR}-e2e" reset --hard "origin/$PR_BRANCH"
   ./tools/sync-worktree-config.sh "./worktrees/PR-${PR}-e2e"
@@ -77,11 +82,11 @@ fi
 WORKTREE="./worktrees/PR-${PR}-e2e"
 cd "$WORKTREE" && yarn install && (cd e2e && yarn install) && cd -
 
-# Pre-flight: see /run-e2e Step 1 (sim/emu booted, port 4723, devices.json appPath).
+# Pre-flight: see /run-e2e Step 1 (phone claimed through agistry, emu/device attached, port 4723).
 
 SPECS=$(find "$WORKTREE/e2e/specs" -type f -name '*.spec.ts' \
   | sed -E 's#.*/##; s#\.spec\.ts$##' \
-  | grep -vE '^(visual-capture|diagnostic|memory-profile)$' \
+  | grep -vE '^(visual-capture|diagnostic|memory-profile|tts-memory-profile|benchmark-matrix)$' \
   | sort -u | paste -sd, -)
 
 POCKETPAL_REPO="$(realpath "$WORKTREE")" \
@@ -106,7 +111,7 @@ Everything after `--` is passed verbatim to `scripts/run-e2e.ts` (devices filter
 |---|---|
 | `no completed CI runs found for PR #N` | PR's `ci.yml` is still running or failed. `gh run watch` or pick another run. |
 | `artifact 'android-release-apk' not found` | The Android build job failed in that run. `gh run view <id>`. |
-| `(--e2e) no completed e2e-tests.yml workflow_dispatch run found for branch` | `e2e-tests.yml` was never dispatched for this PR's branch. Dispatch it (select the PR's head branch as the workflow ref), wait, then rerun. |
+| `(--e2e) no completed e2e-tests.yml workflow_dispatch run found for branch` | `e2e-tests.yml` was never dispatched for this PR's branch. Dispatch it (`tools/ghb workflow run e2e-tests.yml --ref <head-branch>`), wait, then rerun. |
 | `(--e2e) artifact 'e2e-android-apk' not found` | E2E build job failed in that dispatch. `gh run view <id>`. |
 
 ## Required env

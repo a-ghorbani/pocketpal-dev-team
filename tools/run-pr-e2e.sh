@@ -26,6 +26,8 @@ Fetches the CI APK for a PR and runs E2E tests via run-e2e.ts --skip-build.
                     --spec must be passed after -- instead.
   --                Everything after is passed verbatim to run-e2e.ts
 
+Android appPath in e2e/devices.json is rewritten to the APK matching the mode.
+
 Examples:
   $0 688 -- --devices connected
   $0 688 --e2e --specs quick-smoke -- --devices connected
@@ -108,6 +110,20 @@ if [[ "$NO_FETCH" == "false" ]]; then
   fi
 else
   echo "Skipping APK fetch (--no-fetch)"
+fi
+
+if [[ "$E2E_MODE" == "true" ]]; then
+  APK_REL="../android/app/build/outputs/apk/e2e/releaseE2e/app-e2e-releaseE2e.apk"
+else
+  APK_REL="../android/app/build/outputs/apk/release/app-release.apk"
+fi
+DEVICES_JSON="$REPO_ROOT/e2e/devices.json"
+if [[ -f "$DEVICES_JSON" ]]; then
+  TMP_DEVICES="$(mktemp)"
+  jq --arg p "$APK_REL" \
+    '.devices |= map(if .platform == "android" then .appPath = $p else . end)' \
+    "$DEVICES_JSON" >"$TMP_DEVICES" && mv "$TMP_DEVICES" "$DEVICES_JSON"
+  echo "Android appPath in e2e/devices.json -> $APK_REL"
 fi
 
 adb start-server >/dev/null 2>&1 || true
