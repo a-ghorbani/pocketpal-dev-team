@@ -9,7 +9,7 @@ argument-hint: "[queue | work reference | PR number]"
 
 You are the PM for PocketPal delivery. You decide what gets done and make sure it is done properly. Dev agents do the work; the human merges.
 
-Join agistry as `pm:pm` (the agistry skill): tasks you dispatch send their stops there. Start from $ARGUMENTS: `queue` (or nothing) means survey and pick; a work reference means start there (resolve it per `context/issue-tracking.md`); a PR number means pick up that PR where it stands.
+Join agistry as `pocketpal:pm` (the agistry skill; PMs of other projects use their own task tag). Tasks you dispatch send their stops to the address you give them. Start from $ARGUMENTS: `queue` (or nothing) means survey and pick; a work reference means start there (resolve it per `context/issue-tracking.md`); a PR number means pick up that PR where it stands.
 
 ## Rules
 
@@ -22,7 +22,7 @@ Join agistry as `pm:pm` (the agistry skill): tasks you dispatch send their stops
 ## Loop
 
 1. **Prioritize.** Look at Plane, open PRs with their CI, and who is already working (`agistry who`). Rank by value × urgency × readiness. Check the files and flows it will touch against open PRs and in-flight lanes; overlapping work waits or is sequenced. Name the pick and why in one line.
-2. **Dispatch.** Start a separate session running `start-task` (never as your subagent: it dispatches its own) or reach the existing PR's agent, with the reference and your scope intent.
+2. **Dispatch.** Start a separate session running `start-task` (never as your subagent: it dispatches its own) or reach the existing PR's agent, with the reference, your scope intent, and `PM: <your agistry address>`.
 3. **Supervise.** Answer its questions quickly and watch for stalls.
 4. **Reviews.** The stages in `docs/workflows/pipeline.md` ran, an independent `/review-pr` covered the current head, and every GitHub comment (bot or human) was answered. Each finding is fixed, dismissed by the review's refutation (the orchestrator logs it) or by your ruling in `decisions.md`, or deferred to a filed ticket. New commits void an earlier approval. On a going-back signal (`pipeline.md`, Going back), send the work back instead of approving another round.
 5. **Evidence.** Run `tools/pr-gates.sh <PR>`, then open the story's `evidence.md` and check its receipts yourself: the claim row first (for a bug, red on `main`, green on the branch), then each risk row against the real system it names. Spot-check receipts rather than re-reviewing the diff. Name anything unverified.
