@@ -6,38 +6,15 @@ argument-hint: "<pr-number | branch-ref | worktree-path>"
 
 # Review PR
 
-Review the requested PocketPal change as a code-review workflow, not as implementation work.
+Orchestrate a code review (not implementation) of a PR number, branch ref, or worktree path: `/review-pr <pr-number | branch-ref | worktree-path>`.
 
-The user may invoke this skill with a PR number, branch ref, or worktree path:
-
-```text
-/review-pr <pr-number | branch-ref | worktree-path>
-```
-
-## Operating Contract
-
-Use this skill as the orchestration layer.
-
-Read `docs/standards/code-review.md` before making review judgments.
-
-Use the PocketPal role reviewers when role subreviews are required, and `pocketpal-code-reviewer` (all lenses) when they are not. The lead synthesizes either way.
-
-Do not mutate `repos/pocketpal-ai/`, this is read only, instead use worktrees.
-
-Do not produce a complete high-risk final review unless required role subreviews completed.
+`docs/standards/code-review.md` owns lenses, roles, risk, severity, confidence, refutation, verdict, and output; read it before judging. Role reviewers run when role subreviews are required, `pocketpal-code-reviewer` (all lenses) otherwise; the lead synthesizes either way. `repos/pocketpal-ai/` is read-only: use worktrees.
 
 ## Inputs To Resolve
 
-Resolve these before classification:
+Before classification: target (PR number, branch ref, or worktree path); review ID (`PR-<number>`, or a stable name from the branch/worktree); worktree path under `worktrees/`; base and head refs; PR metadata, changed files, diff, linked issue, and acceptance criteria when available; the current round's folder or the next new one.
 
-- Target identifier: PR number, branch ref, or worktree path.
-- Review ID: `PR-<number>` for PRs, or a stable name derived from the branch/worktree.
-- Worktree path under `worktrees/`.
-- Base ref and head ref.
-- PR metadata, changed filenames, diff, linked issue, and acceptance criteria when available.
-- Existing review artifact folder for the current round, or the next new round folder.
-
-If essential target information is missing and cannot be found locally or from GitHub, stop and ask for the missing target.
+If essential target information can't be found locally or on GitHub, stop and ask for it.
 
 ## Readiness
 
@@ -65,114 +42,44 @@ git -C "$MAIN_REPO" fetch origin "+pull/${PR_NUMBER}/head:${PR_REF}"
 
 The worktree is also the PR-fix worktree, so move it to the PR head by fast-forward only: stop and report when it has a dirty tree or commits not on `${PR_REF}`; otherwise `git -C "${WORKTREE_PATH}" merge --ff-only "${PR_REF}"`. Confirm `git -C "${WORKTREE_PATH}" rev-parse HEAD` equals `HEAD_SHA`, and record that SHA as the reviewed revision in `review-map.md`.
 
-If an expected worktree path is missing but `git worktree list` contains a stale entry, do not remove it with raw git or filesystem commands.
-
-Create or reuse an allowed task or PR worktree according to the loaded repo instructions, or report the blocker.
+If an expected worktree path is missing but `git worktree list` has a stale entry, never remove it with raw git or filesystem commands. Create or reuse an allowed worktree per repo instructions, or report the blocker.
 
 ## Context To Read
 
-Read only the context that applies to the review target.
+Read only what applies:
 
-- `context/pocketpal-overview.md` for product and domain orientation.
-- `docs/standards/architecture.md` for app boundaries, runtime surfaces, and data-flow orientation.
-- `context/patterns.md` for local implementation and test conventions.
-- `docs/workflows/visual-capture.md` when UI screenshots or visual evidence are relevant.
-- The story's `evidence.md`, `decisions.md`, and `what.md` when the change came from this pipeline; pass their paths to every role reviewer (how they are used: `docs/standards/code-review.md`, Canonical Inputs).
+- `context/pocketpal-overview.md` (product, domain), `docs/standards/architecture.md` (boundaries, runtime surfaces, data flow), `context/patterns.md` (implementation and test conventions).
+- `docs/workflows/visual-capture.md` when UI screenshots or visual evidence matter.
+- The story's `evidence.md`, `decisions.md`, and `what.md` for pipeline changes; pass their paths to every role reviewer (use: standard's Canonical Inputs).
 - The touched flow docs (`context/architecture/<flow>.md`: the story's `ARCHITECTURE_DOCS`, else the README index rows matching the changed files), passed to `pocketpal-architect-reviewer` or `pocketpal-code-reviewer`.
 - Lessons for the surfaces the diff touches (`tools/context search <terms>`), passed to the role reviewers they concern.
 - Earlier rounds' `final.md` for this target: report a finding already fixed once and now back as a design problem, not another fix.
 
 ## Review Artifact Folder
 
-Write durable artifacts in the following folder:
+Write artifacts to `workflows/reviews/<TARGET_ID>/round-<N>/`, where `N` is the highest existing `round-<k>` for this TARGET_ID plus 1, unless explicitly continuing an in-progress round. The max-2-rounds cap and escalation belong to the caller (the `/start-task` loop); a standalone run does one round, states its number, and enforces no cap.
 
-```text
-workflows/reviews/<TARGET_ID>/round-<N>/
-```
+Required files, complete high-risk review: `review-map.md`, `architect.md`, `qa.md`, `security.md`, `performance.md`, `mobile.md`, `data.md`, `ux.md`, `local-invariants.md`, `verification.md`, `final.md`. Any other review: `review-map.md`, `code-reviewer.md`, `verification.md`, `final.md`.
 
-Determine `N` as `(highest existing round-<k> dir for this TARGET_ID) + 1`, unless explicitly continuing an in-progress round. The max-2-rounds cap and escalation are owned by the caller (the `/start-task` delivery loop). A standalone `/review-pr` run performs a single round, states its round number, and does not enforce the cap itself.
-
-For a complete high-risk review, these files are required:
-
-- `review-map.md`
-- `architect.md`
-- `qa.md`
-- `security.md`
-- `performance.md`
-- `mobile.md`
-- `data.md`
-- `ux.md`
-- `local-invariants.md`
-- `verification.md`
-- `final.md`
-
-For any other review: `review-map.md`, `code-reviewer.md`, `verification.md`, `final.md`.
-
-If a required role artifact is missing, the final review must say `review_complete: no` and `role_subreviews: BLOCKED`.
+A missing required role artifact means `review_complete: no` and `role_subreviews: BLOCKED`.
 
 ## Review Map
 
-Create `review-map.md` before role review.
+Write `review-map.md` before role review; it orients reviewers, it is not the verdict. Include: target metadata (target, base ref, reviewed head SHA `headRefOid`, worktree path, story/PR links); changed file groups; runtime and data-flow notes; requirements and acceptance-criteria coverage; risk classification; required role reviewers; suggested file focus per role; verification required by policy.
 
-The map is orientation for reviewers, not the final verdict.
-
-Include:
-
-- target metadata: target, base ref, reviewed head SHA (`headRefOid`), worktree path, story/PR links.
-- changed file groups.
-- runtime and data-flow notes.
-- requirements and acceptance-criteria coverage.
-- risk classification.
-- required role reviewers.
-- suggested file focus per role.
-- verification required by policy.
-
-For large or ambiguous reviews, use these map helper agents before writing the final map:
-
-- `pocketpal-review-map-architect`
-- `pocketpal-flow-analyst`
-- `pocketpal-requirements-mapper`
-
-Summarize helper output into `review-map.md`.
-
-Do not treat helper output as final review findings.
+For large or ambiguous reviews, run the map helpers (`pocketpal-review-map-architect`, `pocketpal-flow-analyst`, `pocketpal-requirements-mapper`) first and summarize their output into the map; it is never a final finding.
 
 ## Risk Classification
 
-Classify the review as high risk when any condition is true:
-
-- changed files > 10.
-- native dependency or native code changes.
-- persistence, migration, or schema changes.
-- security or trust-boundary changes.
-- model, tool, or execution changes.
-- multi-surface changes.
-- the user explicitly asks for a robust, deep, or role-based review.
-
-For high-risk reviews, run all required role subreviews. Role agents:
-
-- `pocketpal-architect-reviewer`
-- `pocketpal-qa-reviewer`
-- `pocketpal-security-reviewer`
-- `pocketpal-performance-reviewer`
-- `pocketpal-mobile-reviewer`
-- `pocketpal-data-reviewer`
-- `pocketpal-ux-reviewer`
-- `pocketpal-local-invariants-reviewer`
+High risk per the standard's Working Method (a request for a role-based review counts too). Then run every role agent: `pocketpal-architect-reviewer`, `pocketpal-qa-reviewer`, `pocketpal-security-reviewer`, `pocketpal-performance-reviewer`, `pocketpal-mobile-reviewer`, `pocketpal-data-reviewer`, `pocketpal-ux-reviewer`, `pocketpal-local-invariants-reviewer`.
 
 Otherwise `role_subreviews: NOT_REQUIRED`: dispatch `pocketpal-code-reviewer` with the delegation shape below (output artifact `code-reviewer.md`) to apply every lens.
 
 ## Subreview Gate
 
-This gate is mandatory for high-risk reviews.
+Mandatory for high-risk reviews: run read-only role subreviews before the final review. If a required role reviewer cannot run, produce no complete final review: mark `review_complete: no` and `role_subreviews: BLOCKED`.
 
-If role subreviews are required, run read-only role subreviews before issuing the final review.
-
-If required role reviewers cannot run, do not produce a complete final review.
-
-Mark the output as `review_complete: no` and `role_subreviews: BLOCKED`.
-
-Use this delegation shape:
+Delegation shape:
 
 ```text
 Use <role-agent-name>.
@@ -188,13 +95,7 @@ Write the result to the output artifact when file writes are available.
 Do not modify source files or review inputs.
 ```
 
-Role reviewers may write role artifacts directly.
-
-If a role reviewer returns output without writing the artifact, write that output verbatim to the required artifact path before final review synthesis.
-
-Use the role artifacts to produce the final review.
-
-Each role artifact must use this shape:
+Role reviewers may write their artifacts; if one returns output without writing it, write that output verbatim to the artifact path before synthesis. The final review is built from the role artifacts, each in this shape:
 
 ```markdown
 # <Role> Review: <TARGET_ID> Round <N>
@@ -217,30 +118,11 @@ fix: One sentence.
 
 ## Verification
 
-Run feasible verification from the app worktree.
-
-Before JS tests, ensure dependencies exist:
-
-- run `yarn install` in the app worktree when `node_modules` or `jest` is missing.
-- run `yarn install` in `e2e/` before E2E commands.
-
-Native dependency or native code changes require:
-
-- `pod install`.
-- iOS build.
-- Android build.
-
-Missing required native verification is a blocking review issue unless the user explicitly changes the requirement.
-
-Write verification status to `verification.md`.
+Run feasible verification from the app worktree and write the status to `verification.md`. Run `yarn install` in the worktree when `node_modules` or `jest` is missing, and in `e2e/` before E2E commands. Native dependency or code changes require `pod install`, an iOS build, and an Android build; missing them is blocking unless the user explicitly changes the requirement.
 
 ## Final Synthesis
 
-Read all role artifacts (or `code-reviewer.md`) and `verification.md`, then write `final.md`.
-
-Use `final.md` as the team-facing review response and synthesis record; it stays local (Publish posts the public form). It should contain the final normalized findings, role subreview status, verification status, residual risks, open questions, and review-completeness fields in the standard output shape.
-
-Before final output:
+Read all role artifacts (or `code-reviewer.md`) and `verification.md`, then write `final.md` in the human-facing shape (`docs/standards/review-output.md`): the team-facing, local synthesis record (Publish posts the public form). Before writing:
 
 - Confirm every required role artifact exists, or mark the review incomplete.
 - Merge duplicate findings.
@@ -251,21 +133,7 @@ Before final output:
 
 ## Final Response
 
-Write `final.md` using the standard output shape from `docs/standards/code-review.md`.
-
-Respond from `final.md`.
-
-The final response must be team-shareable.
-
-Include:
-
-- `role_subreviews: COMPLETED | BLOCKED | NOT_REQUIRED`.
-- `review_complete: no` when required role subreviews did not complete.
-- findings grouped by severity.
-- verification status.
-- residual risks and open questions.
-
-For a complete high-risk review, `role_subreviews` must be `COMPLETED`.
+Respond from `final.md`, team-shareable: `role_subreviews: COMPLETED | BLOCKED | NOT_REQUIRED` (`COMPLETED` for a complete high-risk review), `review_complete: no` when required subreviews did not complete, findings grouped by severity, verification status, residual risks, and open questions.
 
 ## Publish
 
