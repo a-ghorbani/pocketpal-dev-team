@@ -7,147 +7,90 @@ argument-hint: "[figma-url-or-node-id]"
 
 # Figma Implementation Workflow
 
-You are implementing a Figma design into PocketPal RN. Figma is the source of truth for layout, copy, colour, typography, and assets. The job is **translation discipline**, not improvisation.
+Figma is the source of truth for layout, copy, colour, typography, and assets. The job is **translation discipline**, not improvisation.
 
-## When to use this skill
+## When to use
 
 - The task lists a Figma file key + node IDs (e.g. FOU-112 phase slices, any "implement frame X" request).
 - The user shares a `figma.com/design/<fileKey>/<file>?node-id=...` URL.
 
-## When NOT to use this skill (switch to)
-
-- Editing inside Figma → the `figma-use` skill.
-- Generating a new Figma design from code/intent → `figma-generate-design`.
-- Mapping a code component to a Figma component (Code Connect) → `figma-code-connect`.
-- A non-design implementation task → the normal pipeline (`start-task` / `pocketpal-intake`).
+Switch instead: editing inside Figma → `figma-use`; new Figma design from code/intent → `figma-generate-design`; Code Connect mapping → `figma-code-connect`; non-design work → the normal pipeline (`start-task` / `pocketpal-intake`).
 
 ## Pre-flight
 
-The intent brief must contain:
-
-- Canonical Figma file key (e.g. `RZxDJea4t6jnBZrV4YBacF`).
-- One or more in-scope node IDs (per-screen, per-component).
-- Light frame (and dark frame, if light/dark parity is required).
-
-If any are missing, emit `NEEDS_INPUT:` with the exact unanswered questions and stop. Do not guess node IDs from the URL alone.
+The intent brief must contain the canonical Figma file key (e.g. `RZxDJea4t6jnBZrV4YBacF`), one or more in-scope node IDs (per-screen, per-component), and the light frame (plus dark, if light/dark parity is required). If any are missing, emit `NEEDS_INPUT:` with the exact unanswered questions and stop. Do not guess node IDs from the URL alone.
 
 ## Step 0 — Load the Figma MCP tools
 
-The Figma MCP tools are **deferred** — they aren't in your tool list until you load their schemas, and a bare call fails with "tool not found." Load them first: run `ToolSearch` with the query `figma` to discover and load the Figma tools (you need *get-metadata*, *get-design-context*, *get-screenshot*, and *whoami*; read the exact names from the search result).
+The Figma MCP tools are **deferred**; a bare call fails with "tool not found." Run `ToolSearch` with query `figma` and load *get-metadata*, *get-design-context*, *get-screenshot*, and *whoami* (exact names from the result). Two servers; prefer whichever is already live:
 
-Two servers can serve these tools:
+- **`plugin:figma:figma`** — hosted (`mcp.figma.com`), reads any file by `fileKey`, no desktop app, OAuth-gated. If the search returns only `authenticate` / `complete_authentication`, call `authenticate`, hand the URL to the user, and wait. Do not improvise layout while you wait. Better for pulling a node from a file nobody has open.
+- **`figma-local`** — the desktop app's Dev Mode server on `http://127.0.0.1:3845/mcp` (registered in this repo's `.mcp.json`). No auth; serves the file open in the app, so `nodeId` alone is enough. Needs the desktop app running with the canonical file open. Better when the user is in the file.
 
-- **`plugin:figma:figma`** — hosted (`mcp.figma.com`). Reads any file by `fileKey`, so it needs no desktop app, but it is OAuth-gated. If a `ToolSearch` for `figma` returns only `authenticate` / `complete_authentication`, nobody has authorized it in this session: call `authenticate`, hand the URL to the user, and wait. Do not improvise layout while you wait.
-- **`figma-local`** — the Figma **desktop** app's Dev Mode server on `http://127.0.0.1:3845/mcp`, registered in this repo's `.mcp.json`. **No auth** — it inherits the desktop session. It serves whichever file is open in the app, so `nodeId` alone is enough (no `fileKey`). Requires the desktop app running with the canonical file open.
-
-Prefer whichever is already live. The hosted one is better for pulling a specific node out of a file nobody has open; the local one is better when the user is actively in the file and there is no authorization to wait on.
-
-Call the Figma `whoami` tool once to confirm you're authenticated, then work directly against the canonical file — pull metadata, design context, and screenshots yourself. If `whoami` genuinely errors (auth/transport), stop and report it as a real outage; do not improvise layout from a screenshot alone.
+Call `whoami` once, then pull metadata, design context, and screenshots yourself. If `whoami` genuinely errors (auth/transport), stop and report a real outage; never improvise layout from a screenshot alone.
 
 ## Step 1 — Metadata first, then design context
 
-Order matters. For each in-scope node:
+For each in-scope node, in this order:
 
 ```text
 mcp__plugin_figma_figma__get_metadata(fileKey, nodeId)
 mcp__plugin_figma_figma__get_design_context(fileKey, nodeId)
 ```
 
-- `get_metadata` enumerates every child (id, name, x/y/w/h). This is the canonical "what's in the design" list — **every child must end up in code OR in `designer-asks.md`**. Silently skipping a child is a defect.
-- `get_design_context` returns the decoded Auto Layout as JSX + tokenised values. This is the implementation reference. Treat the output as representational — translate to RN + project tokens, do not ship the Tailwind verbatim.
-
-If `get_design_context` returns truncated content, drill in: call it on smaller sub-trees instead of the whole frame.
+- `get_metadata` lists every child (id, name, x/y/w/h): **every child must end up in code OR in `designer-asks.md`**. Silently skipping a child is a defect.
+- `get_design_context` returns Auto Layout as JSX + tokenised values. It is representational: translate to RN + project tokens, never ship the Tailwind verbatim. If truncated, call it on smaller sub-trees.
 
 ## Step 2 — Asset pipeline (vector-first)
 
-For each visual node, decide the source:
-
 | Source in Figma | Use | How |
 | --- | --- | --- |
-| DS icon already exported (`src/assets/icons/<name>-{sm,md,lg}.svg`) | Direct import | `import {ChevronLeftLgIcon} from '../../../assets/icons'`. Always prefer this over hand-coded SVG components. |
-| DS icon NOT yet exported (Figma library `746:26281`) | Export it before coding the consumer | `get_design_context` on each size variant, `curl` the asset URL, save as `src/assets/icons/<name>-{sm,md,lg}.svg`, register in `src/assets/icons/index.ts` as `<Name><Size>Icon`. |
-| Iconify glyph name in design context (e.g. `fa6-solid:feather`, `material-community:*`, `fluent:*`, `typcn:code`) | `react-native-vector-icons` (already in deps) | Pick the matching family and glyph. Most iconify sets we need are covered. |
-| Vector illustration (non-icon — hero art, mascot, etc.) | SVG via `react-native-svg` + `react-native-svg-transformer` | Export the node as SVG. Save under `src/assets/<flow>/`. Import as a React component. |
-| Photographic / raster source | PNG @3x at minimum | Export at 3× the on-screen size (e.g. 112×112 target → 336×336 PNG). Bitmap-only as a last resort. |
+| DS icon already exported (`src/assets/icons/<name>-{sm,md,lg}.svg`) | Direct import | `import {ChevronLeftLgIcon} from '../../../assets/icons'`. Always prefer over hand-coded SVG components. |
+| DS icon NOT yet exported (Figma library `746:26281`) | Export before coding the consumer | `get_design_context` on each size variant, `curl` the asset URL, save as `src/assets/icons/<name>-{sm,md,lg}.svg`, register in `src/assets/icons/index.ts` as `<Name><Size>Icon`. |
+| Iconify glyph in design context (e.g. `fa6-solid:feather`, `material-community:*`, `fluent:*`, `typcn:code`) | `react-native-vector-icons` (in deps) | Pick the matching family and glyph. |
+| Vector illustration (hero art, mascot) | SVG via `react-native-svg` + `react-native-svg-transformer` | Export the node as SVG, save under `src/assets/<flow>/`, import as a component. |
+| Photographic / raster | PNG @3x minimum | Export at 3× on-screen size (112×112 → 336×336). Bitmap only as a last resort. |
 
-**Never** hand-code an SVG component when the Figma library has the icon exported. Hand-drawn approximations drift in stroke weight, shape, and dimensions — exactly the class of bug the export library prevents.
-
-**Three size variants per DS icon** (sm/md/lg) are NOT for scaling — SVG scales natively. They are different *visual weights* (sm = thinner geometry, lg = chunkier). Pick the variant Figma uses in the specific component; don't substitute.
-
-### Figma SVG export gotchas (RN-specific)
-
-When you save a Figma SVG asset into the repo, normalise it before committing:
-
-1. **Strip CSS variables, then immediately decide the colour** (steps 1 and 2 are one operation — do not stop after 1). `react-native-svg-transformer` doesn't parse `fill="var(--fill-0, #181715)"` — the icon renders transparent — so the mechanical fix is to drop in the hex fallback. **That fix is also how the dark-mode bug gets born.** Verify with `grep -l 'var(' src/assets/icons/*.svg` returning nothing, then go straight to 2.
-
-2. **Colour: `currentColor` unless the icon is genuinely one colour forever.** A baked hex does not react to theme switches, and — this is the part that bites — **passing `fill=` or `stroke=` at the call site will NOT override it.** `.svgrrc`'s `replaceAttrValues` rewrites only a fixed list of hexes (today `#333333`, `#858585`, `#FF653F`) into `{props.fill}`. Any other hex stays literal in the generated component, the path defines its own paint, and it therefore does not inherit from the root `Svg` either. The call site looks correct and does nothing.
-   - **Themed icon** → set the path to `fill="currentColor"` (or `stroke="currentColor"`) and pass `color={theme.colors.<token>}` at the call site.
-   - **Icon whose hex happens to be in `replaceAttrValues`** → it already binds to `{props.fill}`; note that a stroke-only icon binds its *stroke* to the `fill` prop, so passing `fill="none"` paints nothing and omitting `fill` is what yields the outline.
-   - **Deliberately multicolour brand mark** (e.g. `GoogleIcon`) → leave the hexes and pass no colour. Say so in the spec table so a reviewer doesn't "fix" it.
-
-3. **`preserveAspectRatio="none"` warning**: Figma exports set this so the icon stretches to its container. If you pass non-proportional `width`/`height`, the path distorts. Either pass dims proportional to the viewBox, OR remove the attribute to keep aspect locked.
-
-**Why this needs care: nothing catches it.** The raw-hex ESLint ban covers `src/components/ui/**/styles.ts` only — it does not scan `src/assets/icons/*.svg`, and the token-invariant test polices which files *read* tokens, not which files *bypass* them. A baked hex passes typecheck, lint, the full Jest suite and both invariant suites. It is also invisible in light mode, because the exported hex is usually a near-black that looks right on a light surface — it only shows as a near-invisible glyph on the dark-mode container. Assume your gates will not tell you; check dark mode yourself.
-
-Verify each asset visually before committing: open in Preview, confirm it renders crisp at the target size; then run a screen capture **in both light and dark** to confirm it actually shows up in the app.
+- **Never** hand-code an SVG when the Figma library has the icon exported; hand-drawn approximations drift in stroke, shape, and size.
+- The sm/md/lg variants are different *visual weights*, not scales. Use the variant Figma uses; don't substitute.
+- Normalise every saved Figma SVG before committing; read `references/svg-export.md`. In short: strip `var(...)` fills (`grep -l 'var(' src/assets/icons/*.svg` returns nothing) and in the same step choose the colour: `currentColor` + `color={theme.colors.<token>}` for themed icons (a baked hex outside `.svgrrc` `replaceAttrValues` ignores call-site `fill=`/`stroke=`); multicolour brand marks keep their hexes, noted in the spec table; mind `preserveAspectRatio="none"`. No gate catches a baked hex: check dark mode yourself.
+- Verify each asset visually (crisp at target size in Preview), then capture the screen **in light and dark** to confirm it shows in the app.
 
 ## Step 3 — Translation discipline
 
-For each screen / component:
-
-1. **Decode coordinates, don't ship them**. Figma's `x=137, y=30, width=120` on a 393-wide frame is *responsive encoding*: `137 + 60 = center` → "horizontally centered, 30 from top". Translate to flex/padding/margin. Only ship fixed numbers for fixed-size things (icon sizes, hit targets, illustration boxes).
-2. **Node-for-node coverage**. Every child the `get_metadata` walk returned has a code counterpart. If a node is deferred, add a one-line code comment AND an entry in `designer-asks.md`. No silent drops.
-3. **Tokens-only in screens**. Map Figma variables → `theme.*` tokens. Zero raw hex in `src/screens/`. If a token doesn't exist, add it via the paired-edit handshake in `theming.md` (same I_UI8 pattern used for `spacing.xxl`, `accent.peach`).
-4. **Reuse the DS**. Use existing components in `src/components/ui/` before building new ones. New internals live under `src/screens/<screen>/components/`.
-5. **Auto Layout direction** maps to flex direction. `gap` maps to RN `gap`. `padding/px-* / py-*` map to `paddingHorizontal/Vertical`. `min-w-*` to `minWidth`. Etc. — preserve every numeric value.
+1. **Decode coordinates, don't ship them.** `x=137, y=30, width=120` on a 393-wide frame (`137 + 60 = center`) means "centered, 30 from top" → flex/padding/margin. Fixed numbers only for fixed-size things (icon sizes, hit targets, illustration boxes).
+2. **Node-for-node coverage.** Every `get_metadata` child has a code counterpart; a deferred node gets a one-line code comment AND a `designer-asks.md` entry.
+3. **Tokens-only in screens.** Figma variables → `theme.*` tokens; zero raw hex in `src/screens/`. A missing token is added via the paired-edit handshake in `theming.md` (I_UI8 pattern, as for `spacing.xxl`, `accent.peach`).
+4. **Reuse the DS.** Existing `src/components/ui/` components first; new internals under `src/screens/<screen>/components/`.
+5. **Auto Layout** direction → flex direction; `gap` → RN `gap`; `px-*`/`py-*` → `paddingHorizontal/Vertical`; `min-w-*` → `minWidth`. Preserve every numeric value.
 
 ## Step 3.5 — Per-component spec table (MANDATORY)
 
-For every component (NEW or modified) emit a table in the story doc BEFORE writing the component code, then re-verify after coding. The table forces an explicit Figma → code mapping for the properties most likely to drift: dimensions, colour fills, border widths/colours, radii, padding, sub-icon sizes.
+For every NEW or modified component, write a Figma → code table in the story doc BEFORE coding it and re-verify after; read `references/spec-table.md` for the format and the defect map. Rules:
 
-Format:
-
-```markdown
-### Component: <name>  (Figma node `<id>`)
-
-| Property         | Figma value                          | Code value                  | Status |
-|------------------|--------------------------------------|-----------------------------|--------|
-| container size   | 48×48                                | width: 48, height: 48       | ✓      |
-| bg               | `Color/Secondary/Default` `#f3f2f2`  | theme.colors.secondaryDefault | ✓      |
-| border           | 0.5px `Color/Border/Light-grey` `#e5e3e1` | theme.stroke.sm + theme.colors.mutedLight | ✓ |
-| corner radius    | `Radius/ml` 16                       | theme.radius.ml             | ✓      |
-| chevron asset    | `chevron-left lg` (746:26300)        | ChevronLeftLgIcon           | ✓      |
-| chevron display  | 6.5×11.5 (viewBox native)            | width: 6.5, height: 11.5    | ✓      |
-```
-
-Rules:
-
-- Every Figma property the visual depends on must appear. If a property is missing from the table, you don't know what Figma says — pull it before guessing.
-- "Status" is one of `✓` (matches), `≈` (close enough by design — note why), `✗` (deviation — must justify under deferred items in `designer-asks.md`).
-- If you find yourself writing a literal value (`borderColor: '#some-hex'`) in code, the corresponding token binding belongs in this table; if the token doesn't exist yet, that's a design-token follow-up.
-
-This table is the single mechanical check that catches the class of bug where the implementer mapped Figma `Color/Secondary/Default` to RN `secondaryContainer` because "the names sound similar" — without verifying the hex values match. The check costs ~2 minutes per component and finds these mismatches every time.
+- Every property the visual depends on appears (dimensions, fills, border widths/colours, radii, padding, sub-icon sizes, asset choice). A missing property means you don't know what Figma says: pull it before guessing.
+- Status is `✓` (matches), `≈` (close by design, note why), or `✗` (deviation, justified under deferred items in `designer-asks.md`).
+- A literal value in code (`borderColor: '#some-hex'`) means its token binding belongs in the table; a missing token is a design-token follow-up.
+- Compare Figma hex with the resolved theme token; never map by similar-sounding names.
 
 ## Step 4 — Visual-diff captures (MANDATORY gate)
 
-Before the PR is ready for review, every in-scope screen must have a side-by-side saved under the story dir (local story space, not the app branch):
+Before review, every in-scope screen has a side-by-side in the story dir (local story space, not the app branch):
 
 ```
 <STORY_DIR>/visual-diff/<screen>-figma.png
 <STORY_DIR>/visual-diff/<screen>-sim.png
 ```
 
-How:
+1. **Figma render**: `get_screenshot(fileKey, nodeId, maxDimension=2622)` per screen (3× of a 393×852 frame on an iPhone-17-Pro-class device); download the PNG.
+2. **Sim screenshot**: run the app on a sim whose logical width matches the design (iPhone 17 Pro = 393pt = 1206px @3x; confirm against the device under test). Capture via `driver.saveScreenshot()` in `e2e/specs/visual-capture/<TASK-ID>.spec.ts` (PR-fix rounds: `TASK-PR-<n>.spec.ts`, so it stays gitignored) or `xcrun simctl io <udid> screenshot` by hand. This host has no iOS toolchain: sim runs go through `ios-router`.
+3. **No automated pixel-diff gate**; the human eye is. The pipeline reviewer posts each pair with `tools/post-pr-visual-evidence.sh`; that comment is the durable copy.
 
-1. **Figma render**: call `get_screenshot(fileKey, nodeId, maxDimension=2622)` for each screen. Download the PNG. The 2622 cap matches 3× of a 393×852 design frame on an iPhone-17-Pro-class device.
-2. **Sim screenshot**: build and run the app on a sim whose logical width matches the design (iPhone 17 Pro = 393pt = 1206px @3x for the bottom half — confirm against device under test). Walk to each screen. Capture via `driver.saveScreenshot()` (E2E spec under `e2e/specs/visual-capture/<TASK-ID>.spec.ts`; PR-fix rounds: `TASK-PR-<n>.spec.ts`, so it stays gitignored) OR `xcrun simctl io <udid> screenshot` if driving by hand. This host has no iOS toolchain: sim runs go through `ios-router`.
-3. **No automated pixel-diff gate**. Human eye is the gate. The pipeline reviewer posts each pair to the PR with `tools/post-pr-visual-evidence.sh`; that comment is the durable copy.
-
-If a screen has light + dark + RTL variants, capture each separately (`<screen>-light-figma.png`, `<screen>-light-sim.png`, `<screen>-dark-*.png`, `<screen>-rtl-*.png`).
+Light, dark, and RTL variants are captured separately (`<screen>-light-figma.png`, `<screen>-light-sim.png`, `<screen>-dark-*.png`, `<screen>-rtl-*.png`). Story-dir rationale, the parity gate, and restyle pre/post: `docs/workflows/visual-capture.md`, Flavour C.
 
 ## Step 5 — Hand off to the parity reviewer
 
-After commits land and gates pass (`yarn lint && yarn typecheck && yarn test`), reply `COMPLETE`. The orchestrator routes to the `pocketpal-design-parity-reviewer` (after the tester, before the pipeline reviewer); include in the handoff:
+After commits land and `yarn lint && yarn typecheck && yarn test` pass, reply `COMPLETE`. The orchestrator routes to `pocketpal-design-parity-reviewer` (after the tester, before the pipeline reviewer). Handoff:
 
 ```text
 WORKTREE: <path>
@@ -157,25 +100,12 @@ FIGMA_FILE: <fileKey>
 NODE_IDS: <comma-separated list of in-scope screen node ids>
 ```
 
-The parity reviewer reads the `visual-diff/` captures + the Figma node tree, calls out node-for-node coverage gaps, raw-hex leaks, token misuse, typography drift, asset substitutions. Its `NEEDS_FIXES` routes back to you: BLOCKER fixes, then `COMPLETE` again.
+The reviewer checks the `visual-diff/` captures and the node tree for coverage gaps, raw hex, token misuse, typography drift, and asset substitutions. Its `NEEDS_FIXES` routes back to you: fix BLOCKERs, then `COMPLETE` again.
 
-## Required implementer output format
+## Required implementer output
 
-Mirror this in the final report:
-
-1. **Inputs** — Figma fileKey + node IDs covered + light/dark scope.
-2. **Plan** — per-screen translation outline before coding (assets, components, token additions, deviations).
-3. **Changes** — per-commit summary of what landed.
-4. **Parity** — per-screen "matches Figma" / "differs because X" notes, citing the `visual-diff/` files.
+1. **Inputs** — fileKey, node IDs covered, light/dark scope.
+2. **Plan** — per-screen outline before coding (assets, components, token additions, deviations).
+3. **Changes** — per-commit summary.
+4. **Parity** — per-screen "matches Figma" / "differs because X", citing `visual-diff/` files.
 5. **Tests** — lint/typecheck/jest results + the visual-capture spec path (gitignored, not committed).
-
-## Defects this skill prevents
-
-- "Wireframe ships instead of design" (no Step 4 captures → caught by reviewer).
-- "Silently dropped Figma children" (Step 1 metadata walk → Step 5 reviewer coverage check).
-- "Raw hex in screen styles" (Step 3 tokens-only → reviewer grep).
-- "Blurry raster icons" (Step 2 vector-first → reviewer eyeball).
-- "x=137 shipped as `left: 137`" (Step 3 decode → reviewer responsive check).
-- "Wrong token because the names sounded similar" (Step 3.5 per-component table — Figma hex side-by-side with the resolved theme token).
-- "Hand-coded chevron at the wrong dimensions" (Step 2 prefers exported DS icons over hand-drawn SVGs; Step 3.5 captures the asset choice + dimensions).
-- "Icon ships transparent because Figma SVG used a CSS var" (Step 2 normalisation requires stripping `var(...)` fills on import).

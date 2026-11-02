@@ -20,32 +20,7 @@ You are building PocketPal AI from source in a worktree and running E2E specs ag
 
 ## Available specs
 
-Pick the smallest spec that exercises what changed. Defaults to `quick-smoke`.
-
-### Core (`e2e/specs/*.spec.ts`)
-
-| Spec | Tests | Use when |
-|---|---|---|
-| `quick-smoke` | Full user journey on the smallest model (SmolLM2-135M): drawer → Models → HF search → download → load → chat → assert tokens/sec timing. | Default sanity gate. First thing to run before anything more targeted. |
-| `load-stress` | Multiple load/unload cycles with inference between each. Per-model via `TEST_MODELS`. | Reproducing or guarding against crashes on model reload. |
-| `benchmark-matrix` | Drives the in-app `BenchmarkRunnerScreen` across `{models} × {quants} × {backends}`; writes canonical JSON via the automation bridge. Android-only, requires the `e2e` flavor APK. | Perf regression sweeps; producing a report for `scripts/benchmark-compare.ts`. |
-| `memory-profile` | Captures memory at 7 lifecycle checkpoints (app_launch → models_screen → chat_screen → model_loaded → chat_active → post_chat_idle → model_unloaded); writes canonical JSON for the `/memory-profile` pipeline. | Memory regression sweeps; producing a report for `scripts/memory-compare.ts`. |
-| `visual-capture` | Parametrised screenshot generator driven by the `VISUAL_CAPTURES` env var. Skips silently if the var is unset — it is not a regression test. | Producing PR screenshots from a story file (`docs/workflows/visual-capture.md`). |
-| `diagnostic` | Dumps Appium page-source XML to `e2e/debug-output/` at each navigation step. Not a regression test. | Debugging "no such element" failures by inspecting what Appium actually sees. |
-
-### Feature (`e2e/specs/features/*.spec.ts`)
-
-`quick-smoke` already covers the core chat path. Run a feature spec instead when the change is localised to that feature.
-
-| Spec | Tests | Use when |
-|---|---|---|
-| `thinking` | Loads qwen3-0.6b, toggles thinking, asserts the "Reasoning" bubble appears and disappears. | Touching the thinking toggle, reasoning bubble, or thinking-capable inference path. |
-| `language` | Cycles every supported language, asserts the UI updates. No model load required. | l10n changes, language switcher, `src/locales/` work. |
-| `draft-autosave` | Asserts unsent input text persists across session switches and clears on send. | Changes to chat input draft persistence or session-switch behaviour. |
-| `remote-server` | Adds a remote OpenAI-compatible model from the Models FAB, chats with it, deletes the server. Requires a reachable OpenAI-compatible server. | Remote-model / remote-server changes. |
-| `talent-tool-use` | Creates a Pal with `render_html` enabled, sends a prompt, asserts the HTML preview bubble appears. Uses Qwen3-1.7B with temperature=0/seed=1 for determinism. | Talent registry, tool-use plumbing, HTML preview surface. |
-
-`benchmark-matrix`, `memory-profile`, `tts-memory-profile`, `visual-capture`, and `diagnostic` are deliberately excluded from the `/run-pr-e2e` default-spec list because they are measurement infrastructure, not regression gates.
+Pick the smallest spec that exercises what changed; default `quick-smoke`. Core specs live in `e2e/specs/*.spec.ts` (`quick-smoke`, `load-stress`, `benchmark-matrix`, `memory-profile`, `visual-capture`, `diagnostic`), feature specs in `e2e/specs/features/*.spec.ts` (`thinking`, `language`, `draft-autosave`, `remote-server`, `talent-tool-use`). Read `references/specs.md` for what each tests and when to use it. `benchmark-matrix`, `memory-profile`, `tts-memory-profile`, `visual-capture`, and `diagnostic` are measurement infrastructure, excluded from the `/run-pr-e2e` default list.
 
 ## Parse input
 
@@ -112,6 +87,5 @@ For each failure, open the per-device subdirectory and look at the failure scree
 
 ## Notes
 
-- `devices.json` is per-worktree and gitignored — every fresh worktree gets the synced local copy; re-verify the Android `appPath` against the APK under test.
 - The runner script is `scripts/run-e2e.ts`. There is no `run-e2e-pipeline.ts`.
-- For real iOS devices use `yarn ios:build:ipa`, not `:e2e`.
+- `devices.json` and real-iOS builds (`yarn ios:build:ipa`, not `:e2e`): see Project facts 3 and 5.

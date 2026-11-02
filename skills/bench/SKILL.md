@@ -49,50 +49,20 @@ Pick based on the trigger:
 
 ## Infrastructure
 
-### In-app driver (preferred, no WDIO)
+Read `references/infrastructure.md` for the in-app driver (`BenchmarkRunnerScreen`, deep link `pocketpal://e2e/benchmark`), the WDIO spec `e2e/specs/benchmark-matrix.spec.ts`, the `e2e/scripts/` tools (`build-bench-config.ts`, `benchmark-compare.ts`, `merge-bench-reports.ts`), baselines in `e2e/baselines/benchmark/<device-slug>.json`, the device/RAM filter table, and the `effective_backend` states. Rules:
 
-- `BenchmarkRunnerScreen` (in `src/__automation__/screens/`) runs the matrix entirely in-app.
-- Reached via deep link: `pocketpal://e2e/benchmark` (E2E flavor only).
-- On-device backend detection: `addNativeLogListener` captures llama.cpp log lines per cell; `src/__automation__/logSignals.ts` parses them into a `LogSignals` struct and an `effective_backend` enum (states under "Effective backend" below).
-- Reads `bench-config.json` from the e2e flavor's external files dir. Writes `benchmark-report-<timestamp>.json` next to it.
+- Device IDs and UDIDs come from the worktree's local `e2e/devices.json`. On low-RAM phones filter with `BENCH_MODELS=`/`BENCH_QUANTS=` instead of letting the matrix OOM.
+- Don't change the slug of a tracked baseline without re-running against the new slug; comparison is filename-keyed.
+- `unknown` backend is a real signal (log format changed or init crashed before the listener attached): investigate, never merge it into a baseline. A GPU cell reporting `cpu` is a silent fallback and a regression regardless of pp/tg.
 
-### WDIO spec (fallback / CI)
-
-- `e2e/specs/benchmark-matrix.spec.ts` — thin wrapper that triggers the screen via deep link and polls for `bench-runner-screen-status="complete"`. Use when running through the unified E2E pipeline.
-
-### Scripts (in `e2e/scripts/`)
-
-- `build-bench-config.ts` — reads `BENCH_TIER` + filters, writes `bench-config.json`, optional `--push <udid>`.
-- `benchmark-compare.ts` — compares two reports row-by-row. Regression trigger: `|delta%| > --pct` (default 15) on **either** `pp_avg` or `tg_avg`, **or** `effective_backend` mismatch. Exit 1 on regression.
-- `merge-bench-reports.ts` — merges raw report glob into a canonical baseline. Dedupes by `(model_id, quant, requested_backend)`, prefers `status:ok`, latest timestamp wins, sorts deterministically, strips `log_signals.raw_matches`.
-
-### Baselines (in `e2e/baselines/benchmark/`)
-
-Named `<device-slug>.json`, one per device class (all backends × quants × models in one report); the current set is the per-device files in `e2e/baselines/benchmark/` (see its `README.md`). Sibling `e2e/baselines/memory/` holds the unrelated memory-profile baselines.
-
-### Devices & filter mapping
-
-Low-RAM phones cannot run the full quant ladder for every model — heavy combos (phi-4-mini q8_0, gemma-4-e2b q8_0) get OS-killed. Filter with `BENCH_MODELS=`/`BENCH_QUANTS=` for those devices instead of letting the matrix OOM mid-run.
-
-Device IDs and UDIDs come from the worktree's local `e2e/devices.json`. Examples:
-
-| Device | RAM tier | Notes |
-| --- | --- | --- |
-| POCO X9 Pro (`poco-myron` baseline) | high (16 GB) | Adreno 840; runs full matrix; canonical GPU device |
-| `pixel-9-real` | high (16 GB) | Tensor G4; runs full matrix |
-| `oneplus-a6003-real` | low (~6 GB) | Skip phi-4-mini and gemma-4-e2b q8_0 cells |
-| an emulator | n/a | Smoke only; no GPU; for spec-shape verification |
-
-> **Don't change the slug of a tracked baseline** without also re-running against the new slug — comparison is filename-keyed.
-
-### Builds Required
+## Builds Required
 
 - Android E2E APK: `yarn android:build:e2e` (installs as `com.pocketpalai.e2e`, ships the automation bridge).
 - The `prod` flavor has no automation bridge; it cannot run this pipeline.
 
 Use `--skip-build` when the APK is already installed and the bench-config script hasn't changed.
 
-### On the PR's CI APK
+## On the PR's CI APK
 
 CI-APK rows run post-PR on the draft PR's bridge APK from `e2e-tests.yml`: `tools/fetch-pr-apk.sh --e2e <PR>` into the `PR-<N>-e2e` worktree (or `tools/run-pr-e2e.sh <PR> --e2e --specs benchmark-matrix`; `/run-pr-e2e`), then install it and run as below. If `e2e-tests.yml` has not run for the PR's head branch, dispatch it: `tools/ghb workflow run e2e-tests.yml --repo a-ghorbani/pocketpal-ai --ref <head-branch>`.
 
@@ -155,62 +125,9 @@ Default regression threshold is `--pct 15`. Effective-backend changes are flagge
 5. Compare each pulled report against `e2e/baselines/benchmark/<device>.json`.
 6. Present results: per-cell deltas, peak memory, effective_backend, PASS/FAIL from the comparison script.
 
-## Refreshing a baseline (after llama.rn upgrade, native change, or new device)
+## Baselines and OS-killed cells
 
-Baselines are committed to the pocketpal-ai repo. Refreshing one is a focused task:
-
-1. `/start-task "Refresh bench baseline for <device> (llama.rn <ver>)"` — gets a worktree and task branch.
-2. Run the **full** tier on the device (use filters only if RAM forces it). Capture multiple raw reports if you need to top-up cells the OS killed mid-run — the same model file is cached, so re-runs are fast.
-   ```bash
-   cd worktrees/TASK-xxx/e2e
-   BENCH_TIER=full yarn build:bench-config --push <udid>
-   adb -s <udid> shell am start -a android.intent.action.VIEW \
-     -d 'pocketpal://e2e/benchmark' -p com.pocketpalai.e2e
-   # … wait for complete, pull, then top-up missing cells with BENCH_QUANTS=
-   ```
-3. Sanity-check the raw reports:
-   - Every cell has `status: 'ok'` (or a documented `skipped` reason).
-   - GPU cells show `effective_backend: 'opencl'`; CPU cells show `'cpu'`. Any `'unknown'` on a non-GPU device means the parser missed a log line — investigate before merging.
-   - Per-cell `pp_avg`/`tg_avg` within ~10% of the prior baseline (modulo the change you're absorbing).
-4. Merge into a canonical baseline:
-   ```bash
-   npx tsx scripts/merge-bench-reports.ts \
-     --input '/tmp/bench/<device>/benchmark-report-*.json' \
-     --out baselines/benchmark/<device>.json \
-     --device '<full device label>' \
-     --soc '<soc + gpu>' \
-     --commit "$(git rev-parse --short HEAD)" \
-     --llama-rn-version "$(node -p 'require(\"../package.json\").dependencies[\"llama.rn\"]')" \
-     --drop-models <stale-model-id-if-any>
-   ```
-5. Commit, open a PR to pocketpal-ai. Include a one-paragraph summary of why the baseline shifted (llama.rn version, native change, device, etc.).
-
-Run on the device under its **normal load profile** (screen on, typical background apps), not freshly rebooted, so the baseline reflects what users actually see.
-
-## Heavy-model OS-kill pattern
-
-phi-4-mini and gemma-4-e2b at `q8_0` get OS-killed mid-init on most phones. The matrix is ordered to put heavy combos last so partial-row data from earlier cells survives in the JSON report. After the main run finishes (or gets killed), top-up the missing cells:
-
-```bash
-BENCH_TIER=full BENCH_MODELS=phi-4-mini BENCH_QUANTS=q8_0 \
-  yarn build:bench-config --push <udid>
-# … re-run the deep link, pull a second report, merge both via merge-bench-reports
-```
-
-The model file is cached on disk, so the top-up runs in minutes.
-
-## Effective backend — what `unknown` means
-
-`effective_backend` is derived from native log lines captured during context init (`deriveEffectiveBackend` in `src/__automation__/logSignals.ts`). The states:
-
-- `cpu` — no GPU or NPU weight buffer; everything ran on CPU as requested. The iOS simulator lands here (0 layers offloaded).
-- `opencl` — OpenCL init succeeded, all layers offloaded to GPU.
-- `cpu+opencl-partial` — OpenCL initialized but some layers stayed on CPU (large-buffer regression, partial offload).
-- `hexagon` / `cpu+hexagon-partial` — weights on an `HTP*` buffer, fully or partially offloaded.
-- `metal` / `cpu+metal-partial` — weights on an `MTL*` buffer (iOS), fully or partially offloaded.
-- `unknown` — logs were captured but the parser couldn't classify them. Treat as a real signal: either the log format changed (new llama.rn version) or no logs were captured (init crashed before the listener attached). Investigate; don't merge into a baseline.
-
-A GPU cell reporting `cpu` is a silent fallback — the comparison script flags this as a regression independent of pp/tg deltas.
+Read `references/baseline-refresh.md` when refreshing a baseline (full tier, sanity checks, `merge-bench-reports.ts` command, PR to pocketpal-ai) or topping up cells OS-killed mid-run (phi-4-mini / gemma-4-e2b `q8_0`). Run baselines under the device's normal load profile, not freshly rebooted.
 
 ## Presenting Results
 
