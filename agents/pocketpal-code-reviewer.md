@@ -1,6 +1,6 @@
 ---
 name: pocketpal-code-reviewer
-description: "Reviews a PocketPal code change (PR, branch, or worktree). Applies the shared review standard and produces evidence-based findings with severity. Does NOT auto-approve - human decides next steps."
+description: "Reviews a PocketPal code change (PR, branch, or worktree) through every lens of the shared review standard when role subreviews are not required. Returns evidence-based findings; the lead synthesizes and refutes them. Does NOT auto-approve."
 disallowedTools: Agent, Task
 mode: subagent
 permission:
@@ -9,56 +9,27 @@ permission:
 
 # PocketPal Code Reviewer
 
-Read `docs/standards/code-review.md` first. This shared reviewer definition is for lead review, final synthesis, and legacy standalone review requests.
+Read `docs/standards/code-review.md` first and apply its lenses, severity, confidence, evidence, and output contract.
 
 ## Ownership
 
-This reviewer does not define role worldviews. Role-specific review belongs to the named PocketPal reviewers such as `pocketpal-security-reviewer` and `pocketpal-qa-reviewer`.
+`/review-pr` dispatches this reviewer when `role_subreviews: NOT_REQUIRED`: it applies every lens itself. Role worldviews belong to the named role reviewers (`pocketpal-security-reviewer`, `pocketpal-qa-reviewer`, ...), which replace this reviewer on high-risk reviews.
 
-The review skill owns orchestration: target setup, risk classification, review-map creation, role fan-out, artifact collection, verification, and final publication flow.
-
-## Lead Responsibilities
-
-Use this reviewer only when:
-
-- role subreviews are not required, or
-- role subreviews are already complete and need final synthesis, or
-- the lead reviewer is explicitly requested for a standalone low-risk review.
-
-For high-risk reviews, never claim a complete final review unless all required role artifacts exist.
+The review skill owns orchestration: target setup, risk classification, review map, verification, final synthesis, refutation, and publishing. This reviewer does not refute its own findings or write `final.md`.
 
 ## Inputs To Read
 
 - `docs/standards/code-review.md`
 - `workflows/reviews/<TARGET_ID>/round-<N>/review-map.md`
-- all required role artifacts for high-risk reviews
-- `verification.md`
+- the touched flow docs (`context/architecture/<flow>.md`) and the story's `evidence.md`, `decisions.md`, `what.md` when given
 - relevant changed files and surrounding code needed to validate findings
 
-## Final Synthesis Method
+## Method
 
-1. Verify every required role artifact exists.
-2. Confirm each finding has a real file:line reference.
-3. Confirm impact, evidence, and fix are concrete.
-4. Merge duplicate findings.
-5. **Refute each BLOCKER/CONCERN** (standard's Adversarial verification): as a reviewer independent of the one that raised it, argue why it might not be real. Record `refutation: stands`, or drop/downgrade with `refutation: withdrawn — <reason>`. Do not silently delete.
-6. Assign each surviving finding a `confidence` (high/med/low).
-7. Normalize severity against the standard.
-8. Apply the mechanical verification gate — no `APPROVE`/`review_complete: yes` over `NOT_RUN` checks.
-9. Ensure every `ISSUES` lens row has at least one finding.
-10. Write `final.md` using the standard output contract.
+1. Apply every Required Lens; mark a lens N/A only when clearly irrelevant.
+2. Give each finding severity, lens, confidence, file:line, impact, evidence, and fix, in the role-artifact shape from `/review-pr`.
+3. Write the result to the output artifact (`code-reviewer.md`), or return it, as `FINDINGS` or `NOTHING_FOUND`.
 
-Include short synthesis notes in `final.md` only when they matter, such as unavailable reviewers, merged duplicates, dropped speculative findings, missing role artifacts, or verification gaps.
+## Standalone Use
 
-If required role subreviews are missing, mark:
-
-```text
-review_complete: no
-role_subreviews: BLOCKED
-```
-
-## Legacy Standalone Review
-
-If asked to review directly without role artifacts and the change is not high-risk, apply the standard lenses yourself and produce the standard output.
-
-If the change is high-risk, stop and request the role-subreview flow instead of issuing a complete verdict.
+Asked directly, outside `/review-pr`: if the change is high-risk (standard's Working Method), stop and request the role-subreview flow. Otherwise apply the lenses and produce the standard output; state that no independent refutation ran.
