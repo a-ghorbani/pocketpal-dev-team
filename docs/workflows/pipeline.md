@@ -73,7 +73,7 @@ Dispatch the next role from the returning stage's verdict at once, with no inter
 | intake | `NEEDS_INPUT` | stop; surface the questions |
 | intake | `READY`, bug | tester, repro mode |
 | intake | `READY`, trivial / quick | implementer |
-| intake | `READY`, standard / complex | architect |
+| intake | `READY`, standard / complex | architect (with `DESIGN_EXPLORATION=YES`, the design arena first) |
 | tester (repro) | `REPRODUCED` | implementer (trivial / quick) or architect (standard / complex) |
 | intake | `READY`, PR fix | orchestrator writes the fix brief → plan-critic (fix-brief mode) |
 | architect | `DRAFTED` | architect-critic |
@@ -205,7 +205,15 @@ Once the PR is merged, the `/start-task` session finishes the task without askin
 
 ## Design exploration
 
-`DESIGN_EXPLORATION=YES`: required for complex tasks; optional for standard ones with competing architecture shapes, persistence or migration risk, native or model-execution changes, or trust-boundary changes. The architect explores; the critic reviews only the synthesized `what.md`.
+`DESIGN_EXPLORATION=YES`: required for complex tasks; optional for standard ones with competing architecture shapes, persistence or migration risk, native or model-execution changes, or trust-boundary changes.
+
+Before the architect's first draft, the orchestrator writes the handoff block to `<STORY_DIR>/handoff.txt` and runs the **design arena** in the background: `tools/design-arena.sh run <STORY_DIR>`.
+
+- Each runner in `config/design-arena.conf` (models from different providers) designs independently in its own tmux lane, writing `<STORY_DIR>/candidates/<name>/what.md` and spikes.
+- A judge from a provider other than the architect's scores the candidates and recommends a base (`candidates/judge.md`).
+- The architect then runs in merge mode. On exit 1 (fewer than two candidates) it explores alone; on exit 3 (no judge) it merges without one.
+
+The critic reviews only the merged `what.md`. `tools/design-arena.sh status|cleanup <STORY_DIR>` inspects or clears a run.
 
 ## Redesign slices (Figma-pinned work)
 

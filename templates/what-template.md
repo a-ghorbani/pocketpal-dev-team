@@ -24,7 +24,7 @@ Facts the design depends on. Spikes live in `<STORY_DIR>/spikes/`. An unproven p
 
 ## Design exploration
 
-Only with `DESIGN_EXPLORATION=YES`. Candidates: `<STORY_DIR>/design-candidate-*.md` or `<STORY_DIR>/spikes/`; don't paste them here.
+Only with `DESIGN_EXPLORATION=YES`. Candidates: `<STORY_DIR>/candidates/` (design arena) or `<STORY_DIR>/spikes/`; don't paste them here.
 
 ### Alternatives considered
 

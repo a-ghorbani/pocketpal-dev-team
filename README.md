@@ -17,7 +17,9 @@ Intent → WHAT → Implementation, then an independent review loop and a human 
          │     • bug              → tester reproduces on main, finds the cause
          │                          (git history for regressions), then by cause:
          │     • trivial / quick  → implementer
-         │     • standard/complex → architect
+         │     • standard/complex → architect (complex: a design arena first, where
+         │                          Codex and Claude lanes design independently,
+         │                          a judge scores them, the architect merges)
          ▼
   ┌──────────────┐  revise   ┌───────────────────┐   what.md: delta on context/architecture/<flow>.md,
   │  architect   │ ◄───────► │ architect-critic  │   premises proven by spikes

@@ -41,6 +41,7 @@ Repository: ./repos/pocketpal-ai
 
 Route on each stage's `VERDICT` by the routing table in `pipeline.md`. Beyond the table:
 
+- **Design arena** (`DESIGN_EXPLORATION=YES`): before the architect's first draft, write the handoff block to `<STORY_DIR>/handoff.txt`, run `tools/design-arena.sh run <STORY_DIR>` in the background (it takes up to a few hours), then dispatch the architect in merge mode with its exit code.
 - **Slice review** (`SLICE_READY`): give `pocketpal-architect-reviewer` the slice's commit range.
 - **`DESIGN_INVALIDATED`**: check the restart triggers under "Going back" before dispatching the architect's amendment.
 - **Product calls**: relay every defaulted product call a stage reports in your status, so the operator (or the PM) can override it before the code depends on it.

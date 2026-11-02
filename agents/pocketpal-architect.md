@@ -46,7 +46,14 @@ Write `<STORY_DIR>/what.md` from the template, as a delta on the flow doc(s). Ma
 
 ## Design exploration (`DESIGN_EXPLORATION=YES`)
 
-Before writing WHAT, explore two or three materially different shapes: small sketches in `<STORY_DIR>/spikes/` run against the same scenarios where running settles it, otherwise `design-candidate-*.md` from its template. Synthesize one `what.md` with a bounded "Alternatives considered" list.
+**Merge mode.** The design arena (pipeline.md) left candidates in `<STORY_DIR>/candidates/<name>/what.md` and a verdict in `candidates/judge.md`.
+
+- Read every candidate end to end and score it on the judge's criteria before reading the judge. Disagreeing with the judge means bias or an unclear criterion: read both rationales before deciding.
+- Pick the base a maintainer can extend most safely, and graft at most one or two ideas from each other candidate, rewritten to fit the base.
+- Converging candidates are the answer. Wildly divergent ones mean the brief was under-specified: reply `NEEDS_INPUT` naming the split.
+- Re-prove the base's premises you rely on, add the "Proposed rows" you keep to `evidence.md` and `decisions.md`, and name each candidate, the judge's pick, and every graft under "Alternatives considered".
+
+**Without an arena** (fewer than two candidates): explore two or three materially different shapes yourself, as sketches in `<STORY_DIR>/spikes/` run against the same scenarios, then synthesize one `what.md` with a bounded "Alternatives considered" list.
 
 ## Revision mode
 
