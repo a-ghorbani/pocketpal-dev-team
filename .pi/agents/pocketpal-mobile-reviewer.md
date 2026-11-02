@@ -1,1 +1,0 @@
-../../agents/pocketpal-mobile-reviewer.md

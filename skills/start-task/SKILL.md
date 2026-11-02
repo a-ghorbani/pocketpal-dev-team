@@ -44,7 +44,7 @@ Once intake returns `TASK_ID`, join agistry as `<TASK_ID>:orchestrator` (the agi
 Route on each stage's `VERDICT` by the routing table in `pipeline.md`. Beyond the table:
 
 - **Design arena** (`DESIGN_EXPLORATION=YES`): before the architect's first draft, write the handoff block to `<STORY_DIR>/handoff.txt`, run `tools/design-arena.sh run <STORY_DIR>` in the background (it takes up to a few hours), then dispatch the architect in merge mode with its exit code.
-- **Slice review** (`SLICE_READY`): give `pocketpal-architect-reviewer` the slice's commit range.
+- **Slice review** (`SLICE_READY`): give `pocketpal-reviewer` (tracer-slice mode) the slice's commit range.
 - **`DESIGN_INVALIDATED`**: check the restart triggers under "Going back" in `docs/workflows/design-and-restarts.md` before dispatching the architect's amendment.
 - **Questions for the operator** (AGENTS.md, Asking the operator): send a stage's `NEEDS_INPUT` questions and its defaulted product calls to `operator` in one message, each with its default and the research behind it, or to the PM's address (the `PM:` line in your dispatch) when a PM dispatched this task. Contract-shaping calls wait for the reply; the rest proceed on their defaults. Log each answer in `decisions.md` as a ruling (in a PM run the PM logs it), then resume.
 - **Gates**: wait on `tools/pr-gates.sh <PR>` with a watcher that outlives your turn, not a poll-and-exit.

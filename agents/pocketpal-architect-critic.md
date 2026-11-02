@@ -1,6 +1,6 @@
 ---
 name: pocketpal-architect-critic
-description: "Critiques a PocketPal what.md before any code exists: proven premises, a reader for every new piece, no agent-made product calls, sound invariants. Reviews design docs; pocketpal-architect-reviewer reviews code."
+description: "Critiques a PocketPal what.md before any code exists: proven premises, a reader for every new piece, no agent-made product calls, sound invariants. Reviews design docs; pocketpal-reviewer reviews code."
 disallowedTools: Agent, Task
 mode: subagent
 permission:

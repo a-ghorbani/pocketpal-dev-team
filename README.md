@@ -31,7 +31,7 @@ Intent → WHAT → Implementation, then an independent review loop and a human 
          │
          │  (planner ⇄ plan-critic only when sequencing is a risk: multi-PR, migration, staged native)
          ▼
-  ┌──────────────┐  tracer slice ─► architect-reviewer ─► finish; flow-doc update.
+  ┌──────────────┐  tracer slice ─► reviewer (slice) ─► finish; flow-doc update.
   │ implementer  │  A false premise → DESIGN_INVALIDATED → architect
   └──────┬───────┘
          ▼
@@ -44,7 +44,7 @@ Intent → WHAT → Implementation, then an independent review loop and a human 
   │  reviewer    │
   └──────┬───────┘
          ▼  tools/pr-gates.sh (CI green, no internal references in public text)
-  ┌──────────────┐  /review-pr → role reviewers → refutation (real? worth it?) → verdict
+  ┌──────────────┐  /review-pr → lens reviewers → refutation (real? worth it?) → verdict
   │ independent  │  findings → fix brief → plan-critic → fix → re-verify
   │   review     │  (2 rounds total, then escalate)
   └──────┬───────┘

@@ -10,7 +10,7 @@ Open with review metadata:
 verdict: APPROVE | REQUEST_CHANGES | ESCALATE
 risk_level: low | medium | high
 review_complete: yes | no
-role_subreviews: COMPLETED | BLOCKED | NOT_REQUIRED
+lens_subreviews: COMPLETED | BLOCKED | NOT_REQUIRED
 ```
 
 Then a per-lens summary table:
@@ -26,14 +26,15 @@ Then a per-lens summary table:
 | Data / Migration      | PASS / ISSUES / N/A | n      |
 | Performance/Resources | PASS / ISSUES / N/A | n      |
 | UX / Accessibility    | PASS / ISSUES / N/A | n      |
-| Platform / Native     | PASS / ISSUES / N/A | n      |
+| Platform              | PASS / ISSUES / N/A | n      |
+| Local invariants      | PASS / ISSUES / N/A | n      |
 ```
 
 Then: findings ordered by severity (each with its `confidence` and `refutation` outcome), open questions, verification status, residual risks, decision summary.
 
 If nothing was found, say so and name the remaining verification gaps.
 
-The review is team-shareable: deduplicate role findings, normalize severity, and give each finding enough detail to fix without asking "where?". Every `ISSUES` lens row has at least one matching finding.
+The review is team-shareable: deduplicate reviewer findings, normalize severity, and give each finding enough detail to fix without asking "where?". Every `ISSUES` lens row has at least one matching finding.
 
 ## Headless Output
 
@@ -43,7 +44,7 @@ Deterministic, compact, no prose:
 verdict: APPROVE | REQUEST_CHANGES | ESCALATE
 risk_level: low | medium | high
 review_complete: yes | no
-role_subreviews: COMPLETED|BLOCKED|NOT_REQUIRED
+lens_subreviews: COMPLETED|BLOCKED|NOT_REQUIRED
 
 missing_context: [item, ...] # or []
 
@@ -63,7 +64,8 @@ lens_summary:
   data_migration: PASS|ISSUES|N/A
   performance: PASS|ISSUES|N/A
   ux_accessibility: PASS|ISSUES|N/A
-  platform_native: PASS|ISSUES|N/A
+  platform: PASS|ISSUES|N/A
+  local_invariants: PASS|ISSUES|N/A
 
 counts: { blocker: 0, concern: 0, suggestion: 0 }
 
@@ -71,7 +73,7 @@ findings:
 
 - id: R1
   severity: BLOCKER|CONCERN|SUGGESTION
-  lens: correctness|architecture|...|platform_native
+  lens: correctness|architecture|...|local_invariants
   confidence: high|med|low
   refutation: stands|withdrawn
   title: short title

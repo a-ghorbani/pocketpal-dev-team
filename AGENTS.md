@@ -43,7 +43,7 @@ One checkout on `main`, shared by parallel sessions (`worktrees/` belong to the 
 - **Architecture docs** (last writer wins silently): before editing `context/architecture/`, run `git status --porcelain -- context/architecture/`; a foreign modification means stop; commit your change at once, path-scoped (`git commit -- <file>`, never `add -A`).
 - **Story files.** `workflows/stories/*` and `workflows/reviews/*` exist only on the writing machine; inline their content in a PR, never cite the path.
 - **Follow-ups.** An agent can only arm a mechanism that outlives it; "I'll do X when the build finishes", then exiting, arms nothing.
-- **Review subagents.** The user authorises the delegated subreviews (architect, QA, security, performance, mobile, data, UX, local-invariants; code-reviewer when no role subreviews are needed) and review-map helpers (review-map-architect, flow-analyst, requirements-mapper) the review workflow requires.
+- **Review subagents.** The user authorises the delegated subreviews (`pocketpal-reviewer`, prompted per lens) wherever the review workflow requires them.
 
 ## Harness layout
 

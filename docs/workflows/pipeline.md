@@ -88,8 +88,8 @@ Dispatch the next role from the returning verdict at once, with no prompt or app
 | planner | `DRAFTED` | plan-critic |
 | plan-critic | `LGTM` | implementer |
 | plan-critic | `HAS_CONCERNS` / `HAS_BLOCKERS` | the producer revises: planner for HOW, the orchestrator for a fix brief (max 2 rounds) |
-| implementer | `SLICE_READY` | architect-reviewer, slice mode (Tracer slice) |
-| architect-reviewer (slice) | `LGTM` / `HAS_FINDINGS` | implementer, to finish (findings first) |
+| implementer | `SLICE_READY` | reviewer, slice mode (Tracer slice) |
+| reviewer (slice) | `LGTM` / `HAS_FINDINGS` | implementer, to finish (findings first) |
 | implementer | `COMPLETE` | tester |
 | tester | `COMPLETE` | pipeline-reviewer (redesign slices: design-parity-reviewer first) |
 | tester, post-PR mode | `COMPLETE` | the gates |
@@ -128,7 +128,7 @@ See [`evidence-and-decisions.md`](evidence-and-decisions.md).
 
 ## Tracer slice
 
-Standard and complex work: the implementer first commits the thinnest end-to-end slice of the WHAT's core path; `pocketpal-architect-reviewer` reviews the slice diff against the WHAT. A finding that contradicts a WHAT decision or premise comes back as `DESIGN_INVALIDATED`.
+Standard and complex work: the implementer first commits the thinnest end-to-end slice of the WHAT's core path; `pocketpal-reviewer` in slice mode (Architecture lens, plus any the orchestrator names) reviews the slice diff against the WHAT. A finding that contradicts a WHAT decision or premise comes back as `DESIGN_INVALIDATED`.
 
 ## Going back
 

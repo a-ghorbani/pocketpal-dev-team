@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: Review a PocketPal pull request, branch, or review worktree. Use for external PR reviews, requested code-review passes, risk classification, role-subreview orchestration, review-map creation, verification, and final review output.
+description: Review a PocketPal pull request, branch, or review worktree. Use for external PR reviews, requested code-review passes, risk classification, review-map creation, per-lens reviewer dispatch, verification, and final review output.
 argument-hint: "<pr-number | branch-ref | worktree-path>"
 ---
 
@@ -8,7 +8,7 @@ argument-hint: "<pr-number | branch-ref | worktree-path>"
 
 Orchestrate a code review (not implementation) of a PR number, branch ref, or worktree path: `/review-pr <pr-number | branch-ref | worktree-path>`.
 
-`docs/standards/code-review.md` owns lenses, roles, risk, severity, confidence, refutation, verdict, and output; read it before judging. Role reviewers run when role subreviews are required, `pocketpal-code-reviewer` (all lenses) otherwise; the lead synthesizes either way. `repos/pocketpal-ai/` is read-only: use worktrees.
+`docs/standards/code-review.md` owns risk, severity, confidence, refutation, verdict, and output; `docs/standards/review-lenses.md` the lenses. Read both before judging. The lead maps, dispatches `pocketpal-reviewer` per lens set, and synthesizes. `repos/pocketpal-ai/` is read-only: use worktrees.
 
 ## Inputs To Resolve
 
@@ -50,55 +50,60 @@ Read only what applies:
 
 - `context/pocketpal-overview.md` (product, domain), `docs/standards/architecture.md` (boundaries, runtime surfaces, data flow), `context/patterns.md` (implementation and test conventions).
 - `docs/workflows/visual-capture.md` when UI screenshots or visual evidence matter.
-- The story's `evidence.md`, `decisions.md`, and `what.md` for pipeline changes; pass their paths to every role reviewer (use: standard's Canonical Inputs).
-- The touched flow docs (`context/architecture/<flow>.md`: the story's `ARCHITECTURE_DOCS`, else the README index rows matching the changed files), passed to `pocketpal-architect-reviewer` or `pocketpal-code-reviewer`.
-- Lessons for the surfaces the diff touches (`tools/context search <terms>`), passed to the role reviewers they concern.
+- The story's `evidence.md`, `decisions.md`, and `what.md` for pipeline changes; pass their paths to every reviewer (use: standard's Canonical Inputs).
+- The touched flow docs (`context/architecture/<flow>.md`: the story's `ARCHITECTURE_DOCS`, else the README index rows matching the changed files), passed to the reviewer holding the Architecture lens.
+- Lessons for the surfaces the diff touches (`tools/context search <terms>`), passed to the reviewers whose lenses they concern.
 - Earlier rounds' `final.md` for this target: report a finding already fixed once and now back as a design problem, not another fix.
 
 ## Review Artifact Folder
 
 Write artifacts to `workflows/reviews/<TARGET_ID>/round-<N>/`, where `N` is the highest existing `round-<k>` for this TARGET_ID plus 1, unless explicitly continuing an in-progress round. The max-2-rounds cap and escalation belong to the caller (the `/start-task` loop); a standalone run does one round, states its number, and enforces no cap.
 
-Required files, complete high-risk review: `review-map.md`, `architect.md`, `qa.md`, `security.md`, `performance.md`, `mobile.md`, `data.md`, `ux.md`, `local-invariants.md`, `verification.md`, `final.md`. Any other review: `review-map.md`, `code-reviewer.md`, `verification.md`, `final.md`.
+Required files: `review-map.md`, one `reviewer-<lens-set>.md` per reviewer (e.g. `reviewer-all.md`, `reviewer-security.md`, `reviewer-correctness-tests.md`), `verification.md`, `final.md`.
 
-A missing required role artifact means `review_complete: no` and `role_subreviews: BLOCKED`.
+A missing required reviewer artifact means `review_complete: no` and `lens_subreviews: BLOCKED`.
 
 ## Review Map
 
-Write `review-map.md` before role review; it orients reviewers, it is not the verdict. Include: target metadata (target, base ref, reviewed head SHA `headRefOid`, worktree path, story/PR links); changed file groups; runtime and data-flow notes; requirements and acceptance-criteria coverage; risk classification; required role reviewers; suggested file focus per role; verification required by policy.
+The lead writes `review-map.md` before dispatch; it orients, it is no verdict. Include:
 
-For large or ambiguous reviews, run the map helpers (`pocketpal-review-map-architect`, `pocketpal-flow-analyst`, `pocketpal-requirements-mapper`) first and summarize their output into the map; it is never a final finding.
+- target metadata: target, base ref, reviewed head SHA (`headRefOid`), worktree path, story/PR links;
+- change areas: changed files grouped by area, key files, what each does, cross-cutting concerns;
+- runtime and data-flow notes: upstream callers, downstream effects; state, data, network, persistence, native boundaries; async, streaming, lifecycle, retry paths; hidden coupling between changed files; touched flow docs; a diagram only when it clarifies; each claim confirmed in code;
+- requirements → files: each story/PR/issue/acceptance-criteria requirement, tied to its text, mapped to files, verification, and lens; missing or ambiguous ones are review risks;
+- risk classification, lenses that apply (N/A ones with a reason), the reviewer split, file focus per reviewer, verification required by policy.
 
-## Risk Classification
+Keep findings out of the map unless an obvious blocker changes review planning.
 
-High risk per the standard's Working Method (a request for a role-based review counts too). Then run every role agent: `pocketpal-architect-reviewer`, `pocketpal-qa-reviewer`, `pocketpal-security-reviewer`, `pocketpal-performance-reviewer`, `pocketpal-mobile-reviewer`, `pocketpal-data-reviewer`, `pocketpal-ux-reviewer`, `pocketpal-local-invariants-reviewer`.
+## Risk Classification and Dispatch
 
-Otherwise `role_subreviews: NOT_REQUIRED`: dispatch `pocketpal-code-reviewer` with the delegation shape below (output artifact `code-reviewer.md`) to apply every lens.
+High risk per the standard's Working Method (a request for a deep or lens-based review counts too).
+
+- **Low risk:** `lens_subreviews: NOT_REQUIRED`; one `pocketpal-reviewer` with `LENSES: all` (artifact `reviewer-all.md`).
+- **High risk:** parallel `pocketpal-reviewer`s with one or a few lenses each, covering every lens that applies exactly once. Each high-risk surface in the map gets its lens a reviewer of its own (trust boundary → Security, schema/persistence → Data, perf-sensitive path → Performance, platform UI → Platform); the other applicable lenses are grouped by shared areas (e.g. Correctness + Tests + Local invariants).
 
 ## Subreview Gate
 
-Mandatory for high-risk reviews: run read-only role subreviews before the final review. If a required role reviewer cannot run, produce no complete final review: mark `review_complete: no` and `role_subreviews: BLOCKED`.
+Mandatory for high-risk reviews: run the read-only lens subreviews before the final review. If a required reviewer cannot run, produce no complete final review: mark `review_complete: no` and `lens_subreviews: BLOCKED`.
 
 Delegation shape:
 
 ```text
-Use <role-agent-name>.
+Use pocketpal-reviewer.
+LENSES: <lens list | all>
 Target: <target>
 Worktree: <review worktree>
 Base ref: <base SHA/ref>
 Head ref: <head SHA/ref>
 Review map: workflows/reviews/<TARGET_ID>/round-<N>/review-map.md
-Output artifact: workflows/reviews/<TARGET_ID>/round-<N>/<role>.md
+Output artifact: workflows/reviews/<TARGET_ID>/round-<N>/reviewer-<lens-set>.md
 
-Return only concrete findings with severity, lens, confidence, file:line, impact, evidence, and fix, or NOTHING_FOUND.
-Write the result to the output artifact when file writes are available.
-Do not modify source files or review inputs.
 ```
 
-Role reviewers may write their artifacts; if one returns output without writing it, write that output verbatim to the artifact path before synthesis. The final review is built from the role artifacts, each in this shape:
+If a reviewer returns output without writing it, write it verbatim to the artifact path before synthesis. The final review is built from the reviewer artifacts, each in this shape:
 
 ```markdown
-# <Role> Review: <TARGET_ID> Round <N>
+# Review (<lenses>): <TARGET_ID> Round <N>
 
 status: FINDINGS | NOTHING_FOUND
 
@@ -107,7 +112,7 @@ status: FINDINGS | NOTHING_FOUND
 ### <ID>: <Title>
 
 severity: BLOCKER | CONCERN | SUGGESTION
-lens: Correctness | Architecture | Maintainability (incl. comment load) | Tests | Security | Data / Migration | Performance/Resources | UX / Accessibility | Platform / Native
+lens: Correctness | Architecture | Maintainability (incl. comment load) | Tests | Security | Data / Migration | Performance/Resources | UX / Accessibility | Platform | Local invariants
 confidence: high | med | low
 path: relative/path.ts
 line: 123
@@ -122,18 +127,18 @@ Run feasible verification from the app worktree and write the status to `verific
 
 ## Final Synthesis
 
-Read all role artifacts (or `code-reviewer.md`) and `verification.md`, then write `final.md` in the human-facing shape (`docs/standards/review-output.md`): the team-facing, local synthesis record (Publish posts the public form). Before writing:
+Read all reviewer artifacts and `verification.md`, then write `final.md` in the human-facing shape (`docs/standards/review-output.md`): the team-facing, local synthesis record (Publish posts the public form). Before writing:
 
-- Confirm every required role artifact exists, or mark the review incomplete.
+- Confirm every required reviewer artifact exists, or mark the review incomplete.
 - Merge duplicate findings.
 - Normalize each finding's severity and confidence against the standard.
 - Refute each BLOCKER/CONCERN (standard's Adversarial verification) as a reviewer independent of the one that raised it; record `refutation: stands` or drop/downgrade with `refutation: withdrawn — <reason>`.
 - Apply the mechanical verification gate: no `APPROVE` / `review_complete: yes` over `NOT_RUN` checks.
-- Include short synthesis notes only when they matter, such as unavailable reviewers, merged duplicates, missing role artifacts, or verification gaps.
+- Include short synthesis notes only when they matter, such as unavailable reviewers, merged duplicates, missing reviewer artifacts, or verification gaps.
 
 ## Final Response
 
-Respond from `final.md`, team-shareable: `role_subreviews: COMPLETED | BLOCKED | NOT_REQUIRED` (`COMPLETED` for a complete high-risk review), `review_complete: no` when required subreviews did not complete, findings grouped by severity, verification status, residual risks, and open questions.
+Respond from `final.md`, team-shareable: `lens_subreviews: COMPLETED | BLOCKED | NOT_REQUIRED` (`COMPLETED` for a complete high-risk review), `review_complete: no` when required subreviews did not complete, findings grouped by severity, verification status, residual risks, and open questions.
 
 ## Publish
 

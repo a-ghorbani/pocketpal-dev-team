@@ -1,1 +1,0 @@
-../../agents/pocketpal-security-reviewer.md

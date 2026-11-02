@@ -22,34 +22,21 @@ Load what is available; state missing critical context.
 7. Prefer the simpler fix; don't grow scope: the smallest correct change, reusing existing state or paths. Hardening, defence in depth, or an improvement costing more than the risk it removes is a SUGGESTION; a real, reachable defect (wrong behaviour, data loss, reachable security sink) keeps its severity whatever the fix costs.
 8. Code with no reader, no trace to the request, or guarding an unreached path is an Architecture finding; removing it is a fix.
 
-## Role Reviewers
+## Reviewer and lenses
 
-- High-risk roles: `architect`, `qa`, `security`, `performance`, `mobile`, `data`, `ux`, `local-invariants` (small contract breaks on changed lines).
-- Review-map helpers: `pocketpal-review-map-architect`, `pocketpal-flow-analyst`, `pocketpal-requirements-mapper`. Orientation notes for `review-map.md`, not findings.
-- When no role subreviews are required, `pocketpal-code-reviewer` applies every lens.
-
-Each role reviewer returns only concrete findings (severity, lens, confidence, file:line, impact, evidence, fix) or `NOTHING_FOUND`.
+One role, `pocketpal-reviewer`, prompted with its lens(es); the lenses (Correctness, Architecture and maintainability, Tests, Security and privacy, Performance and resources, Platform, Data and migration, UX and accessibility, Local invariants) and their checks live in `docs/standards/review-lenses.md`. The lead (`/review-pr`) builds the review map itself. Each reviewer returns only concrete findings (severity, lens, confidence, file:line, impact, evidence, fix) or `NOTHING_FOUND`.
 
 ## Working Method
 
 Each lens's concerns are a floor; surface anything else a PocketPal reviewer would notice. Group findings by lens; N/A only when clearly irrelevant.
 
-High-risk (read-only subreviews by every high-risk role before a complete final review) when any holds: changed files > 10; native dependency or native code changes; persistence, migration, or schema changes; security/trust-boundary changes; model/tool execution changes; multi-surface changes; the user asks for a robust/deep review.
+High-risk (read-only parallel subreviews covering every lens that applies before a complete final review) when any holds: changed files > 10; native dependency or native code changes; persistence, migration, or schema changes; security/trust-boundary changes; model/tool execution changes; multi-surface changes; the user asks for a robust/deep review. Otherwise one reviewer applies every lens.
 
 If they did not complete, the final review is marked incomplete: it may summarize issues, never claim a complete approval or request-changes.
 
-## Required Lenses
+## Native verification
 
-- **Correctness** _(QA)_: broken behavior, bad assumptions, nulls, state mistakes, async races, retries, cancellation, stale state, error paths.
-- **Architecture and boundaries** _(Architect)_: coupling, layering, public contracts, hidden dependencies, over-engineering.
-- **Maintainability and readability** _(Architect)_: duplication, naming, fragile logic, magic constants, hard-to-test design.
-- **Comment load** _(Architect; reported under Maintainability)_: a recurring defect here; review it unasked. Classify each questionable comment by the Comments test and **name the case** ("case 2: does three things", never just "too many comments"). Volume signals a clarity or design problem; fix the code. Flag task narrative (Comments).
-- **Tests and verification** _(QA)_: missing coverage, weak assertions, contract-hiding mocks, skipped tests, manual validation gaps. **Coverage floor: 60%** (statements, branches, functions, lines) on the changed surface; below it is a `BLOCKER` unless explicitly waived.
-- **Security and privacy** _(Security)_: **on-device app, not a server**: mobile threat model. Trust boundaries: (a) model output reaching render/execution surfaces (markdown/HTML/WebView/JS, tool-call/JSON parsing); (b) external content (downloaded GGUF models, web-search results, deep links / App Intents / Shortcuts params, PalsHub rows); (c) data at rest and in logs (chat history, API keys, server/auth tokens, crash reports); (d) the native bridge and capability allowlist (Pals-as-apps WebView); (e) debug/E2E hooks reachable in production. A trust-boundary finding names an untrusted **source**, the **sink** it reaches unsanitized, and shows it **reachable on `main`** with that input (call path, `file:line` per hop). A guard on a path no attacker input reaches is defence in depth: at most a SUGGESTION.
-- **Data and migration safety** _(Data, Security)_: schemas, persisted state, cache invalidation, backward compatibility, rollback.
-- **Performance and resources** _(Perf, Mobile)_: hot paths, unbounded work, repeated I/O, memory, storage, startup, battery. A plausible rise in RAM/heap, model load time, bundle size, startup, or battery use is at least a `CONCERN`.
-- **UX and accessibility** _(UX/A11y)_: visible flows, honest states, error messages, accessibility, copy consistency, lost affordances.
-- **Platform and native verification** _(Mobile)_: `NATIVE_CHANGES=YES` requires `pod install`, an iOS build, and an Android build before approval. Check cross-OS/chip compatibility: iOS floor, Android API min, arm64 vs simulator, llama.rn backend variants, device vs emulator.
+Not a lens: checked in verification (the pipeline-reviewer runs it on pipeline work). `NATIVE_CHANGES=YES` requires `pod install`, an iOS build, and an Android build before approval; a native diff without them is a process finding (e.g. a lockfile changed on one platform, the other build unverified). Check native-dependency autolinking, cross-OS/chip compatibility (arm64 vs simulator, llama.rn backend variants, device vs emulator), App Store/Play Store constraints, and that no native artifact comes from the read-only submodule.
 
 ## Comments
 
@@ -78,7 +65,7 @@ Every finding carries `confidence`: `high` (proven by cited code, contract, or r
 
 ## Adversarial verification
 
-Before a `BLOCKER`/`CONCERN` enters the final review, someone other than its role reviewer (the lead synthesizer, or a skeptic subreview for the highest stakes) tries to **refute** it:
+Before a `BLOCKER`/`CONCERN` enters the final review, someone other than the reviewer that raised it (the lead synthesizer, or a skeptic subreview for the highest stakes) tries to **refute** it:
 
 1. **Is it real?** Argue from code and contracts that it is not: wrong, handled elsewhere, unreachable on `main`, masked by an invariant, or already decided in `decisions.md` / WHAT §8.
 2. **Is the fix worth it?** Hardening and improvements only: weigh the fix's cost (new states, guards, tests, surfaces touched) against the risk removed; bigger than its risk makes it a SUGGESTION.
