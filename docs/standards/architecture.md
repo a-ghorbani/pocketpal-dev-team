@@ -205,7 +205,7 @@ src/locales/
 2. **Edit only `en.json`**: other languages are synced from Weblate, do not hand-edit
 3. **Semantic keys**: `section.descriptiveKey`
 4. **Placeholders**: use `{{variable}}` syntax and the `t()` helper instead of manual `.replace()`
-5. **Adding a language**: update `languageRegistry`, `requireLanguageData()`, the getter on the `l10n` object, the `dayjs` locale require in `initLocale`, and the related test/E2E lists (see memory: l10n integration)
+5. **Adding a language**: update `languageRegistry`, `requireLanguageData()`, the getter on the `l10n` object, the `dayjs` locale require in `initLocale`, and the related test/E2E lists (`tools/context search l10n`)
 
 ```typescript
 // Usage in component

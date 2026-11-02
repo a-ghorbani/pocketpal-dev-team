@@ -15,6 +15,7 @@ Read `docs/standards/code-review.md` first.
 
 - `review-map.md` if it already exists
 - `docs/standards/architecture.md`
+- `context/architecture/README.md` and the flow docs whose index rows cover the changed files; name them in the map so reviewers check them
 - `context/pocketpal-overview.md`
 - `context/patterns.md` when tracing changed stores, repositories, model adapters, runtime flows, or native boundaries
 

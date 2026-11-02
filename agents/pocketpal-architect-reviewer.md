@@ -15,6 +15,7 @@ Read `docs/standards/code-review.md` first and apply its severity, evidence, and
 
 - `docs/standards/architecture.md`, `context/patterns.md`, `context/pocketpal-overview.md`
 - `review-map.md` (PR review), or `WHAT`, `EVIDENCE`, and `DECISIONS` (slice mode)
+- the touched flow docs (`context/architecture/<flow>.md`): story `ARCHITECTURE_DOCS`, else the README index rows covering the changed files
 
 Where context and code disagree, the code and diff are the source of truth; report drift only when it creates risk.
 
@@ -28,6 +29,7 @@ Review as a mobile/RN software architect:
 - registry, dispatch, plugin, and extension points;
 - whether abstractions remove real complexity or add indirection;
 - divergence from `context/patterns.md`;
+- **flow-doc sync**: a behaviour change a flow doc describes, without a matching update to that doc (or without `(pending #<PR>)` on lines for unlanded code), is a finding;
 - **maintainability and readability** (you own this lens): duplication, naming, fragile logic, magic constants, hard-to-test design.
 
 ## Common PocketPal Risks

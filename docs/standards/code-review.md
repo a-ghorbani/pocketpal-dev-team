@@ -25,6 +25,7 @@ Load whatever is available:
 - the change set (PR diff, branch diff, worktree diff)
 - the story, issue, or acceptance criteria
 - the story's `evidence.md` (what was proven, with receipts), `decisions.md`, and WHAT §8 (what was decided). Re-raise a decided item only with new evidence that it is wrong, and name that evidence.
+- the touched flow docs: `context/architecture/<flow>.md` named in the story's `ARCHITECTURE_DOCS`, else the flows whose README index rows cover the changed files. A behaviour change a flow doc describes, with no matching update to that doc in the same round (or a line for unlanded code without `(pending #<PR>)`), is an Architecture finding.
 - `context/patterns.md`
 - project-local standards referenced by the change
 - existing CI or implementation verification output
@@ -59,9 +60,11 @@ Required high-risk role reviewers:
 
 Review-map helper roles:
 
-- `map-architect`
-- `flow-analyst`
-- `requirements-mapper`
+- `pocketpal-review-map-architect`
+- `pocketpal-flow-analyst`
+- `pocketpal-requirements-mapper`
+
+When no role subreviews are required, `pocketpal-code-reviewer` applies every lens.
 
 Each role reviewer returns only concrete findings or `NOTHING_FOUND`. Map helper roles produce orientation notes for `review-map.md`, not final review findings.
 
@@ -81,7 +84,7 @@ For large or high-risk reviews, read-only role subreviews are required before a 
 - multi-surface changes
 - user explicitly asks for a robust/deep review
 
-Use the required high-risk role reviewers listed above. Each role returns only concrete findings with severity, file:line, impact, evidence, and fix, or `NOTHING_FOUND`.
+Use the required high-risk role reviewers listed above. Each role returns only concrete findings with severity, lens, confidence, file:line, impact, evidence, and fix, or `NOTHING_FOUND`.
 
 If high-risk role subreviews were required but not completed, the final review must be marked incomplete. It may summarize found issues, but it must not claim a complete approval/request-changes review.
 
@@ -92,7 +95,7 @@ The `local-invariants` role reviews changed lines for small contract breaks defi
 - **Correctness** _(QA)_: broken behavior, bad assumptions, null handling, state mistakes, async races, retries, cancellation, stale state, error paths.
 - **Architecture and boundaries** _(Architect)_: coupling, layering, public contracts, hidden dependencies, over-engineering.
 - **Maintainability and readability** _(Architect)_: duplication, naming, fragile logic, magic constants, hard-to-test design. (Owned by the architect role in high-risk reviews; the lead applies it against the diff directly when no architect subreview ran.)
-- **Comment load** _(Architect)_: over-commenting is a recurring defect in this repo, so review it explicitly rather than waiting to be asked. Classify every questionable comment with the four-case test under "Comments" below. A finding **must name which case**: "too many comments" is not actionable, "this is case 2 — the comment exists because the function does three things" is. Volume itself is evidence: a diff that needs heavy commentary is reporting a clarity or design problem, and the remedy is the code, not better prose. Also flag task narrative in source (naming the bug just fixed, round numbers, plan-step restatements) — that rots into archaeology.
+- **Comment load** _(Architect; part of Maintainability, reported under that lens)_: over-commenting is a recurring defect in this repo, so review it explicitly rather than waiting to be asked. Classify every questionable comment with the four-case test under "Comments" below. A finding **must name which case**: "too many comments" is not actionable, "this is case 2 — the comment exists because the function does three things" is. Volume itself is evidence: a diff that needs heavy commentary is reporting a clarity or design problem, and the remedy is the code, not better prose. Also flag task narrative in source (naming the bug just fixed, round numbers, plan-step restatements) — that rots into archaeology.
 - **Tests and verification** _(QA)_: missing coverage, weak assertions, mocks that hide contracts, skipped tests, manual validation gaps. **Coverage floor: 60%** (statements, branches, functions, lines) for the changed surface; below it is a `BLOCKER` unless explicitly waived.
 - **Security and privacy** _(Security)_: PocketPal is an **on-device app, not a server** — review against the mobile threat model, not a server perimeter. The real trust boundaries are: (a) model-generated content reaching render/execution surfaces (markdown/HTML/WebView/JS, tool-call/JSON parsing); (b) external content entering the app (downloaded GGUF models, web-search/internet results, deep links / App Intents / Shortcuts params, PalsHub rows); (c) on-device data at rest and in logs (chat history, API keys, server/auth tokens, crash reports); (d) the native bridge and capability allowlist (Pals-as-apps WebView bridge); (e) debug/E2E hooks reachable in production builds. A security finding on a trust-boundary diff must name an untrusted **source** and the **sink** it reaches unsanitized, and show the sink is **reachable on `main`** with that input (the call path, `file:line` per hop). A guard on a path no attacker-controlled input reaches is defence in depth: at most a SUGGESTION, whatever the theoretical impact.
 - **Data and migration safety** _(Data, Security)_: schema changes, persisted state, cache invalidation, backward compatibility, rollback.
@@ -131,7 +134,7 @@ Nothing about the task belongs in source: no "we hit X", no round numbers, no st
 
 - `BLOCKER`: incorrect behavior, broken contract, exploitable security issue, unsafe data change, missing mandatory verification, missing critical test.
 - `CONCERN`: real issue that should not merge yet but is below blocker.
-- `SUGGESTION`: legitimate improvement, deferrable to the PR's follow-ups; never triggers a fix round.
+- `SUGGESTION`: legitimate improvement, deferrable to the PR's follow-ups (the `Follow-ups` list of the published review); never triggers a fix round.
 
 `NOTHING_FOUND` is a valid outcome. Do not invent issues.
 
