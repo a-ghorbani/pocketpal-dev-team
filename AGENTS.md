@@ -37,6 +37,7 @@ These apply to work that becomes an app PR.
 - **Never review your own work:** implementation and independent review stay separate roles. The orchestrator never prompts between stages; its stops are in `pipeline.md`.
 - **Story gate.** Every task has `intent-brief.md`, `evidence.md`, and `decisions.md`; standard and complex work add `what.md`; `PLAN=YES` adds `how.md`.
 - **Facts are proven, product calls are the operator's.** A design premise is read from code or proven by a spike. User-visible behaviour the request leaves open, or accepting a regression, is logged as a product call with a recommended default, never decided by an agent.
+- **Asking the operator.** A question only the human can answer goes to `agistry.sh send operator` (it reaches them on Slack), never only into chat output. Send one message with every open question, each with its recommended default; the reply comes back to your `task:role`. Log each answer in `decisions.md` as a ruling. Only top-level sessions send (the `/start-task` orchestrator, the PM); stage roles reply `NEEDS_INPUT`.
 - **A wrong design goes back.** A stage that finds a premise false or a decision wrong replies `DESIGN_INVALIDATED` instead of patching around it (`pipeline.md`, Going back).
 - **Architecture docs** (`context/architecture/`, one per flow; lifecycle in its README):
   - a change to behaviour a flow doc describes updates that doc in the same round. that update is a path-scoped commit in this repo, not part of the app PR;

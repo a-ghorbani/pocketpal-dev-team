@@ -115,7 +115,7 @@ Stop only for:
 - failed mandatory verification
 - `BLOCKER` or `CONCERN` findings persisting after review round 2
 
-When a PM session runs the queue, these stops go to the PM first (`skills/pm`).
+The orchestrator sends a stop's questions to `operator` over agistry (AGENTS.md, Asking the operator); when a PM session runs the queue, they go to the PM first (`skills/pm`).
 
 ## Evidence plan
 

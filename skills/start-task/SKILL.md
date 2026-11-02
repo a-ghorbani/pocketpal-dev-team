@@ -39,12 +39,14 @@ Repository: ./repos/pocketpal-ai
 
 ## 3. Run the pipeline
 
+Once intake returns `TASK_ID`, join agistry as `<TASK_ID>:orchestrator` (`skills/agistry`), so the operator's replies reach this task even if the session is replaced.
+
 Route on each stage's `VERDICT` by the routing table in `pipeline.md`. Beyond the table:
 
 - **Design arena** (`DESIGN_EXPLORATION=YES`): before the architect's first draft, write the handoff block to `<STORY_DIR>/handoff.txt`, run `tools/design-arena.sh run <STORY_DIR>` in the background (it takes up to a few hours), then dispatch the architect in merge mode with its exit code.
 - **Slice review** (`SLICE_READY`): give `pocketpal-architect-reviewer` the slice's commit range.
 - **`DESIGN_INVALIDATED`**: check the restart triggers under "Going back" before dispatching the architect's amendment.
-- **Product calls**: relay every defaulted product call a stage reports in your status, so the operator (or the PM) can override it before the code depends on it.
+- **Questions for the operator** (AGENTS.md, Asking the operator): send a stage's `NEEDS_INPUT` questions and its defaulted product calls to `operator` in one message, each with its default and the research behind it, or to the PM when a PM dispatched this task. Contract-shaping calls wait for the reply; the rest proceed on their defaults. Log each answer in `decisions.md` as a ruling, then resume.
 - **Gates**: wait on `tools/pr-gates.sh <PR>` with a watcher that outlives your turn, not a poll-and-exit.
 - **`REQUEST_CHANGES`**: follow "Independent review loop" in `pipeline.md`. You write the fix brief into the PR-fix story intake created, and you are the only writer of review dismissals in `decisions.md`.
 
