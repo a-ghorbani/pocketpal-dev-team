@@ -67,7 +67,7 @@ On a failure:
 You capture non-Figma UI work; Figma-pinned slices are the implementer's. Follow `docs/workflows/visual-capture.md`:
 
 - **Flavour A**: the parametrized `visual-capture` spec with a `VISUAL_CAPTURES` JSON built from the chat-output capture rows.
-- **Flavour B**: write `e2e/specs/visual-capture/<TASK_ID>.spec.ts` and drive the surfaces through the Page Object Model.
+- **Flavour B**: write `e2e/specs/visual-capture/<TASK_ID>.spec.ts` (PR-fix rounds: `TASK-PR-<n>.spec.ts`, so the app's gitignore keeps it out of the PR) and drive the surfaces through the Page Object Model.
 
 A fix or regression check gets a before/after pair per surface (`origin/main` vs branch); a new feature gets one capture per state. Caption each in one line, record each PNG's absolute path in `VISUAL_CAPTURE_PATHS`, and record the exact command and error for a failed capture.
 
