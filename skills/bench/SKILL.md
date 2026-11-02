@@ -28,14 +28,14 @@ Single source of truth: `BENCHMARK_FULL_MODELS` in [`e2e/fixtures/benchmark-mode
 | Tier | Models × quants × backends | Cells | Runtime | When |
 | --- | --- | --: | --- | --- |
 | `smoke` (default) | 3 × 3 × 2 | 18 | ~10–15 min | Regression gate; PR + every llama.rn nightly |
-| `focused` | 6 × 6 × 2 | ~60 | ~30–45 min | Investigation when smoke flags something |
+| `focused` | 6 × 6 × 2 | ~60 | ~30–45 min | llama.rn bumps and inference changes; investigating a smoke flag |
 | `full` | 11 × 8 × 2 | ~165 | ~3 hr/device | Recalibrating defaults, adding device class |
 
 Pick based on the trigger:
 
-- PR touching inference / native code → `smoke`
+- llama.rn bump, backend selection, or inference code → `smoke` and `focused`; `full` only to refresh the baseline
+- Any other native change (model loading, native dependencies, build flags) → `smoke`
 - Smoke regression on one cell → `focused` with `BENCH_MODELS=` narrowed to that family
-- llama.rn upgrade → `smoke` first; `full` only if you intend to refresh the baseline
 - New device → `full` once to seed a baseline, then `smoke` thereafter
 
 ## Infrastructure

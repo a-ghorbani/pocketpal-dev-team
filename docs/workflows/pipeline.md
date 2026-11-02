@@ -115,8 +115,9 @@ When a PM session runs the queue, these stops go to the PM first (`skills/pm`).
 | The change touches | It always needs |
 | --- | --- |
 | a surface an existing e2e spec drives (grep `e2e/specs` for the changed screens, stores, services) | those specs, on the PR's CI APK (`/run-pr-e2e`) |
-| llama.rn, whisper.rn, native inference, model loading, backends | `bench` on the full matrix and `memory-profile`; a device run with a stateful (hybrid / recurrent) and a multimodal model as well as a transformer |
-| native dependencies, Gradle, Podfile, ProGuard / dependency trims | iOS and Android release builds; a real-store `.e2e` smoke build plus a negative control |
+| a llama.rn bump, backend selection, inference code | `bench` smoke and focused, compared with the baseline and the previous llama.rn PR; `memory-profile`; a device run with a stateful (hybrid / recurrent) and a multimodal model as well as a transformer |
+| model loading | `bench` smoke and `memory-profile` |
+| native dependencies, Gradle, Podfile, podspecs, ProGuard / dependency trims | iOS and Android release builds; `bench` smoke; a real-store `.e2e` smoke build plus a negative control |
 | purchases, store, entitlements, Plus | `iap-plus` and a real store sandbox run, not only FakeStore |
 | remote-server wire format | a strict OpenAI-compatible server as well as llama-server; read what the server applied (`/slots`), not the status code |
 | downloads, network resilience | the slow-network proxy (stall, resume, terminal failure) and a permission decline |
