@@ -27,7 +27,7 @@ Two consequences hold that shut:
 - `scripts/build-fill-plan.mjs` — `--fill`: validate subagent translations → fill plan (overwrites, state=10).
 - `scripts/auto-review.sh` — `--auto` pre-review: discover PR, fetch, machine checks, per-lang diff split.
 - `scripts/decide.mjs` — `--auto` merge-gate decision engine → `decision.json` + `plan.json`.
-- `scripts/apply-decision.sh` — `--auto` act path: merge-or-not + Weblate writes + PR comment (dry-run by default).
+- `scripts/apply-decision.sh` — `--auto` act path: Weblate writes plus a recorded MERGE/HOLD recommendation; never merges or comments on GitHub (dry-run by default).
 - `repos/pocketpal-ai/scripts/validate-l10n.js` — the repo's own (registry-aware) validator.
 - Memory: locale registry lives in `repos/pocketpal-ai/src/locales/index.ts`.
 
