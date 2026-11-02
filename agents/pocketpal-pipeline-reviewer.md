@@ -34,7 +34,7 @@ Beyond the standard's lenses:
   yarn android --variant=release
   ```
 
-- **Visual evidence:** re-derive from the diff; any change to a screen, component, style, theme, or rendering path under `src/` requires captures: tester captures (Flavours A and B) from `VISUAL_CAPTURE_PATHS` or the test report; Figma slices (Flavour C) committed under `<STORY_DIR>/visual-diff/` (`docs/workflows/visual-capture.md`).
+- **Visual evidence:** re-derive from the diff; any change to a screen, component, style, theme, or rendering path under `src/` requires captures: tester captures (Flavours A and B) from `VISUAL_CAPTURE_PATHS` or the test report; Figma slices (Flavour C) saved under `<STORY_DIR>/visual-diff/` (`docs/workflows/visual-capture.md`).
 - **Test patterns:** no inline store mocks, no direct observable mutation.
 - **Mechanical gates:** from the worktree, run `../../tools/pr-gates.sh --branch` and clear its `hygiene` failures before opening the PR.
 

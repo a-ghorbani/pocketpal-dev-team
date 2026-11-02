@@ -241,15 +241,13 @@ WIRED=$(node skills/review-l10n/scripts/wired-langs.mjs --ref="${BASE_OID}")
 node skills/review-l10n/scripts/coverage.mjs "${SCRATCH}/head" --wired="${WIRED}" > "${SCRATCH}/coverage.txt"
 node skills/review-l10n/scripts/find-placeholder-issues.mjs "${SCRATCH}/head" > "${SCRATCH}/placeholders.txt"
 
-# Optional: run repo's own validator
-node repos/pocketpal-ai/scripts/validate-l10n.js  # registry-aware (wired langs only)
-
-# Bypass the registry filter to also catch issues in unwired files
-( cd "${SCRATCH}/head"
-  cp -r . ../runner-src && mkdir -p ../runner/scripts && cp ../../../repos/pocketpal-ai/scripts/validate-l10n.js ../runner/scripts/
-  cd .. && mv runner-src runner/src/locales 2>/dev/null || true
-  # (or just run coverage.mjs which surfaces the same info)
-)
+# Optional: run the repo's validator against the PR head locales (no index.ts there,
+# so it auto-discovers every locale, wired or not). ROOT = dev-team repo root.
+ROOT="$PWD"
+mkdir -p "${SCRATCH}/runner/scripts" "${SCRATCH}/runner/src/locales"
+cp -r "$ROOT/repos/pocketpal-ai/scripts/validate-l10n.js" "$ROOT/repos/pocketpal-ai/scripts/lib" "${SCRATCH}/runner/scripts/"
+cp "${SCRATCH}/head/"*.json "${SCRATCH}/runner/src/locales/"
+node "${SCRATCH}/runner/scripts/validate-l10n.js"
 ```
 
 The skill should always run `coverage.mjs` and `find-placeholder-issues.mjs`; running the repo validator is optional and informational.

@@ -1,6 +1,6 @@
 ---
 name: figma-implement
-description: Implement a Figma frame in PocketPal RN with 1:1 visual parity. Drives the implementer through metadata-first inspection, design-context-driven translation, vector-first assets, and committed visual-diff captures. Used for any redesign-rollout slice (FOU-112 phases) or any task that pins a canonical Figma file + node id.
+description: Implement a Figma frame in PocketPal RN with 1:1 visual parity. Drives the implementer through metadata-first inspection, design-context-driven translation, vector-first assets, and visual-diff captures. Used for any redesign-rollout slice (FOU-112 phases) or any task that pins a canonical Figma file + node id.
 user-invocable: true
 argument-hint: "[figma-url-or-node-id]"
 ---
@@ -130,35 +130,34 @@ This table is the single mechanical check that catches the class of bug where th
 
 ## Step 4 — Visual-diff captures (MANDATORY gate)
 
-Before the PR is ready for review, every in-scope screen must have a committed side-by-side under:
+Before the PR is ready for review, every in-scope screen must have a side-by-side saved under the story dir (local story space, not the app branch):
 
 ```
-workflows/stories/<TASK-ID>/visual-diff/<screen>-figma.png
-workflows/stories/<TASK-ID>/visual-diff/<screen>-sim.png
+<STORY_DIR>/visual-diff/<screen>-figma.png
+<STORY_DIR>/visual-diff/<screen>-sim.png
 ```
 
 How:
 
 1. **Figma render**: call `get_screenshot(fileKey, nodeId, maxDimension=2622)` for each screen. Download the PNG. The 2622 cap matches 3× of a 393×852 design frame on an iPhone-17-Pro-class device.
-2. **Sim screenshot**: build and run the app on a sim whose logical width matches the design (iPhone 17 Pro = 393pt = 1206px @3x for the bottom half — confirm against device under test). Walk to each screen. Capture via `driver.saveScreenshot()` (E2E spec under `e2e/specs/visual-capture/<TASK-ID>.spec.ts`) OR `xcrun simctl io <udid> screenshot` if driving by hand.
-3. **No automated pixel-diff gate**. Human eye is the gate. Commit both PNGs in the same commit so reviewers can flip between them in GitHub or any image viewer.
+2. **Sim screenshot**: build and run the app on a sim whose logical width matches the design (iPhone 17 Pro = 393pt = 1206px @3x for the bottom half — confirm against device under test). Walk to each screen. Capture via `driver.saveScreenshot()` (E2E spec under `e2e/specs/visual-capture/<TASK-ID>.spec.ts`) OR `xcrun simctl io <udid> screenshot` if driving by hand. This host has no iOS toolchain: sim runs go through `ios-router`.
+3. **No automated pixel-diff gate**. Human eye is the gate. The pipeline reviewer posts each pair to the PR with `tools/post-pr-visual-evidence.sh`; that comment is the durable copy.
 
 If a screen has light + dark + RTL variants, capture each separately (`<screen>-light-figma.png`, `<screen>-light-sim.png`, `<screen>-dark-*.png`, `<screen>-rtl-*.png`).
 
 ## Step 5 — Hand off to the parity reviewer
 
-After commits land and gates pass (`yarn lint && yarn typecheck && yarn test`), invoke the `pocketpal-design-parity-reviewer` subagent before the pipeline reviewer:
+After commits land and gates pass (`yarn lint && yarn typecheck && yarn test`), reply `COMPLETE`. The orchestrator routes to the `pocketpal-design-parity-reviewer` (after the tester, before the pipeline reviewer); include in the handoff:
 
 ```text
 WORKTREE: <path>
 TASK_ID: <TASK-ID>
+STORY_DIR: <path>
 FIGMA_FILE: <fileKey>
 NODE_IDS: <comma-separated list of in-scope screen node ids>
 ```
 
-The parity reviewer reads the committed `visual-diff/` captures + the Figma node tree, calls out node-for-node coverage gaps, raw-hex leaks, token misuse, typography drift, asset substitutions. Treat its findings the same way as a critic verdict: BLOCKER fixes, then re-route.
-
-Once parity is approved, hand off to `pocketpal-pipeline-reviewer` as usual.
+The parity reviewer reads the `visual-diff/` captures + the Figma node tree, calls out node-for-node coverage gaps, raw-hex leaks, token misuse, typography drift, asset substitutions. Its `NEEDS_FIXES` routes back to you: BLOCKER fixes, then `COMPLETE` again.
 
 ## Required implementer output format
 
@@ -167,8 +166,8 @@ Mirror this in the final report:
 1. **Inputs** — Figma fileKey + node IDs covered + light/dark scope.
 2. **Plan** — per-screen translation outline before coding (assets, components, token additions, deviations).
 3. **Changes** — per-commit summary of what landed.
-4. **Parity** — per-screen "matches Figma" / "differs because X" notes, citing the committed `visual-diff/` files.
-5. **Tests** — lint/typecheck/jest results + the visual-capture spec commit SHA.
+4. **Parity** — per-screen "matches Figma" / "differs because X" notes, citing the `visual-diff/` files.
+5. **Tests** — lint/typecheck/jest results + the visual-capture spec path (gitignored, not committed).
 
 ## Defects this skill prevents
 

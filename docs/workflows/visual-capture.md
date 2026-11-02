@@ -10,13 +10,13 @@ There are **three flavours**, picked by what the change touches:
 | --- | --- | --- |
 | Chat output (prompt → assistant response) | **Parametrized** | `e2e/specs/visual-capture.spec.ts` driven by `VISUAL_CAPTURES` env JSON |
 | Anything else (settings panel, sheet, header indicator, drawer state, etc.) | **Per-task, one-shot** | `e2e/specs/visual-capture/<TASK-ID>.spec.ts` authored in the worktree, **gitignored**, dies with the worktree |
-| **Figma-sourced screen / component** (any redesign-rollout slice) | **Figma parity diff** | Pair of `<screen>-figma.png` + `<screen>-sim.png` committed under `workflows/stories/<TASK-ID>/visual-diff/`. Drive via the [`figma-implement`](../../.claude/skills/figma-implement/SKILL.md) skill; reviewed by the `pocketpal-design-parity-reviewer` subagent. |
+| **Figma-sourced screen / component** (any redesign-rollout slice) | **Figma parity diff** | Pair of `<screen>-figma.png` + `<screen>-sim.png` saved under `<STORY_DIR>/visual-diff/` and posted to the PR. Drive via the [`figma-implement`](../../skills/figma-implement/SKILL.md) skill; reviewed by the `pocketpal-design-parity-reviewer` subagent. |
 
 Decision rule:
 
 - "Send a prompt, screenshot the response" → Flavour A.
 - "Drive Appium to a non-chat surface that isn't tied to a Figma spec" → Flavour B.
-- "Implementing a Figma node id" → Flavour C (mandatory side-by-side captures committed into the story dir; the parity reviewer is a pipeline gate).
+- "Implementing a Figma node id" → Flavour C (mandatory side-by-side captures saved in the story dir and posted to the PR; the parity reviewer is a pipeline gate).
 
 ## Ownership
 
@@ -24,9 +24,11 @@ Decision rule:
 | --- | --- |
 | Decide whether evidence is required | `pocketpal-intake` adds capture rows to `evidence.md` from the claim; the architect and implementer add rows for surfaces they touch; `pocketpal-pipeline-reviewer` **re-derives it from the actual diff** so a missing row can't skip the gate. Any change under `src/` to a screen, component, style, theme, or rendering path ⇒ required. |
 | Produce captures (Flavour A / B) | `pocketpal-tester` writes the PNGs and hands their paths to the reviewer in the Test Report. |
-| Produce captures (Flavour C) | `pocketpal-implementer` via the `figma-implement` skill (committed side-by-sides under the story dir). |
-| Post captures to the PR | `pocketpal-pipeline-reviewer`, immediately after `gh pr create`, via `tools/post-pr-visual-evidence.sh`. |
+| Produce captures (Flavour C) | `pocketpal-implementer` via the `figma-implement` skill (side-by-sides saved under the story dir). |
+| Post captures to the PR | `pocketpal-pipeline-reviewer` (Flavour C pairs included), immediately after `gh pr create`, via `tools/post-pr-visual-evidence.sh`. |
 | Enforce | `pocketpal-pipeline-reviewer` — "UI changed but no visual-evidence comment on the PR" is a `BLOCKER`. |
+
+Device runs claim a phone through agistry first and release it after. This host has no iOS toolchain: the `yarn e2e:ios`, `yarn ios:build:e2e` and `xcrun simctl` steps below run through `ios-router`.
 
 ## Freshness
 
@@ -89,11 +91,11 @@ Capture only the surfaces the change touches. After the draft PR exists, post th
 
 ```bash
 # run from the task worktree (so gh infers the pocketpal-ai repo)
-./tools/post-pr-visual-evidence.sh <PR-number> --before-after \
+../../tools/post-pr-visual-evidence.sh <PR-number> --before-after \
   --title "Visual evidence — <short label>" \
   "Long model name truncates=pre/name.png" post/name.png ...
 
-./tools/post-pr-visual-evidence.sh <PR-number> \
+../../tools/post-pr-visual-evidence.sh <PR-number> \
   --title "Visual evidence — <short label>" \
   "Voice toggle in Settings=settings.png" "Reply read aloud=chat.png" ...
 ```
@@ -123,11 +125,13 @@ When the surface isn't chat output, author a one-off spec **in the worktree** th
 e2e/specs/visual-capture/<TASK-ID>.spec.ts   (gitignored — pattern: e2e/specs/visual-capture/TASK-*.spec.ts)
 ```
 
+Only `TASK-*` names are ignored. A PR-fix round names its spec `TASK-PR-<n>.spec.ts` so it does not leak into the app PR.
+
 ### Rationale for discarding instead of preserving
 
 These specs are one-shot pre/post diff harnesses tied to a specific PR review. Once the PR merges, `main` *is* the post-state — re-running the spec compares post-against-post, which is meaningless. Long-term preservation also accumulates per-task specs that drift silently as the UI evolves, with no signal value when they break.
 
-If you ever regret a discard (e.g. a future slice touches the same surfaces and would have benefited from re-using a prior spec), the spec is still recoverable from the git history of the worktree branch via `git log --diff-filter=D --all -- "e2e/specs/visual-capture/*"` before the worktree is removed. At that point, promote it to a durable spec at `e2e/specs/features/<descriptive-name>.spec.ts` and remove the `gitignore` rule for that file.
+The spec is never committed, so it is gone once the worktree is removed. To keep one, promote it before removal to a durable spec at `e2e/specs/features/<descriptive-name>.spec.ts`.
 
 ### Conventions
 
@@ -146,28 +150,29 @@ The same spec runs against `main` and the branch:
 VISUAL_CAPTURE_LABEL=post \
   yarn e2e:ios --spec visual-capture/<TASK-ID> --skip-build
 
-# pre (cherry-pick spec + any new testID/helper commits onto main, then re-run):
-git checkout origin/main
-git checkout feature/<branch> -- e2e/specs/visual-capture/<TASK-ID>.spec.ts \
-  <any e2e/pages/*.ts or e2e/helpers/*.ts files the spec depends on> \
+# pre, in a separate baseline worktree off origin/main (from the dev-team root):
+./tools/create-worktree.sh <TASK-ID>-base --detach --ref origin/main
+cd worktrees/<TASK-ID>-base
+cp ../<TASK-ID>/e2e/specs/visual-capture/<TASK-ID>.spec.ts e2e/specs/visual-capture/
+git checkout feature/<branch> -- <any e2e/pages/*.ts or e2e/helpers/*.ts files the spec depends on> \
   <any product files with new testIDs the spec depends on>
 yarn install && (cd ios && pod install) && yarn ios:build:e2e
 VISUAL_CAPTURE_LABEL=pre \
   yarn e2e:ios --spec visual-capture/<TASK-ID> --skip-build
 
-# back to branch:
-git checkout feature/<branch>
+# after copying the pre captures out (from the dev-team root):
+./tools/remove-worktree.sh <TASK-ID>-base --yes
 ```
 
-The two output dirs (`<TASK-ID>/pre/` and `<TASK-ID>/post/`) are diffed by the reviewer or attached side-by-side as PR comments. Screenshots can be committed to the dev-team story dir at `workflows/stories/<TASK-ID>/screenshots/` if they need to be referenced from the PR.
+The two output dirs (`<TASK-ID>/pre/` and `<TASK-ID>/post/`) are posted side-by-side to the PR (**Posting to the PR**). Copy them to `<STORY_DIR>/screenshots/` when they must outlive the worktree; that dir is local story space, never on the app branch.
 
 ## Flavour C — Figma parity diff
 
-When the work is "implement Figma node id X into the app" (any FOU-112 redesign-rollout slice, any task that pins a canonical Figma file), the implementer follows the [`figma-implement`](../../.claude/skills/figma-implement/SKILL.md) skill, which mandates a committed side-by-side per screen:
+When the work is "implement Figma node id X into the app" (any FOU-112 redesign-rollout slice, any task that pins a canonical Figma file), the implementer follows the [`figma-implement`](../../skills/figma-implement/SKILL.md) skill, which mandates a side-by-side per screen:
 
 ```
-workflows/stories/<TASK-ID>/visual-diff/<screen>-figma.png
-workflows/stories/<TASK-ID>/visual-diff/<screen>-sim.png
+<STORY_DIR>/visual-diff/<screen>-figma.png
+<STORY_DIR>/visual-diff/<screen>-sim.png
 ```
 
 When light + dark + RTL are in scope, capture each variant separately (`<screen>-light-figma.png`, etc.).
@@ -176,15 +181,15 @@ When light + dark + RTL are in scope, capture each variant separately (`<screen>
 
 1. **Figma render**: `mcp__plugin_figma_figma__get_screenshot(fileKey, nodeId, maxDimension=2622)` → download the PNG.
 2. **Sim screenshot**: build + run the app on a sim whose width matches the design (iPhone 17 Pro / 13 Pro for 393pt designs). Either drive Appium (Flavour B-style spec under `e2e/specs/visual-capture/<TASK-ID>.spec.ts`) or capture by hand with `xcrun simctl io <udid> screenshot`.
-3. Commit both PNGs into the story dir on the same branch as the implementation.
+3. Save both PNGs in the story dir. The pipeline reviewer posts them to the PR with `tools/post-pr-visual-evidence.sh`; the PR comment is the durable copy.
 
 ### Why this lives in the story dir (not `e2e/debug-output/`)
 
-`e2e/debug-output/` is gitignored — captures vanish with the worktree. Flavour C captures need to survive the PR review and are referenced from the parity-review subagent's report, so they live alongside `intent-brief.md` / `what.md` / `evidence.md`.
+`e2e/debug-output/` vanishes with the worktree. Flavour C captures must survive until the parity review and PR post, so they live alongside `intent-brief.md` / `what.md` / `evidence.md` (local story space, not the app branch).
 
 ### Review gate
 
-The `pocketpal-design-parity-reviewer` subagent runs after the implementer, before the pipeline reviewer. It compares each `*-figma.png` against `*-sim.png` pair, walks the Figma node tree to catch silently-dropped children, and greps for raw hex in screens. Its findings route back to the implementer (max 2 parity rounds before human escalation).
+The orchestrator routes to the `pocketpal-design-parity-reviewer` after the tester, before the pipeline reviewer, with `STORY_DIR` in the handoff. It compares each `*-figma.png` against `*-sim.png` pair, walks the Figma node tree to catch silently-dropped children, and greps for raw hex in screens. Its findings route back to the implementer (max 2 parity rounds before human escalation).
 
 ### Bonus: pre/post diff for restyle slices
 
