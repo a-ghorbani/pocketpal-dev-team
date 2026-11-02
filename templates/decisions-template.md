@@ -1,6 +1,6 @@
 # Decisions: <TASK_ID>
 
-Product calls, prior decisions, operator and PM rulings, and review dismissals (`docs/workflows/pipeline.md`, Decisions and product calls). Append only; reverse a row with a new row that names it.
+Product calls, prior decisions, operator and PM rulings, and review dismissals (`docs/workflows/evidence-and-decisions.md`, Decisions and product calls). Append only; reverse a row with a new row that names it.
 
 | ID | Kind | Decision | By | Source | Status |
 | --- | --- | --- | --- | --- | --- |

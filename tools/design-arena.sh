@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Design arena: independent design candidates from several models in tmux lanes,
-# then a judge from another provider. The architect merges them (pipeline.md, Design exploration).
+# then a judge from another provider. The architect merges them (docs/workflows/design-and-restarts.md, Design exploration).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

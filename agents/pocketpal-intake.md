@@ -50,7 +50,7 @@ The request is the review round's `final.md`.
 
 ## 2. Load context
 
-- `context/pocketpal-overview.md`, `context/patterns.md`, the intent, evidence, and decisions templates, and "Evidence plan" in `docs/workflows/pipeline.md`.
+- `context/pocketpal-overview.md`, `context/patterns.md`, the intent, evidence, and decisions templates, and "Evidence plan" in `docs/workflows/evidence-and-decisions.md`.
 - From `context/architecture/README.md`, only the flow docs the request touches. They become `ARCHITECTURE_DOCS`; their code maps name the platforms, native modules, and external systems involved.
 - In the worktree: `CONTRIBUTING.md`, `package.json`, and enough code to classify (for standard or complex, to name the flows and contracts).
 - Past work: `tools/context index`, then `tools/context search` for the surfaces the request touches. Write `<STORY_DIR>/context.md` listing each lesson, past decision, research, and review finding that applies, with its path and one line on why; set `CONTEXT`.
@@ -86,7 +86,7 @@ Record each in the brief's metadata and in the handoff block.
 - **`CLAIM`**: `bug` or `feature`, as in `evidence.md`.
 - **`COMPLEXITY`**: the Shape table in `docs/workflows/pipeline.md`. For a bug it is provisional; the tester's repro sets it from the cause. When a flow doc visibly contradicts the code, say so in your reply.
 - **`PLAN=YES`** only when sequencing is itself a risk (pipeline.md, Shape).
-- **`DESIGN_EXPLORATION`**: per pipeline.md, Design exploration.
+- **`DESIGN_EXPLORATION`**: per `docs/workflows/design-and-restarts.md`, Design exploration.
 - **`NEEDS_RESEARCH=YES`** when a product call shapes the contract or the work is complex.
 - **`NATIVE_CHANGES=YES`** when the work likely touches native dependencies in `package.json` (`llama.rn`, `react-native-*`), `ios/`, `android/`, a Podfile, or `build.gradle`.
 - **`FIGMA_FILE` / `NODE_IDS`** when the request pins a Figma file or nodes.

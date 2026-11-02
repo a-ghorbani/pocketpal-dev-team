@@ -1,6 +1,6 @@
 # Evidence plan: <one-line summary>
 
-What must be shown for this change to count as done (`docs/workflows/pipeline.md`, Evidence plan).
+What must be shown for this change to count as done (`docs/workflows/evidence-and-decisions.md`, Evidence plan).
 
 ## Claim
 

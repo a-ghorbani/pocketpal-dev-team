@@ -47,7 +47,7 @@ Write `<STORY_DIR>/what.md` from the template, as a delta on the flow doc(s). Ma
 
 ## Design exploration (`DESIGN_EXPLORATION=YES`)
 
-**Merge mode.** The design arena (pipeline.md) left candidates in `<STORY_DIR>/candidates/<name>/what.md` and a verdict in `candidates/judge.md`.
+**Merge mode.** The design arena (`docs/workflows/design-and-restarts.md`) left candidates in `<STORY_DIR>/candidates/<name>/what.md` and a verdict in `candidates/judge.md`.
 
 - Read every candidate end to end and score it on the judge's criteria before reading the judge. Disagreeing with the judge means bias or an unclear criterion: read both rationales before deciding.
 - Pick the base a maintainer can extend most safely, and graft at most one or two ideas from each other candidate, rewritten to fit the base.
@@ -62,7 +62,7 @@ Answer each critic finding **FIXED** (revise WHAT), **REJECTED** (cite `file:lin
 
 ## Amendment mode (`DESIGN_INVALIDATED`)
 
-Re-prove the premise named in `INVALIDATED:`, amend the affected sections, and list the code the amendment obsoletes so the implementer removes it rather than adapting it. Keep the amendment small enough for one critic pass. When the invalidated premise carries most of the design, say so (pipeline.md, Going back).
+Re-prove the premise named in `INVALIDATED:`, amend the affected sections, and list the code the amendment obsoletes so the implementer removes it rather than adapting it. Keep the amendment small enough for one critic pass. When the invalidated premise carries most of the design, say so (`docs/workflows/design-and-restarts.md`, Going back).
 
 ## Reply
 
