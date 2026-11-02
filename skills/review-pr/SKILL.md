@@ -205,7 +205,14 @@ status: FINDINGS | NOTHING_FOUND
 
 ### <ID>: <Title>
 
-severity: BLOCKER | CONCERN | SUGGESTION lens: Correctness | Architecture | Maintainability (incl. comment load) | Tests | Security | Data / Migration | Performance/Resources | UX / Accessibility | Platform / Native confidence: high | med | low path: relative/path.ts line: 123 impact: One sentence. evidence: Short quote or concrete code reference. fix: One sentence.
+severity: BLOCKER | CONCERN | SUGGESTION
+lens: Correctness | Architecture | Maintainability (incl. comment load) | Tests | Security | Data / Migration | Performance/Resources | UX / Accessibility | Platform / Native
+confidence: high | med | low
+path: relative/path.ts
+line: 123
+impact: One sentence.
+evidence: Short quote or concrete code reference.
+fix: One sentence.
 ```
 
 ## Verification
@@ -262,7 +269,7 @@ For a complete high-risk review, `role_subreviews` must be `COMPLETED`.
 
 ## Publish
 
-For a PR target, post the verdict to the PR with `tools/ghb pr review <n> --comment` (`--request-changes` for `REQUEST_CHANGES`) and a body file:
+For a PR target, post the verdict to the PR with `tools/ghb pr review <n> --comment` and a body file (always `--comment`: the bot authors pipeline PRs, and GitHub refuses a review that requests changes on the author's own PR):
 
 - verdict, reviewed head SHA, and verification status;
 - BLOCKER/CONCERN findings, one line each: severity, `path:line`, the fix;

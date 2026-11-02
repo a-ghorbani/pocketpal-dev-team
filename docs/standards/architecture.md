@@ -169,35 +169,14 @@ src/locales/
 ├── index.ts        # languageRegistry, lazy l10n object, t() helper, initLocale
 ├── types.ts        # Translations type derived from `typeof enData`
 ├── en.json         # Source of truth — only this file is hand-edited
-├── fa.json         # Other languages are managed by translators on Weblate
-├── he.json
-├── id.json
-├── ja.json
-├── ko.json
-├── ms.json
-├── ru.json
-├── uk.json
-├── zh.json
-└── zh_Hant.json
+└── <code>.json     # Other languages, managed by translators on Weblate
 ```
 
 `languageRegistry` in `src/locales/index.ts` is the single source of truth for keys, display names, and the `supportedLanguages` array. Non-English files fall back to English via `_.merge({}, enData, langData)` (overlay semantics).
 
 ### Supported Languages
 
-| Code      | Language              | Status                              |
-| --------- | --------------------- | ----------------------------------- |
-| `en`      | English               | Primary (only file edited directly) |
-| `fa`      | Persian (Farsi)       | Weblate                             |
-| `he`      | Hebrew                | Weblate                             |
-| `id`      | Indonesian            | Weblate                             |
-| `ja`      | Japanese              | Weblate                             |
-| `ko`      | Korean                | Weblate                             |
-| `ms`      | Malay                 | Weblate                             |
-| `ru`      | Russian               | Weblate                             |
-| `uk`      | Ukrainian             | Weblate                             |
-| `zh`      | Chinese (Simplified)  | Weblate                             |
-| `zh_Hant` | Chinese (Traditional) | Weblate                             |
+`languageRegistry` lists them; `en` is the only file edited directly, the rest come from Weblate.
 
 ### L10n Rules
 
@@ -449,9 +428,7 @@ import { ChildComponent } from "./ChildComponent";
 
 ### Branch Naming
 
-- `feature/description` - New features
-- `fix/description` - Bug fixes
-- `chore/description` - Maintenance
+See "Worktrees and naming" in `AGENTS.md`.
 
 ### Commit Messages
 
@@ -471,5 +448,5 @@ chore(deps): upgrade llama.rn to 0.11.0
 
 - Descriptive title and body
 - Tests for new code
-- L10n for new strings (all languages)
+- New strings in `en.json` only (other languages come from Weblate)
 - Native builds verified (if applicable)

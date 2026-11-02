@@ -25,7 +25,7 @@ Load whatever is available:
 - the change set (PR diff, branch diff, worktree diff)
 - the story, issue, or acceptance criteria
 - the story's `evidence.md` (what was proven, with receipts), `decisions.md`, and WHAT §8 (what was decided). Re-raise a decided item only with new evidence that it is wrong, and name that evidence.
-- the touched flow docs: `context/architecture/<flow>.md` named in the story's `ARCHITECTURE_DOCS`, else the flows whose README index rows cover the changed files. A behaviour change a flow doc describes, with no matching update to that doc in the same round (or a line for unlanded code without `(pending #<PR>)`), is an Architecture finding.
+- the touched flow docs: `context/architecture/<flow>.md` named in the story's `ARCHITECTURE_DOCS`, else the flows whose README index rows cover the changed files. A behaviour change a flow doc describes, with no matching update to that doc in the same round (or a line for unlanded code without `(pending #<PR>)`), is an Architecture finding on a pipeline PR (a story exists); on an external PR, note it in `final.md` for the orchestrator and leave it out of the published review.
 - `context/patterns.md`
 - project-local standards referenced by the change
 - existing CI or implementation verification output
@@ -94,7 +94,7 @@ The `local-invariants` role reviews changed lines for small contract breaks defi
 
 - **Correctness** _(QA)_: broken behavior, bad assumptions, null handling, state mistakes, async races, retries, cancellation, stale state, error paths.
 - **Architecture and boundaries** _(Architect)_: coupling, layering, public contracts, hidden dependencies, over-engineering.
-- **Maintainability and readability** _(Architect)_: duplication, naming, fragile logic, magic constants, hard-to-test design. (Owned by the architect role in high-risk reviews; the lead applies it against the diff directly when no architect subreview ran.)
+- **Maintainability and readability** _(Architect)_: duplication, naming, fragile logic, magic constants, hard-to-test design. (Owned by the architect role in high-risk reviews; `pocketpal-code-reviewer` applies it when no role subreviews are required.)
 - **Comment load** _(Architect; part of Maintainability, reported under that lens)_: over-commenting is a recurring defect in this repo, so review it explicitly rather than waiting to be asked. Classify every questionable comment with the four-case test under "Comments" below. A finding **must name which case**: "too many comments" is not actionable, "this is case 2 — the comment exists because the function does three things" is. Volume itself is evidence: a diff that needs heavy commentary is reporting a clarity or design problem, and the remedy is the code, not better prose. Also flag task narrative in source (naming the bug just fixed, round numbers, plan-step restatements) — that rots into archaeology.
 - **Tests and verification** _(QA)_: missing coverage, weak assertions, mocks that hide contracts, skipped tests, manual validation gaps. **Coverage floor: 60%** (statements, branches, functions, lines) for the changed surface; below it is a `BLOCKER` unless explicitly waived.
 - **Security and privacy** _(Security)_: PocketPal is an **on-device app, not a server** — review against the mobile threat model, not a server perimeter. The real trust boundaries are: (a) model-generated content reaching render/execution surfaces (markdown/HTML/WebView/JS, tool-call/JSON parsing); (b) external content entering the app (downloaded GGUF models, web-search/internet results, deep links / App Intents / Shortcuts params, PalsHub rows); (c) on-device data at rest and in logs (chat history, API keys, server/auth tokens, crash reports); (d) the native bridge and capability allowlist (Pals-as-apps WebView bridge); (e) debug/E2E hooks reachable in production builds. A security finding on a trust-boundary diff must name an untrusted **source** and the **sink** it reaches unsanitized, and show the sink is **reachable on `main`** with that input (the call path, `file:line` per hop). A guard on a path no attacker-controlled input reaches is defence in depth: at most a SUGGESTION, whatever the theoretical impact.
@@ -187,7 +187,10 @@ A finding that cannot survive a genuine refutation attempt must not ship as a `B
 Open with review metadata:
 
 ```markdown
-verdict: APPROVE | REQUEST_CHANGES | ESCALATE risk_level: low | medium | high review_complete: yes | no role_subreviews: COMPLETED | BLOCKED | NOT_REQUIRED
+verdict: APPROVE | REQUEST_CHANGES | ESCALATE
+risk_level: low | medium | high
+review_complete: yes | no
+role_subreviews: COMPLETED | BLOCKED | NOT_REQUIRED
 ```
 
 Then include a per-lens summary table:
@@ -217,7 +220,10 @@ The final review must be team-shareable (including the necessary details the tea
 Deterministic, compact, no prose:
 
 ```markdown
-verdict: APPROVE | REQUEST_CHANGES | ESCALATE risk_level: low | medium | high review_complete: yes | no role_subreviews: COMPLETED|BLOCKED|NOT_REQUIRED
+verdict: APPROVE | REQUEST_CHANGES | ESCALATE
+risk_level: low | medium | high
+review_complete: yes | no
+role_subreviews: COMPLETED|BLOCKED|NOT_REQUIRED
 
 missing_context: [item, ...] # or []
 
@@ -228,15 +234,35 @@ verification:
 - { name: tests, status: PASS|FAIL|NOT_RUN|N/A, notes: ... }
 - { name: native, status: PASS|FAIL|NOT_RUN|N/A, notes: ... }
 
-lens_summary: correctness: PASS|ISSUES architecture: PASS|ISSUES maintainability: PASS|ISSUES tests: PASS|ISSUES security: PASS|ISSUES|N/A data_migration: PASS|ISSUES|N/A performance: PASS|ISSUES|N/A ux_accessibility: PASS|ISSUES|N/A platform_native: PASS|ISSUES|N/A
+lens_summary:
+  correctness: PASS|ISSUES
+  architecture: PASS|ISSUES
+  maintainability: PASS|ISSUES
+  tests: PASS|ISSUES
+  security: PASS|ISSUES|N/A
+  data_migration: PASS|ISSUES|N/A
+  performance: PASS|ISSUES|N/A
+  ux_accessibility: PASS|ISSUES|N/A
+  platform_native: PASS|ISSUES|N/A
 
 counts: { blocker: 0, concern: 0, suggestion: 0 }
 
 findings:
 
-- id: R1 severity: BLOCKER|CONCERN|SUGGESTION confidence: high|med|low refutation: stands|withdrawn lens: correctness|architecture|...|platform_native title: short title path: relative/path.ts line: 123 impact: one sentence evidence: short quoted code fix: one sentence
+- id: R1
+  severity: BLOCKER|CONCERN|SUGGESTION
+  lens: correctness|architecture|...|platform_native
+  confidence: high|med|low
+  refutation: stands|withdrawn
+  title: short title
+  path: relative/path.ts
+  line: 123
+  impact: one sentence
+  evidence: short quoted code
+  fix: one sentence
 
-manual_checks: [step, ...] # or [] residual_risks: [item, ...] # or []
+manual_checks: [step, ...]   # or []
+residual_risks: [item, ...]  # or []
 ```
 
 `risk_level: high` when native, persistence, security, or multi-surface changes ship with incomplete verification.
