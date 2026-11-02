@@ -43,7 +43,7 @@ Intent → WHAT → Implementation, then an independent review loop and a human 
   │  pipeline-   │
   │  reviewer    │
   └──────┬───────┘
-         ▼  tools/pr-gates.sh (CI green, evidence posted)
+         ▼  tools/pr-gates.sh (CI green, no internal references in public text)
   ┌──────────────┐  /review-pr → role reviewers → refutation (real? worth it?) → verdict
   │ independent  │  findings → fix brief → plan-critic → fix → re-verify
   │   review     │  (2 rounds total, then escalate)

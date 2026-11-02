@@ -41,7 +41,7 @@ If essential target information is missing and cannot be found locally or from G
 
 ## Readiness
 
-For a PR produced by this pipeline (a story exists for its branch), run `tools/pr-gates.sh <PR>` first. `ci PEND` (exit 4) means wait and rerun. Any gate FAIL (exit 1: `ci`, `evidence`, `hygiene`, ...) is `NOT_READY`: reply `NOT_READY` with the gate output and stop without creating a round folder. A standalone review the user asked for (an external PR, a branch) proceeds and records the gate output in `verification.md`.
+For a PR produced by this pipeline (a story exists for its branch), run `tools/pr-gates.sh <PR>` first. `ci PEND` (exit 4) means wait and rerun. Any gate FAIL (exit 1: `ci` or `hygiene`) is `NOT_READY`: reply `NOT_READY` with the gate output and stop without creating a round folder. A standalone review the user asked for (an external PR, a branch) proceeds and records the gate output in `verification.md`.
 
 ## Worktree Setup
 

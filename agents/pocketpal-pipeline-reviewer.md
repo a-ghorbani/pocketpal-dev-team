@@ -110,7 +110,7 @@ Then:
    ```
 
    Fixes and regression checks are before/after pairs; new features are captioned rows ("Posting to the PR" in `docs/workflows/visual-capture.md`). Exit 0 means posted. Exit 3 (`MANUAL_POST_REQUIRED`) means the upload or comment failed: record the exact command to hand-run as an unmet approval condition.
-4. Run `../../tools/pr-gates.sh <PR>` and clear any `hygiene` or `evidence` failure (CI may still be running).
+4. Run `../../tools/pr-gates.sh <PR>` and clear any `hygiene` failure (CI may still be running).
 
 Titles, bodies, and comments carry public references only: no task IDs, story paths, WHAT/HOW references, or story section labels.
 

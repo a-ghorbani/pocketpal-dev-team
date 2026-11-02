@@ -100,7 +100,7 @@ Dispatch the next role from the returning stage's verdict at once, with no inter
 | design-parity-reviewer | `APPROVED` / `NEEDS_FIXES` | pipeline-reviewer / implementer (max 2 rounds) |
 | pipeline-reviewer | `APPROVED` (with `PR`) | tester in post-PR mode when `evidence.md` has CI-APK rows; then the gates |
 | `tools/pr-gates.sh` | `ci` PEND (exit 4) | wait (a watcher, `skills/start-task`); no attempt consumed |
-| `tools/pr-gates.sh` | `ci`, `evidence`, or `hygiene` FAIL (exit 1) | implementer (CI; hygiene in code or commits), pipeline-reviewer (hygiene in PR text; a missing evidence comment or captures), or tester (a failing receipt); max 2, then `BLOCKED` |
+| `tools/pr-gates.sh` | `ci` or `hygiene` FAIL (exit 1) | implementer (CI; hygiene in code or commits) or pipeline-reviewer (hygiene in PR text); max 2, then `BLOCKED` |
 | `tools/pr-gates.sh` | exit 2 (usage or `gh` error) | `BLOCKED` |
 | `tools/pr-gates.sh` | all PASS | independent review (`review-pr`) |
 | review-pr | `NOT_READY` | as a gate FAIL above; no round consumed |
@@ -152,7 +152,7 @@ The orchestrator sends a stop's questions to `operator` over agistry (AGENTS.md,
 | architect | adds an item per canonical scenario and per required WHAT section it fills |
 | implementer, fix rounds | add items for touched surfaces the plan didn't foresee |
 | tester | runs each item as a command, spec, or device run and records the receipt. **CI APK** rows (e2e specs, bench, memory profiles, store runs) run post-PR on the draft PR's CI APK; compare any red against `main` before calling it |
-| pipeline-reviewer | checks every pre-PR item has a receipt or a documented reason it could not run; posts the **evidence comment** (what was proven and its receipt, public references only, captures inline); the tester appends post-PR rows. `tools/pr-gates.sh` fails without it |
+| pipeline-reviewer | checks every pre-PR item has a receipt or a documented reason it could not run; posts the **evidence comment** (what was proven and its receipt, public references only, captures inline); the tester appends post-PR rows |
 
 Any stage may add an item; dropping one needs a reason in its row. A capture is an evidence item whose receipt is an image.
 
