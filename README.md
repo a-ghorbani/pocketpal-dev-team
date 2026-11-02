@@ -13,7 +13,7 @@ Intent → WHAT → Implementation, then an independent review loop and a human 
   ┌──────────────┐  intent-brief.md, evidence.md (claim, platforms, risk rows),
   │   intake     │  decisions.md (product calls with defaults), context.md (lessons
   └──────┬───────┘  and past work that apply); classifies by riskiest contract;
-         │          NEEDS_INPUT only for an unclear request
+         │          NEEDS_INPUT only for an unclear request or a slicing proposal
          │
          │     • bug              → tester reproduces on main, finds the cause
          │                          (git history for regressions)

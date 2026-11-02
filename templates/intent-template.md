@@ -13,6 +13,9 @@ The request, verbatim, and any clarifications; nothing else. Stands alone withou
 - **Complexity**: trivial | quick | standard | complex
 - **Plan**: YES | NO
 - **Native Changes**: YES | NO
+- **Claim**: bug | feature
+- **Design Exploration**: YES | NO
+- **Needs Research**: YES | NO
 - **Created**: YYYY-MM-DD
 - **Status**: draft | needs-input | approved
 
@@ -26,7 +29,7 @@ The request, verbatim, and any clarifications; nothing else. Stands alone withou
 
 ## Clarifications
 
-Only for a product call the request leaves open; omit or write "none" otherwise.
+Only when the request is unclear (product calls go to `decisions.md`); omit or write "none" otherwise.
 
 - **Q1**: <question>? Recommended: <answer>
   - **A1**: <answer, or "NEEDS_INPUT">

@@ -2,15 +2,15 @@
 set -euo pipefail
 
 # Mechanical gates for a PocketPal change, so no agent or reviewer spends a
-# round finding them by hand. Prints one line per gate and exits non-zero when
-# any gate FAILs.
+# round finding them by hand. Prints one line per gate; exits 1 when any gate
+# FAILs, 4 when none fails but CI is still PEND (wait, don't fix).
 #
 # Usage:
 #   tools/pr-gates.sh <pr-number> [--repo owner/repo]
 #   tools/pr-gates.sh --branch [<base-ref>]       # from inside a worktree, before the PR exists
 #
 # Gates:
-#   ci        PR checks green (PENDING is not a pass)
+#   ci        PR checks green (PEND: still running or not reported yet; not a pass)
 #   hygiene   no internal tracker IDs, task IDs, story paths or story anchors in
 #             the PR title, body, commit messages, or added source lines
 #   evidence  an evidence comment (a "## ...evidence..." heading) is on the PR;
@@ -44,8 +44,8 @@ ui_paths='^src/(screens|components|theme)/|^src/.*\.tsx$'
 test_paths='/__tests__/|\.test\.tsx?$|^__mocks__/'
 native_paths='^(package\.json|ios/|android/|.*Podfile|.*\.podspec$|.*build\.gradle)'
 
-failed=0
-report() { printf '%-9s %-5s %s\n' "$1" "$2" "$3"; [[ "$2" == FAIL ]] && failed=1; return 0; }
+failed=0 pending=0
+report() { printf '%-9s %-5s %s\n' "$1" "$2" "$3"; [[ "$2" == FAIL ]] && failed=1; [[ "$2" == PEND ]] && pending=1; return 0; }
 die() { echo "pr-gates: $*" >&2; exit 2; }
 
 # Merge commits never reach main under squash merges, so their subjects are skipped.
@@ -71,13 +71,13 @@ ui_files=$(grep -E "$ui_paths" <<<"$files" | grep -vE "$test_paths" || true)
 # ci
 if [[ "$mode" == "pr" ]]; then
   if ! checks=$(gh pr checks "$pr" --repo "$repo" --json name,bucket --jq '.[] | "\(.bucket) \(.name)"' 2>&1); then
-    grep -qi 'no checks' <<<"$checks" && report ci FAIL "no checks reported yet" || die "gh pr checks failed: $checks"
+    grep -qi 'no checks' <<<"$checks" && report ci PEND "no checks reported yet" || die "gh pr checks failed: $checks"
   elif [[ -z "$checks" ]]; then
-    report ci FAIL "no checks reported yet"
+    report ci PEND "no checks reported yet"
   elif grep -qE '^(fail|cancel)' <<<"$checks"; then
     report ci FAIL "$(grep -E '^(fail|cancel)' <<<"$checks" | cut -d' ' -f2- | paste -sd, -)"
   elif grep -q '^pending' <<<"$checks"; then
-    report ci FAIL "pending: $(grep '^pending' <<<"$checks" | cut -d' ' -f2- | paste -sd, -)"
+    report ci PEND "pending: $(grep '^pending' <<<"$checks" | cut -d' ' -f2- | paste -sd, -)"
   else
     report ci PASS "$(wc -l <<<"$checks" | tr -d ' ') checks green"
   fi
@@ -122,4 +122,6 @@ else
   report native PASS "no native files changed"
 fi
 
-exit "$failed"
+(( failed )) && exit 1
+(( pending )) && exit 4
+exit 0

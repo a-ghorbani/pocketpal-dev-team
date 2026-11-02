@@ -61,9 +61,9 @@ Take `WORKTREE`, `BRANCH` and `STORY_DIR` from the block; never rebuild them fro
 
 Intake classifies by the **riskiest contract touched**, not size. Security, schema, and breaking-API changes are at least standard, and so is a task whose flow doc visibly contradicts the code.
 
-**Bugs reproduce first.** For `CLAIM: bug`, the tester's repro mode runs right after intake, before any design or code: it reproduces the symptom on `main`, finds the cause (and, for a regression, the change that introduced it), and sets `COMPLEXITY` from that cause.
+**Bugs reproduce first.** For `CLAIM: bug`, the tester's repro mode runs right after intake, before any design or code: it reproduces the symptom on `main`, finds the cause (and, for a regression, the change that introduced it), and sets `COMPLEXITY` from that cause, re-deriving `NEEDS_RESEARCH` and `DESIGN_EXPLORATION` when it changes.
 
-**Research before choices.** With `NEEDS_RESEARCH=YES` (set by intake when a product call is open or the work is complex), the researcher runs next, after the repro for a bug: what users need (issues, discussions, feedback, reviews, forums) and how comparable products solve it, in `research.md`. Product-call defaults and the architect's hard choices cite it.
+**Research before choices.** With `NEEDS_RESEARCH=YES` (set by intake when a product call shapes the contract or the work is complex), the researcher runs next, after the repro for a bug: what users need (issues, discussions, feedback, reviews, forums) and how comparable products solve it, in `research.md`. Product-call defaults and the architect's hard choices cite it.
 
 **Planner (`PLAN=YES`, set by intake or the architect)** runs after the architect-critic only when sequencing is itself a risk: several PRs, a data migration, a native build change that must land in steps, or a feature-flag rollout. Otherwise the implementer sequences its own work.
 
@@ -84,7 +84,7 @@ Dispatch the next role from the returning stage's verdict at once, with no inter
 | intake | `READY`, PR fix | orchestrator writes the fix brief → plan-critic (fix-brief mode) |
 | architect | `DRAFTED` | architect-critic |
 | architect-critic | `LGTM` | planner when `PLAN=YES`, else implementer |
-| architect-critic | `HAS_CONCERNS` / `HAS_BLOCKERS` | architect (revision; max 2 rounds) |
+| architect-critic | `HAS_CONCERNS` / `HAS_BLOCKERS` | architect (revision; max 2 rounds; concerns still open after round 2 proceed, listed in the reply) |
 | planner | `DRAFTED` | plan-critic |
 | plan-critic | `LGTM` | implementer |
 | plan-critic | `HAS_CONCERNS` / `HAS_BLOCKERS` | the producer revises: planner for HOW, the orchestrator for a fix brief (max 2 rounds) |
@@ -92,10 +92,12 @@ Dispatch the next role from the returning stage's verdict at once, with no inter
 | architect-reviewer (slice) | `LGTM` / `HAS_FINDINGS` | implementer, to finish (addressing findings first) |
 | implementer | `COMPLETE` | tester |
 | tester | `COMPLETE` | pipeline-reviewer (redesign slices: design-parity-reviewer first) |
+| tester, post-PR mode | `COMPLETE` | the gates |
 | tester | `IMPLEMENTATION_BUG` | implementer |
 | design-parity-reviewer | `APPROVED` / `NEEDS_FIXES` | pipeline-reviewer / implementer (max 2 rounds) |
 | pipeline-reviewer | `APPROVED` (with `PR`) | tester in post-PR mode when `evidence.md` has CI-APK rows; then the gates |
-| `tools/pr-gates.sh` | `ci` or `evidence` FAIL | implementer (CI) or tester (evidence); max 2, then `BLOCKED` |
+| `tools/pr-gates.sh` | `ci` PEND (exit 4) | wait (a watcher, `skills/start-task`); no attempt consumed |
+| `tools/pr-gates.sh` | `ci`, `evidence`, or `hygiene` FAIL | implementer (CI; hygiene in code or commits), tester (evidence), or pipeline-reviewer (hygiene in PR text); max 2, then `BLOCKED` |
 | `tools/pr-gates.sh` | all PASS | independent review (`review-pr`) |
 | review-pr | `NOT_READY` | as a gate FAIL above; no round consumed |
 | pipeline-reviewer | `REQUEST_CHANGES` | implementer |
@@ -198,7 +200,7 @@ A restart keeps `evidence.md` and its receipts, spike receipts, behaviour tests,
 
 `review-pr <PR>` runs only once `tools/pr-gates.sh <PR>` passes. Output: `workflows/reviews/PR-<n>/round-<N>/final.md`. Every round counts toward the cap of 2, whatever the previous verdict; a third round needs an operator or PM ruling, logged in `decisions.md`.
 
-- `APPROVE` with only SUGGESTIONs ends the review. Suggestions go to the PR body's follow-ups; none triggers a round.
+- `APPROVE` with only SUGGESTIONs ends the review. Suggestions are listed as follow-ups in the published review; none triggers a round.
 - `REQUEST_CHANGES`, in order:
   1. Intake sets up the PR-fix story `PR-<n>-fix` (first round only: it carries `evidence.md` and `decisions.md` over and points `INTENT_BRIEF`, `WHAT`, `HOW` at the original story).
   2. The orchestrator writes the **fix brief** `<STORY_DIR>/review-feedback-round-<N>.md` from `templates/review-feedback-template.md` and logs the round's review dismissals in `decisions.md`. A finding that contradicts `decisions.md` or WHAT, or that a previous round already fixed once, goes to the architect as `DESIGN_INVALIDATED` instead of into the brief.
@@ -207,7 +209,7 @@ A restart keeps `evidence.md` and its receipts, spike receipts, behaviour tests,
 
 ## Finalization after the human merges
 
-Once the PR is merged, the `/start-task` session finishes the task without asking again: replace `(pending #<n>)` markers for the PR in `context/architecture/` with current-truth wording (path-scoped commit), distill the task's lessons (`AGENTS.md`, Lessons: false premises, real findings a stage should have caught, tool and device traps, general rulings), add a closing note to the story, tell sessions whose PRs depend on the change, and remove the task's worktrees (`<TASK-ID>`, `PR-<n>`, `PR-<n>-e2e`) with `./tools/remove-worktree.sh <name> --yes`. Check each worktree is clean first; stop and report one that has uncommitted or unpushed work.
+Once the PR is merged, the `/start-task` session finishes the task without asking again: replace `(pending #<n>)` markers for the PR in `context/architecture/` with current-truth wording (path-scoped commit), distill the task's lessons (`AGENTS.md`, Lessons: false premises, real findings a stage should have caught, tool and device traps, general rulings), close the tracker item (`context/issue-tracking.md`), add a closing note to the story, tell sessions whose PRs depend on the change, and remove the task's worktrees (`<TASK-ID>`, `PR-<n>`, `PR-<n>-e2e`) with `./tools/remove-worktree.sh <name> --yes`. Check each worktree is clean first; stop and report one that has uncommitted or unpushed work.
 
 ## Design exploration
 
@@ -216,8 +218,8 @@ Once the PR is merged, the `/start-task` session finishes the task without askin
 Before the architect's first draft, the orchestrator writes the handoff block to `<STORY_DIR>/handoff.txt` and runs the **design arena** in the background: `tools/design-arena.sh run <STORY_DIR>`.
 
 - Each runner in `config/design-arena.conf` (models from different providers) designs independently in its own tmux lane, writing `<STORY_DIR>/candidates/<name>/what.md` and spikes.
-- A judge from a provider other than the architect's scores the candidates and recommends a base (`candidates/judge.md`).
-- The architect then runs in merge mode. On exit 1 (fewer than two candidates) it explores alone; on exit 3 (no judge) it merges without one.
+- A judge from a provider other than the architect's scores the candidates and recommends a base (`candidates/judge.md`). The shipped conf assumes a Claude orchestrator; under another harness, set the judge to a different provider.
+- The architect then runs in merge mode. On exit 1 (fewer than two candidates) or exit 2 (environment or usage error, reported in the reply) it explores alone; on exit 3 (no judge) it merges without one.
 
 The critic reviews only the merged `what.md`. `tools/design-arena.sh status|cleanup <STORY_DIR>` inspects or clears a run.
 

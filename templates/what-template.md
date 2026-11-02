@@ -28,7 +28,7 @@ Only with `DESIGN_EXPLORATION=YES`. Candidates: `<STORY_DIR>/candidates/` (desig
 
 ### Alternatives considered
 
-≤ 3 bullets, ≤ 12 words each. Omit if no real alternative.
+≤ 3 bullets, ≤ 12 words each (after a design arena: one per candidate, plus the grafts). Omit if no real alternative.
 
 - selected: <approach> — <why>
 - rejected: <approach> — <why>
