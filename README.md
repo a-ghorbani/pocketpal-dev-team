@@ -11,8 +11,9 @@ Intent → WHAT → Implementation, then an independent review loop and a human 
          │
          ▼
   ┌──────────────┐  intent-brief.md, evidence.md (claim, platforms, risk rows),
-  │   intake     │  decisions.md (product calls with defaults); classifies by
-  └──────┬───────┘  riskiest contract; NEEDS_INPUT only for an unclear request
+  │   intake     │  decisions.md (product calls with defaults), context.md (lessons
+  └──────┬───────┘  and past work that apply); classifies by riskiest contract;
+         │          NEEDS_INPUT only for an unclear request
          │
          │     • bug              → tester reproduces on main, finds the cause
          │                          (git history for regressions)
@@ -48,10 +49,20 @@ Intent → WHAT → Implementation, then an independent review loop and a human 
   │   review     │  (2 rounds total, then escalate)
   └──────┬───────┘
          ▼
-   HUMAN REVIEW & MERGE
+   HUMAN REVIEW & MERGE ─► finalization: remove worktrees, distill the task's lessons
 ```
 
 The full runbook (complexity, routing, evidence, decisions, restarts, stop conditions) is [`docs/workflows/pipeline.md`](docs/workflows/pipeline.md). The rules every agent obeys are in [`AGENTS.md`](AGENTS.md).
+
+## Lessons
+
+What agents learn (device quirks, harness traps, operator rulings) lives in `context-private/lessons/`, one fact per file. It is local only: gitignored here, versioned by its own local git, never published. Intake gathers the lessons that apply to a task, finalization writes new ones, and anyone can query them:
+
+```bash
+tools/context search <terms>   # lessons, past stories, reviews, flow docs
+tools/context index            # every lesson, one line each
+tools/context sync             # lint, regenerate the index, commit locally
+```
 
 ## Getting started
 
@@ -139,10 +150,12 @@ After a task merges, remove its worktree with the allowlisted tool (never raw `g
 pocketpal-dev-team/
 ├── repos/pocketpal-ai/   # git submodule — the app (read-only)
 ├── agents/               # role definitions (source of truth)
+├── config/               # design-arena lanes: harness, model, effort
 ├── skills/               # skills: start-task, review-pr, run-e2e, bench, ... (source of truth)
 ├── context/
 │   ├── architecture/     # per-flow architecture truth (indexed in its README)
 │   └── patterns.md       # coding and testing patterns
+├── context-private/      # lessons learned (local only, gitignored)
 ├── docs/                 # pipeline runbook, standards, workflows
 ├── templates/            # intent / what / how / review templates
 ├── tools/                # worktree, guard, GitHub, device, and tracker scripts
@@ -156,3 +169,4 @@ pocketpal-dev-team/
 - One agent harness: [Claude Code](https://code.claude.com), [Codex CLI](https://github.com/openai/codex), [opencode](https://opencode.ai), or [pi](https://pi.dev)
 - Git 2.20+, Node.js 18+, `jq`, Python 3.11+
 - Optional: Xcode 15+ and CocoaPods (iOS builds), Android SDK (Android builds)
+- Optional, for the design arena: `tmux`, both Claude Code and Codex CLI, and agistry (`config/design-arena.conf`)
