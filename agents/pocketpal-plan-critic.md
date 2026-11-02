@@ -29,7 +29,7 @@ Check each row:
 
 1. **Owner.** The fix is applied where the state is decided (the "Owned at" column), and that location is right when you read the code. A fix at the symptom site is a BLOCKER.
 2. **Writers and callers.** Every writer and caller of the touched state is listed with `file:line`, and you find none missing. A missed writer is a BLOCKER.
-3. **Decisions.** A row that contradicts WHAT or `decisions.md`, or re-fixes something a previous round fixed, should have been `DESIGN_INVALIDATED` (BLOCKER).
+3. **Decisions.** A row should have been `DESIGN_INVALIDATED` (BLOCKER) when it contradicts WHAT or `decisions.md`, re-fixes something a previous round fixed, or needs a contract, state, owner, or persisted field that WHAT doesn't record (on trivial or quick work, any new contract).
 4. **Evidence.** "Evidence to re-run" covers each finding's own check and the existing rows for every surface the fix touches.
 5. **Scope.** The fix is the smallest change that handles the finding. An added state, guard layer, or mechanism the finding doesn't need is a CONCERN; a guard whose sink isn't reachable on `main` is out of scope.
 

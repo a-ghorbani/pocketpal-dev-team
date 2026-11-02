@@ -24,7 +24,7 @@ Actionable findings from `workflows/reviews/<TARGET_ID>/round-<N>/final.md`, wit
 
 ## Fix Scope
 
-`BLOCKER` and `CONCERN` findings only; `SUGGESTION`s go to the PR's follow-ups (the `Follow-ups` list of the published review). A finding that contradicts `decisions.md` or WHAT, or that an earlier round already fixed, is `DESIGN_INVALIDATED`, not a row.
+`BLOCKER` and `CONCERN` findings only; `SUGGESTION`s go to the PR's follow-ups (the `Follow-ups` list of the published review). A finding that contradicts `decisions.md` or WHAT, that an earlier round already fixed, or whose fix needs a contract, state, owner, or persisted field WHAT doesn't record (on trivial or quick work, any new contract) is `DESIGN_INVALIDATED`, not a row.
 
 | ID | Severity | Path:line | State touched | Owned at | Writers / callers checked | Required fix |
 | --- | --- | --- | --- | --- | --- | --- |
