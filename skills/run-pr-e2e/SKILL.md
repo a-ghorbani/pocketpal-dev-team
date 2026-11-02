@@ -66,17 +66,17 @@ From the dev-team repo root:
 ```bash
 ROOT="$PWD"
 PR=<number>
-PR_BRANCH=$(gh pr view "$PR" --repo a-ghorbani/pocketpal-ai --json headRefName -q .headRefName)
+PR_REF="refs/remotes/pr/$PR"
 
-# Fetch the branch into the submodule (read-only use; no cd into it)
-git -C "$ROOT/repos/pocketpal-ai" fetch origin "$PR_BRANCH"
+# Fetch the PR head into the submodule (read-only use; no cd into it; works for fork PRs)
+git -C "$ROOT/repos/pocketpal-ai" fetch origin "+pull/$PR/head:$PR_REF"
 
 # Create or fast-forward the e2e worktree (reset targets the worktree only)
 if [ -d "./worktrees/PR-${PR}-e2e" ]; then
-  git -C "./worktrees/PR-${PR}-e2e" reset --hard "origin/$PR_BRANCH"
+  git -C "./worktrees/PR-${PR}-e2e" reset --hard "$PR_REF"
   ./tools/sync-worktree-config.sh "./worktrees/PR-${PR}-e2e"
 else
-  ./tools/create-worktree.sh "PR-${PR}-e2e" --detach --ref "origin/$PR_BRANCH"
+  ./tools/create-worktree.sh "PR-${PR}-e2e" --detach --ref "$PR_REF"
 fi
 
 WORKTREE="./worktrees/PR-${PR}-e2e"
@@ -111,7 +111,7 @@ Everything after `--` is passed verbatim to `scripts/run-e2e.ts` (devices filter
 |---|---|
 | `no completed CI runs found for PR #N` | PR's `ci.yml` is still running or failed. `gh run watch` or pick another run. |
 | `artifact 'android-release-apk' not found` | The Android build job failed in that run. `gh run view <id>`. |
-| `(--e2e) no completed e2e-tests.yml workflow_dispatch run found for branch` | `e2e-tests.yml` was never dispatched for this PR's branch. Dispatch it (`tools/ghb workflow run e2e-tests.yml --ref <head-branch>`), wait, then rerun. |
+| `(--e2e) no completed e2e-tests.yml workflow_dispatch run found for branch` | `e2e-tests.yml` was never dispatched for this PR's branch. Dispatch it (`tools/ghb workflow run e2e-tests.yml --repo a-ghorbani/pocketpal-ai --ref <head-branch>`), wait, then rerun. |
 | `(--e2e) artifact 'e2e-android-apk' not found` | E2E build job failed in that dispatch. `gh run view <id>`. |
 
 ## Required env

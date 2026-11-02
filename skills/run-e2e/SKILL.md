@@ -35,9 +35,10 @@ Pick the smallest spec that exercises what changed. Defaults to `quick-smoke`.
 
 ### Feature (`e2e/specs/features/*.spec.ts`)
 
+`quick-smoke` already covers the core chat path. Run a feature spec instead when the change is localised to that feature.
+
 | Spec | Tests | Use when |
 |---|---|---|
-| `quick-smoke` already covers the core chat path. Run a feature spec instead when the change is localised to that feature. ||
 | `thinking` | Loads qwen3-0.6b, toggles thinking, asserts the "Reasoning" bubble appears and disappears. | Touching the thinking toggle, reasoning bubble, or thinking-capable inference path. |
 | `language` | Cycles every supported language, asserts the UI updates. No model load required. | l10n changes, language switcher, `src/locales/` work. |
 | `draft-autosave` | Asserts unsent input text persists across session switches and clears on send. | Changes to chat input draft persistence or session-switch behaviour. |
@@ -64,7 +65,7 @@ Verify before starting a run:
 - **Local branch is in sync with origin**. Stale checkouts produce results that don't reflect the code being shipped.
 - **iOS simulator is booted** (the runner does not boot it).
 - **Android emulator or device is attached and showing as `device`** in `adb devices`.
-- **Phone claimed.** Claim a phone through agistry before driving it and release it after; iOS runs go through `ios-router` (this host has no iOS toolchain).
+- **Phone claimed.** Claim a phone through agistry before driving it and release it after (a pipeline stage uses the `DEVICE` its orchestrator claimed); iOS runs go through `ios-router` (this host has no iOS toolchain).
 - **Appium ports 4723 and 4724 are free** — the WDIO config spawns Appium on these (see `wdio.{ios,android}.local.conf.ts`); a leftover daemon from a previous run causes session creation to hang.
 
 ## Step 2 — One-time worktree setup

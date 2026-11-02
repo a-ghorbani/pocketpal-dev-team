@@ -26,7 +26,7 @@ List in §0 the facts the design depends on: library behaviour, platform limits,
 1. the source in the worktree or `node_modules`, cited as `file:line` → `(C)`;
 2. a script or Jest probe against the real library → `(F)`;
 3. a request to the real server → `(F)`;
-4. a timeboxed simulator or device run, with the device claimed through agistry (iOS through `ios-router`) → `(F)`.
+4. a timeboxed simulator or device run, on the `DEVICE` the orchestrator claimed (iOS: ask for an `ios-router` run in your reply) → `(F)`.
 
 Spike code and output go in `<STORY_DIR>/spikes/`, never in the app branch; §0 records the command and an output excerpt. A premise you cannot prove before implementation stays marked unproven, becomes a must-run row in `evidence.md`, and the WHAT names what changes if it is false. A question you can settle by running something is never `NEEDS_INPUT`.
 

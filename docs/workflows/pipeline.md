@@ -16,6 +16,8 @@ Run each role as a subagent with the handoff block as its prompt:
 
 Roles are leaves: only the orchestrator dispatches.
 
+**Devices and iOS.** Stage roles are subagents and never call agistry. Before dispatching a stage that drives a phone (tester device rows, an architect device spike), the orchestrator claims one (`agistry.sh claim`), passes it as `DEVICE`, and releases it with a note when the stage returns. A stage marks rows that need iOS `needs ios-router` with the exact check; the orchestrator requests a worker from `ios-lab:router` (`skills/ios-router`), relays the check, and records the worker's receipts in those rows before routing on.
+
 ## Handoff block
 
 Intake creates it; every stage ends its reply with it, updating `VERDICT` and any key it learned. Pass the returning stage's whole reply (report plus block) verbatim to the next role. Critics get the block alone (paths only, never the producer's reasoning) and may rerun any spike receipt. Omit keys that don't apply.
@@ -44,6 +46,7 @@ ARCHITECTURE_DOCS: ./context/architecture/<flow>.md, ...
 FIGMA_FILE: <file key>                         # Figma-pinned slices
 NODE_IDS: <node id>, ...                       # Figma-pinned slices
 VISUAL_CAPTURE_PATHS: <png> <png> ...          # tester, when captures exist
+DEVICE: <agistry resource id>                  # the phone the orchestrator claimed for this stage
 PR: #<n>                                       # pipeline-reviewer, once the draft PR exists
 INVALIDATED: <decision or premise id>: <one line>     # with DESIGN_INVALIDATED
 ```
@@ -132,7 +135,7 @@ The orchestrator sends a stop's questions to `operator` over agistry (AGENTS.md,
 | a llama.rn bump, backend selection, inference code | `bench` smoke and focused, compared with the baseline and the previous llama.rn PR; `memory-profile`; a device run with a stateful (hybrid / recurrent) and a multimodal model as well as a transformer |
 | model loading | `bench` smoke and `memory-profile` |
 | native dependencies, Gradle, Podfile, podspecs, ProGuard / dependency trims | iOS and Android release builds; `bench` smoke; a real-store `.e2e` smoke build plus a negative control |
-| purchases, store, entitlements, Plus | `iap-plus` and a real store sandbox run, not only FakeStore |
+| purchases, store, entitlements, Plus | the `iap-purchase`, `iap-restore`, and `iap-recovery` specs and a real store sandbox run, not only FakeStore |
 | remote-server wire format | a strict OpenAI-compatible server as well as llama-server; read what the server applied (`/slots`), not the status code |
 | downloads, network resilience | the slow-network proxy (stall, resume, terminal failure) and a permission decline |
 | sheets, keyboard, layout | iOS and Android, rotation, multi-window or tablet width (`wm density`), dark mode, from a focused input |

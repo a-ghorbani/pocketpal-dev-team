@@ -46,11 +46,11 @@ Keep one file per worker in `~/.local/state/pocketpal-dev-team/ios-router/<key>-
 ## Worker brief
 
 - Join agistry as `ios-tester` on task `<key>`, say hello to `<requester>`, and work with them directly.
-- Task: `<what to verify>` on `<simulator | iPhone>`, in worktree `<key>-ios` created from `<ref>`.
+- Task: `<what to verify>` on `<simulator | iPhone>`, in worktree `<key>-ios`, created with `./tools/create-worktree.sh <key>-ios --detach --ref <ref>`.
 - Simulator: create a disposable one with `xcrun simctl create` and delete it when done, even after a failure.
 - iPhone: claim the `ios-device` resource on this host before touching it, and release it with a note on what you left installed.
-- When the requester is done (or silent after your final report), delete your simulator and any `PocketPal-*` DerivedData you created, remove your worktree, and send `ios-lab:router` "done <key>".
+- When the requester is done (or silent after your final report), delete your simulator and any `PocketPal-*` DerivedData you created, remove your worktree (`./tools/remove-worktree.sh <key>-ios --yes`), and send `ios-lab:router` "done <key>".
 
 ## Cleanup
 
-For a finished entry: delete leftover simulators, remove the worktree, kill the tmux session, mark it `removed`, then start the next queued request. A lease the dead worker still holds can't be released by you; it will expire.
+For a finished entry: delete leftover simulators, remove the worktree (`./tools/remove-worktree.sh <key>-ios --yes`), kill the tmux session, mark it `removed`, then start the next queued request. A lease the dead worker still holds can't be released by you; it will expire.

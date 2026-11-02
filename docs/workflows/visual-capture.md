@@ -25,7 +25,7 @@ Decision rule:
 | Decide whether evidence is required | `pocketpal-intake` adds capture rows to `evidence.md` from the claim; the architect and implementer add rows for surfaces they touch; `pocketpal-pipeline-reviewer` **re-derives it from the actual diff** so a missing row can't skip the gate. Any change under `src/` to a screen, component, style, theme, or rendering path ⇒ required. |
 | Produce captures (Flavour A / B) | `pocketpal-tester` writes the PNGs and hands their paths to the reviewer in the Test Report. |
 | Produce captures (Flavour C) | `pocketpal-implementer` via the `figma-implement` skill (side-by-sides saved under the story dir). |
-| Post captures to the PR | `pocketpal-pipeline-reviewer` (Flavour C pairs included), immediately after `gh pr create`, via `tools/post-pr-visual-evidence.sh`. |
+| Post captures to the PR | `pocketpal-pipeline-reviewer` (Flavour C pairs included), immediately after `tools/ghb pr create`, via `tools/post-pr-visual-evidence.sh`. |
 | Enforce | `pocketpal-pipeline-reviewer` — "UI changed but no visual-evidence comment on the PR" is a `BLOCKER`. |
 
 Device runs claim a phone through agistry first and release it after. This host has no iOS toolchain: the `yarn e2e:ios`, `yarn ios:build:e2e` and `xcrun simctl` steps below run through `ios-router`.

@@ -16,7 +16,7 @@
 # E2E-mode note: e2e-tests.yml is a manual workflow_dispatch and is not linked
 # to a PR. Matching is by run head_branch == the PR's head ref, so dispatch the
 # workflow with the PR branch selected in the "Use workflow from" selector
-# (or `gh workflow run e2e-tests.yml --ref <PR branch>`). Otherwise no run
+# (or `tools/ghb workflow run e2e-tests.yml --repo a-ghorbani/pocketpal-ai --ref <PR branch>`). Otherwise no run
 # will match.
 #
 # Runs inside a pocketpal-ai worktree or standalone checkout. Set POCKETPAL_REPO

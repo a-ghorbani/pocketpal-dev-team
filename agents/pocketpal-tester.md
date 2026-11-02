@@ -73,7 +73,7 @@ A fix or regression check gets a before/after pair per surface (`origin/main` vs
 
 ## Device and platform runs
 
-Claim a phone through agistry before driving it and release it after; iOS runs go through `ios-router`. A row that cannot run after a documented attempt is `BLOCKED: <why>` with the exact command and error.
+Drive only the phone named in `DEVICE` (the orchestrator claimed it; you never call agistry). Mark a row that needs iOS `needs ios-router` with the exact check; the orchestrator runs it (`pipeline.md`, Devices and iOS). A row that cannot run after a documented attempt is `BLOCKED: <why>` with the exact command and error.
 
 Update every row's Status and Receipt in `evidence.md` before replying.
 

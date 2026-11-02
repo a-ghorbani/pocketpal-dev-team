@@ -17,7 +17,7 @@ Request: $ARGUMENTS
 
 Sweeps `(model × quant × backend)` cells through llama.rn on a real device, recording prompt-processing tok/s (`pp_avg`), token-generation tok/s (`tg_avg`), wall time, peak memory, and the **effective backend** (`cpu` / `opencl` / `cpu+opencl-partial` / `hexagon` / `cpu+hexagon-partial` / `metal` / `cpu+metal-partial` / `unknown`) derived live from native log lines. Compares the resulting report against the device's committed baseline to flag perf regressions or silent backend fallbacks.
 
-Claim a phone through agistry before driving it and release it after. This host has no iOS toolchain: iOS runs go through `ios-router`.
+Claim a phone through agistry before driving it and release it after (a pipeline stage uses the `DEVICE` its orchestrator claimed). This host has no iOS toolchain: iOS runs go through `ios-router`.
 
 Android runs through the WDIO spec or `yarn build:bench-config --push` below. On a physical iPhone, run `yarn bench:ios --device <udid> [--app ../ios/build/PocketPal.ipa]` from the app worktree's `e2e/` (build with `yarn ios:build:ipa`; `--dry-run` first). It drives the same matrix with `xcrun devicectl` only and pulls, stamps and pass-gates the report itself (`e2e/README.md`, "iOS (physical iPhone)").
 
@@ -32,7 +32,7 @@ Android runs through the WDIO spec or `yarn build:bench-config --push` below. On
 
 ## Tiers
 
-Single source of truth: `BENCHMARK_FULL_MODELS` in [`e2e/fixtures/benchmark-models.ts`](../../e2e/fixtures/benchmark-models.ts). Smaller tiers are derived as id filters from that list.
+Single source of truth: `BENCHMARK_FULL_MODELS` in `e2e/fixtures/benchmark-models.ts` (in the app worktree). Smaller tiers are derived as id filters from that list.
 
 | Tier | Models × quants × backends | Cells | Runtime | When |
 | --- | --- | --: | --- | --- |

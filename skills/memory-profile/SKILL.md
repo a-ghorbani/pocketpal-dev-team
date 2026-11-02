@@ -36,6 +36,7 @@ Named `<device_id>-<model_id>.json`. (Sibling `e2e/baselines/benchmark/` holds t
 
 - `iphone-13-pro-qwen3-1.7b.json` — iPhone 13 Pro (device ID: `agh`) — **tracked**
 - `pixel-9-qwen3-1.7b.json` — Pixel 9 (device ID: `pixel-9-real`) — **tracked**
+- `iphone-17-pro-sim-tts.json`, `pixel-emulator-tts.json` — TTS baselines for `tts-memory-profile`
 - `xiaomi-22126rn91y-qwen3-0.6b.json` — Xiaomi 22126RN91Y — **not yet captured**, see "Capturing a new baseline" below
 
 ### Devices & model mapping
@@ -94,8 +95,8 @@ npx tsx e2e/scripts/memory-compare.ts <baseline.json> <current.json>
 
 ## Typical Workflow
 
-1. Check if physical devices are connected (`adb devices`). Claim a phone through agistry before driving it and release it after; iOS runs go through `ios-router` (this host has no iOS toolchain).
-2. For each device you'll run against, look up the model from the mapping table and ensure LM Studio has it loaded (if relevant): `./tools/lmstudio.sh ensure "qwen/qwen3-1.7b"` (etc.) (needs `REMOTE_SERVER_API_KEY` or `LMSTUDIO_API_KEY` already in the environment)
+1. Check if physical devices are connected (`adb devices`). Claim a phone through agistry before driving it and release it after (a pipeline stage uses the `DEVICE` its orchestrator claimed); iOS runs go through `ios-router` (this host has no iOS toolchain).
+2. For each device you'll run against, look up the model from the mapping table and ensure LM Studio has it loaded (if relevant): `./tools/lmstudio.sh ensure "qwen/qwen3-1.7b"` (etc.) (`LMSTUDIO_API_KEY` or `REMOTE_SERVER_API_KEY` from the environment when the server needs a key; defaults to `lm-studio`)
 3. Build IPA and APK (in parallel if both platforms needed, skip if already built)
 4. Run profiling on each device with the **device's** `TEST_MODELS` from the mapping (do not use a single global model)
 5. Compare each result against the matching baseline in `e2e/baselines/memory/`

@@ -140,7 +140,7 @@ Before the PR is ready for review, every in-scope screen must have a side-by-sid
 How:
 
 1. **Figma render**: call `get_screenshot(fileKey, nodeId, maxDimension=2622)` for each screen. Download the PNG. The 2622 cap matches 3× of a 393×852 design frame on an iPhone-17-Pro-class device.
-2. **Sim screenshot**: build and run the app on a sim whose logical width matches the design (iPhone 17 Pro = 393pt = 1206px @3x for the bottom half — confirm against device under test). Walk to each screen. Capture via `driver.saveScreenshot()` (E2E spec under `e2e/specs/visual-capture/<TASK-ID>.spec.ts`) OR `xcrun simctl io <udid> screenshot` if driving by hand. This host has no iOS toolchain: sim runs go through `ios-router`.
+2. **Sim screenshot**: build and run the app on a sim whose logical width matches the design (iPhone 17 Pro = 393pt = 1206px @3x for the bottom half — confirm against device under test). Walk to each screen. Capture via `driver.saveScreenshot()` (E2E spec under `e2e/specs/visual-capture/<TASK-ID>.spec.ts`; PR-fix rounds: `TASK-PR-<n>.spec.ts`, so it stays gitignored) OR `xcrun simctl io <udid> screenshot` if driving by hand. This host has no iOS toolchain: sim runs go through `ios-router`.
 3. **No automated pixel-diff gate**. Human eye is the gate. The pipeline reviewer posts each pair to the PR with `tools/post-pr-visual-evidence.sh`; that comment is the durable copy.
 
 If a screen has light + dark + RTL variants, capture each separately (`<screen>-light-figma.png`, `<screen>-light-sim.png`, `<screen>-dark-*.png`, `<screen>-rtl-*.png`).

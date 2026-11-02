@@ -47,14 +47,14 @@ Silently dropped Figma children → BLOCKER. List each missing child with its Fi
 ### 3. Tokens-only in screens
 
 ```bash
-grep -rE '#[0-9a-fA-F]{3,8}' src/screens/OnboardingScreens/ src/screens/<other-in-scope> | grep -v '.test.' | grep -v '.snap'
+grep -rE '#[0-9a-fA-F]{3,8}' src/screens/<in-scope>/ | grep -v '.test.' | grep -v '.snap'
 ```
 
 Any raw hex inside screen styles is a defect (modulo borrow-cases like a `tintColor` on an SVG passed through props). Likewise grep for inline `fontFamily: 'Inter'` / `'Fraunces'` literals — those should come from `theme.typography.*`. Raw colour or font literals in screens → CONCERN (or BLOCKER if pervasive).
 
 ### 4. Asset type sanity
 
-For each asset under `src/assets/onboarding/` (or task-specific dir):
+For each asset under the task's `src/assets/<flow>/`:
 
 - Is the Figma source vector? Then the asset must be an `.svg`. A `.png` for a vector source → BLOCKER (causes the "low-quality image" failure mode).
 - Is it iconify-named in the Figma design context? Then it must come from `react-native-vector-icons`, not a separate exported asset → CONCERN if a duplicate asset exists.
