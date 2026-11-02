@@ -26,8 +26,8 @@ A prompt containing `PR #` or `PR Branch:` is a **PR fix**; anything else is a *
 # new task
 ./tools/create-worktree.sh "$TASK_ID" --branch "feature/$TASK_ID" --ref origin/main
 # PR fix, when ./worktrees/PR-<n> does not exist yet
-git -C ./repos/pocketpal-ai fetch origin "pull/<n>/head:pr-<n>"
-./tools/create-worktree.sh "PR-<n>" --branch "pr-<n>" --ref "pr-<n>"
+git -C ./repos/pocketpal-ai fetch origin "+pull/<n>/head:refs/remotes/pr/<n>"
+./tools/create-worktree.sh "PR-<n>" --branch "pr-<n>" --ref "refs/remotes/pr/<n>"
 # both
 ./tools/sync-worktree-config.sh "$WORKTREE"
 mkdir -p "$STORY_DIR"
