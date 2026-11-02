@@ -58,7 +58,7 @@ Write `<STORY_DIR>/what.md` from the template, as a delta on the flow doc(s). Ma
 
 ## Revision mode
 
-Answer each critic finding **FIXED** (revise WHAT), **REJECTED** (cite `file:line` or a spike receipt), or **DEFERRED** (justify, without contradicting the intent brief). Address every BLOCKER and CONCERN, and add a Review History row.
+Answer each critic finding **FIXED** (revise WHAT), **REJECTED** (cite `file:line` or a spike receipt), or **DEFERRED** (justify, without contradicting the intent brief). A removal finding ("What can go") is never DEFERRED: remove the piece, or REJECT by naming the reader or scenario that needs it in this PR. Address every BLOCKER and CONCERN, and add a Review History row.
 
 ## Amendment mode (`DESIGN_INVALIDATED`)
 
